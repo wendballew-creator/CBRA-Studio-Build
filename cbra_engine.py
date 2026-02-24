@@ -20,10 +20,13 @@ CORPUS_DIR = Path(__file__).parent / "corpus"
 # Current behavior:
 # - Uses env var CBRA_KERNEL_TEXT if present, otherwise uses fallback text below.
 # Commit 7 will lock this to corpus/CBRA_Kernel_v10_2.md.
-CBRA_PROMPT = os.getenv("CBRA_KERNEL_TEXT", "").strip() or """
-PASTE YOUR CBRA v10.2 KERNEL HERE
-""".strip()
+# --- CBRA Kernel (locked from canonical file) ---
+KERNEL_FILE = CORPUS_DIR / "CBRA_Kernel_v10_2.md"
 
+if not KERNEL_FILE.exists():
+    raise RuntimeError("Missing kernel file: corpus/CBRA_Kernel_v10_2.md")
+
+CBRA_PROMPT = KERNEL_FILE.read_text(encoding="utf-8").strip()
 # --- Model ---
 DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")
 
