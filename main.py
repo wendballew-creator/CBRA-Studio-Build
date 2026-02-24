@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Optional, Literal, Any
 
@@ -13,6 +14,7 @@ from cbra.models import Message, LoopCycle, DriftEvent
 from cbra.store import create_thread, get_thread, append_message, append_loopcycle, append_drift_event
 
 app = FastAPI(title="CBRA Writing Support")
+app.mount("/ui", StaticFiles(directory=".", html=True), name="static")
 
 def ok(*, request_id: str, thread_id: Optional[str], text: Optional[str] = None, debug: Any = None, data: Any = None):
     return {
@@ -126,3 +128,76 @@ def export_thread(thread_id: str):
         debug=None,
         data=thread.dict(),
     )
+# ------------------------------
+# Attachment Support (.docx, .txt, .md)
+# ------------------------------
+
+from fastapi import UploadFile, File
+import io
+from docx import Document
+
+def _extract_text_from_upload(upload: UploadFile) -> str:
+    name = (upload.filename or "").lower()
+    data = upload.file.read()
+
+    # txt / md
+    if name.endswith(".txt") or name.endswith(".md"):
+        return data.decode("utf-8", errors="replace")
+
+    # docx
+    if name.endswith(".docx"):
+        doc = Document(io.BytesIO(data))
+        parts = []
+        for p in doc.paragraphs:
+            t = (p.text or "").strip()
+            if t:
+                parts.append(t)
+        return "\n".join(parts)
+
+    raise HTTPException(status_code=400, detail="Unsupported file type. Use .docx, .txt, or .md")
+
+
+@app.post("/chat/{thread_id}/file")
+def chat_with_file(
+    thread_id: str,
+    user_text: str = "",
+    mode: Literal["production", "debug"] = "production",
+    upload: UploadFile = File(...)
+):
+    thread = get_thread(thread_id) or create_thread(thread_id)
+
+    doc_text = _extract_text_from_upload(upload)
+
+    MAX_CHARS = 25000
+    if len(doc_text) > MAX_CHARS:
+        doc_text = doc_text[:MAX_CHARS] + "\n\n[TRUNCATED]"
+
+    combined = (user_text or "").strip()
+    if combined:
+        combined += "\n\n"
+    combined += f"ATTACHMENT ({upload.filename}):\n{doc_text}"
+
+    append_message(thread_id, Message(
+        role="user",
+        content=f"{user_text}\n\n[Attached: {upload.filename}]",
+        timestamp=datetime.utcnow()
+    ))
+
+    result = run_cbra(user_text=combined, mode=mode)
+
+    append_message(thread_id, Message(
+        role="assistant",
+        content=result.get("text", ""),
+        timestamp=datetime.utcnow()
+    ))
+
+    if "loopcycle" in result and isinstance(result["loopcycle"], dict):
+        append_loopcycle(thread_id, LoopCycle(**result["loopcycle"]))
+
+    return {
+        "request_id": str(uuid4()),
+        "thread_id": thread_id,
+        "text": result.get("text", ""),
+        "debug": result.get("debug"),
+        "data": None,
+    }
