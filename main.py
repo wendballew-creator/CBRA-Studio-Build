@@ -9,8 +9,8 @@ from cbra_engine import run_cbra
 from uuid import uuid4
 from datetime import datetime
 
-from cbra.models import Message, LoopCycle
-from cbra.store import create_thread, get_thread, append_message, append_loopcycle
+from cbra.models import Message, LoopCycle, DriftEvent
+from cbra.store import create_thread, get_thread, append_message, append_loopcycle, append_drift_event
 
 app = FastAPI(title="CBRA Writing Support")
 
@@ -69,6 +69,18 @@ def chat(thread_id: str, request: GenerateRequest):
         result = run_cbra(user_text=request.user_text, mode=request.mode)
         if "loopcycle" in result and isinstance(result["loopcycle"], dict):
             append_loopcycle(thread_id, LoopCycle(**result["loopcycle"]))
+        # If drift detected, log DriftEvent
+        lc = result.get("loopcycle") if isinstance(result.get("loopcycle"), dict) else None
+        if lc and lc.get("drift_detected"):
+            append_drift_event(
+                thread_id,
+                DriftEvent(
+                    type="DRIFT_DETECTED",
+                    detected_at_stage="Articulation",
+                    reintegration_stage=lc.get("reintegration_stage") or "Field Entry",
+                    timestamp=datetime.utcnow(),
+                ),
+            )
 
         append_message(
             thread_id,

@@ -198,9 +198,29 @@ def _local_noticing_register(user_text: str) -> List[str]:
 
 
 def _local_drift_signal(user_text: str) -> List[str]:
-    # Placeholder; expand later into drift heuristics.
-    return []
+    """
+    Deterministic drift detection v1.
+    Emits a list of drift indicator labels.
+    """
+    q = (user_text or "").lower()
 
+    indicators: List[str] = []
+
+    # Direct drift language
+    if "drift" in q or "drift indicator" in q or "drift signal" in q:
+        indicators.append("mentions_drift")
+
+    # Reintegration / reset language
+    if "reset" in q or "reintegration" in q or "re-enter" in q or "reenter" in q:
+        indicators.append("mentions_reset_or_reintegration")
+
+    # Known drift-related failure modes (lightweight lexical triggers)
+    if "paraphrase" in q and "stage" in q:
+        indicators.append("stage_name_paraphrase_risk")
+    if "invent" in q and "stage" in q:
+        indicators.append("stage_name_invention_risk")
+
+    return indicators
 
 def run_cbra(
     user_text: str,
@@ -270,11 +290,11 @@ def run_cbra(
 
     text = getattr(resp, "output_text", "") or ""
     result: Dict[str, Any] = {"text": text}
-    # --- LoopCycle (always emitted for architecture-level inspection) ---
+    # --- LoopCycle (architecture record) ---
     drift_signal = _local_drift_signal(user_text)
     drift_detected = bool(drift_signal)
 
-    loopcycle = {
+    loopcycle: Dict[str, Any] = {
         "field_signature": _local_field_signature(user_text, citations),
         "noticing_register": {"signals": _local_noticing_register(user_text)},
         "relational_map": {},
@@ -283,7 +303,7 @@ def run_cbra(
         "articulation_output": text,
         "action_vector": None,
         "drift_detected": drift_detected,
-        "reintegration_stage": ("Field Entry" if drift_detected else None),
+        "reintegration_stage": "Field Entry" if drift_detected else None,
     }
 
     result["loopcycle"] = loopcycle
