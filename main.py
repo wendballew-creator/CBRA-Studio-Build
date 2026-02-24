@@ -9,8 +9,8 @@ from cbra_engine import run_cbra
 from uuid import uuid4
 from datetime import datetime
 
-from cbra.models import Message
-from cbra.store import create_thread, get_thread, append_message
+from cbra.models import Message, LoopCycle
+from cbra.store import create_thread, get_thread, append_message, append_loopcycle
 
 app = FastAPI(title="CBRA Writing Support")
 
@@ -67,6 +67,8 @@ def chat(thread_id: str, request: GenerateRequest):
         )
 
         result = run_cbra(user_text=request.user_text, mode=request.mode)
+        if "loopcycle" in result and isinstance(result["loopcycle"], dict):
+            append_loopcycle(thread_id, LoopCycle(**result["loopcycle"]))
 
         append_message(
             thread_id,

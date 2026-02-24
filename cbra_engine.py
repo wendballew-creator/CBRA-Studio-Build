@@ -270,6 +270,23 @@ def run_cbra(
 
     text = getattr(resp, "output_text", "") or ""
     result: Dict[str, Any] = {"text": text}
+    # --- LoopCycle (always emitted for architecture-level inspection) ---
+    drift_signal = _local_drift_signal(user_text)
+    drift_detected = bool(drift_signal)
+
+    loopcycle = {
+        "field_signature": _local_field_signature(user_text, citations),
+        "noticing_register": {"signals": _local_noticing_register(user_text)},
+        "relational_map": {},
+        "diffractive_map": {},
+        "relevance_gradient": {},
+        "articulation_output": text,
+        "action_vector": None,
+        "drift_detected": drift_detected,
+        "reintegration_stage": ("Field Entry" if drift_detected else None),
+    }
+
+    result["loopcycle"] = loopcycle
 
     if mode == "debug":
         result["debug"] = {
