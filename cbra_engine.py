@@ -222,6 +222,31 @@ def _local_drift_signal(user_text: str) -> List[str]:
 
     return indicators
 
+def _normalize_terminology(text: str, user_text: str = "") -> str:
+    """
+    Silent terminology guard:
+    - preserves CBRA ontology terms
+    - avoids swapping 'interaction'/'intra-action' inappropriately
+    """
+    t = text or ""
+    u = (user_text or "").lower()
+
+    # If user is clearly talking about UI/software interaction, leave it alone.
+    ui_markers = ["click", "button", "ui", "interface", "dropdown", "browser", "endpoint", "http", "post", "get"]
+    if any(m in u for m in ui_markers):
+        return t
+
+    # If the response is talking CBRA/Barad ontology, prefer intra-action consistently.
+    ontology_markers = ["barad", "entanglement", "field", "co-constitute", "materialize", "discursive", "phenomena", "cbra"]
+    if any(m in (t.lower() + " " + u) for m in ontology_markers):
+        # Replace common ontology-slippage phrasing. Keep it conservative.
+        # Only replace standalone "interaction"/"interactions" (not "user interaction design", etc.).
+        import re
+        t = re.sub(r"\binteractions\b", "intra-actions", t, flags=re.IGNORECASE)
+        t = re.sub(r"\binteraction\b", "intra-action", t, flags=re.IGNORECASE)
+
+    return t
+
 def run_cbra(
     user_text: str,
     mode: Literal["production", "debug"] = "production",
@@ -280,7 +305,7 @@ def run_cbra(
         model=model,
         input=[
             {"role": "system", "content": system_identity},
-            {"role": "developer", "content": CBRA_PROMPT},
+            {"role": "developer", "content": CBRA_PROMPT + "\n\nTERMINOLOGY CONSTRAINT:\nUse 'intra-action' for CBRA/Barad ontology. Do not use 'interaction' as a synonym for 'intra-action'. Use 'interaction' only for ordinary, non-ontological usage (e.g., UI interaction, casual interaction).\nDo not explain this constraint."},
             {
                 "role": "user",
                 "content": f"{user_text}{sources_block}{placement_rule}{output_rule}",
@@ -289,6 +314,7 @@ def run_cbra(
     )
 
     text = getattr(resp, "output_text", "") or ""
+    text = _normalize_terminology(text, user_text=user_text)
     result: Dict[str, Any] = {"text": text}
     # --- LoopCycle (architecture record) ---
     drift_signal = _local_drift_signal(user_text)
