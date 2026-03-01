@@ -11,7 +11,15 @@ from uuid import uuid4
 from datetime import datetime
 
 from cbra.models import Message, LoopCycle, DriftEvent
-from cbra.store import create_thread, get_thread, append_message, append_loopcycle, append_drift_event
+from cbra.store import (
+    create_thread,
+    get_thread,
+    append_message,
+    append_loopcycle,
+    append_drift_event,
+    get_field,
+    create_field,
+)
 
 app = FastAPI(title="CBRA Writing Support")
 app.mount("/ui", StaticFiles(directory=".", html=True), name="static")
@@ -61,7 +69,12 @@ def chat(thread_id: str, request: GenerateRequest):
     try:
         thread = get_thread(thread_id)
         if thread is None:
-            create_thread(thread_id)
+            thread = create_thread(thread_id)
+        else:
+            # Back-compat: attach a field if missing
+            if not getattr(thread, "current_field_id", None):
+                f = create_field(thread_id=thread_id)
+                thread.current_field_id = f.id
 
         append_message(
             thread_id,
@@ -156,6 +169,19 @@ def _extract_text_from_upload(upload: UploadFile) -> str:
 
     raise HTTPException(status_code=400, detail="Unsupported file type. Use .docx, .txt, or .md")
 
+@app.get("/field/{field_id}")
+def read_field(field_id: str):
+    request_id = str(uuid4())
+    field = get_field(field_id)
+    if field is None:
+        return err(request_id=request_id, code="FIELD_NOT_FOUND", message="Field not found")
+    return ok(
+        request_id=request_id,
+        thread_id=field.thread_id,
+        text=None,
+        debug=None,
+        data=field.dict(),
+    )
 
 @app.post("/chat/{thread_id}/file")
 def chat_with_file(

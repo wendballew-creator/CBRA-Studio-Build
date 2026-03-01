@@ -1,43 +1,74 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+def _now_iso() -> str:
+    return datetime.utcnow().isoformat() + "Z"
 
 
 class Message(BaseModel):
-    role: str                # "user" or "assistant"
+    role: str
     content: str
-    timestamp: datetime
-
-
-class LoopCycle(BaseModel):
-    # These start as dicts. Later we can tighten them into richer models.
-    field_signature: Dict[str, Any] = {}
-    noticing_register: Dict[str, Any] = {}
-    relational_map: Dict[str, Any] = {}
-    diffractive_map: Dict[str, Any] = {}
-    relevance_gradient: Dict[str, Any] = {}
-
-    articulation_output: str = ""
-    action_vector: Optional[str] = None
-
-    drift_detected: bool = False
-    reintegration_stage: Optional[str] = None
+    ts: str = Field(default_factory=_now_iso)
 
 
 class DriftEvent(BaseModel):
-    type: str
-    detected_at_stage: str
-    reintegration_stage: str
-    timestamp: datetime
+    ts: str = Field(default_factory=_now_iso)
+    kind: str
+    severity: str = "low"
+    reintegration_target: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class FieldArtifact(BaseModel):
+    """
+    First-class persisted 'field' object. This becomes the canonical substrate
+    for loop execution + diffractive mapping, with language as downstream translation.
+    """
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    thread_id: str
+
+    # Default diffractive lens
+    diffractive_lens: str = "CBRA"
+
+    created_at: str = Field(default_factory=_now_iso)
+    updated_at: str = Field(default_factory=_now_iso)
+
+    sources_citations: List[str] = Field(default_factory=list)
+
+    field_signature: Dict[str, Any] = Field(default_factory=dict)
+    noticing_register: Dict[str, Any] = Field(default_factory=dict)
+    relational_map: Dict[str, Any] = Field(default_factory=dict)
+    diffractive_map: Dict[str, Any] = Field(default_factory=dict)
+    relevance_gradient: Dict[str, Any] = Field(default_factory=dict)
+
+    selected_elements: List[Dict[str, Any]] = Field(default_factory=list)
+    notes: Dict[str, Any] = Field(default_factory=dict)
+
+
+class LoopCycle(BaseModel):
+    ts: str = Field(default_factory=_now_iso)
+
+    # Link to the canonical field artifact (added for commit 1)
+    field_id: Optional[str] = None
+
+    field_signature: Dict[str, Any] = Field(default_factory=dict)
+    noticing_register: Dict[str, Any] = Field(default_factory=dict)
+    relational_map: Dict[str, Any] = Field(default_factory=dict)
+    diffractive_map: Dict[str, Any] = Field(default_factory=dict)
+    relevance_gradient: Dict[str, Any] = Field(default_factory=dict)
 
 
 class Thread(BaseModel):
     id: str
-    messages: List[Message] = []
-    loop_history: List[LoopCycle] = []
-    drift_events: List[DriftEvent] = []
-    created_at: datetime
-    updated_at: datetime
+    messages: List[Message] = Field(default_factory=list)
+    loop_cycles: List[LoopCycle] = Field(default_factory=list)
+    drift_events: List[DriftEvent] = Field(default_factory=list)
+
+    # Track the currently active field artifact
+    current_field_id: Optional[str] = None
