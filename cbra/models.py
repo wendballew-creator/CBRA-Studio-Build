@@ -34,7 +34,8 @@ class FieldArtifact(BaseModel):
     thread_id: str
 
     # Default diffractive lens
-    diffractive_lens: str = "CBRA"
+    # Default diffractive ground (CBRA ontology)
+    diffractive_ground: str = "CBRA"
 
     created_at: str = Field(default_factory=_now_iso)
     updated_at: str = Field(default_factory=_now_iso)
@@ -63,6 +64,11 @@ class LoopCycle(BaseModel):
     diffractive_map: Dict[str, Any] = Field(default_factory=dict)
     relevance_gradient: Dict[str, Any] = Field(default_factory=dict)
 
+    articulation_output: Optional[str] = None
+    action_vector: Optional[Dict[str, Any]] = None
+
+    drift_detected: bool = False
+    reintegration_stage: Optional[str] = None
 
 class Thread(BaseModel):
     id: str

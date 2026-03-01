@@ -81,7 +81,12 @@ def chat(thread_id: str, request: GenerateRequest):
             Message(role="user", content=request.user_text, timestamp=datetime.utcnow()),
         )
 
-        result = run_cbra(user_text=request.user_text, mode=request.mode)
+        result = run_cbra(
+            request.user_text,
+            mode=request.mode,
+            thread_id=thread_id,
+            field_id=thread.current_field_id,
+        )
         if "loopcycle" in result and isinstance(result["loopcycle"], dict):
             append_loopcycle(thread_id, LoopCycle(**result["loopcycle"]))
         # If drift detected, log DriftEvent
