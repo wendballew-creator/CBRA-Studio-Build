@@ -465,9 +465,36 @@ def run_cbra(
         field_id=field_id or "NO_FIELD",
     )
 
-    selected_elements = stage_relevance.get("selected_elements") if isinstance(stage_relevance, dict) else None
-    if not isinstance(selected_elements, list):
-        selected_elements = []
+    # Derive selected_elements from relevance_gradient.selected_elements (single source of truth)
+    selected_elements = []
+    if isinstance(stage_relevance, dict):
+        se = stage_relevance.get("selected_elements")
+        if isinstance(se, list):
+            selected_elements = se
+    # --- Drift detection (structural, minimal v0) ---
+    drift_detected = False
+    reintegration_stage = None
+
+    if isinstance(stage_diffractive, dict):
+        posthuman = stage_diffractive.get("posthumanist_reading") or {}
+        exclusions = stage_diffractive.get("exclusions_revealed") or []
+        loop_impact = stage_diffractive.get("loop_impact") or {}
+        # Mirror reintegration_stage from diffractive loop_impact even when drift_detected is False
+        if isinstance(loop_impact, dict):
+            reintegration_stage = loop_impact.get("reintegration_stage") or reintegration_stage
+        drift_risk = (loop_impact.get("drift_risk") or "").lower()
+
+        if not posthuman or (isinstance(exclusions, list) and len(exclusions) == 0):
+            drift_detected = True
+            reintegration_stage = (
+                loop_impact.get("reintegration_stage") or "Noticing Register"
+            )
+
+        if "high" in drift_risk:
+            drift_detected = True
+            reintegration_stage = (
+                loop_impact.get("reintegration_stage") or "Diffractive Mapping"
+            )
 
     if field_id:
         update_field(
@@ -481,64 +508,72 @@ def run_cbra(
                 "diffractive_map": stage_diffractive or {},
                 "relevance_gradient": stage_relevance or {},
                 "selected_elements": selected_elements,
+                "notes": {
+                    "drift_detected": drift_detected,
+                    "reintegration_stage": reintegration_stage,
+                },
             },
         )
 
+    persisted_field = get_field(field_id) if field_id else None
+
     placement_rule = _placement_rule_text() if placement_q else ""
     output_rule = _output_rule_text() if mode == "debug" else ""
+
+    field_payload = persisted_field.model_dump() if persisted_field else {}
+
+    articulation_prompt = (
+        "ARTICULATION\n"
+        "Generate the user-facing response grounded ONLY in FIELD_PAYLOAD.\n\n"
+        "Constraints:\n"
+        "- Use ONLY information present in FIELD_PAYLOAD.\n"
+        "- Prioritize FIELD_PAYLOAD.selected_elements.\n"
+        "- Do not output stage labels.\n"
+        "- Do not explain the architecture.\n"
+        "- Do not introduce new concepts not present in FIELD_PAYLOAD.\n"
+        "- Do not use the word 'lens'.\n"
+        "- If FIELD_PAYLOAD.notes.drift_detected is true, be concise and orient toward FIELD_PAYLOAD.notes.reintegration_stage.\n\n"
+        f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
+        f"USER_INPUT:\n{user_text}\n\n"
+        f"{placement_rule}{output_rule}"
+    )
 
     resp = client.responses.create(
         model=model,
         input=[
             {"role": "system", "content": system_identity},
             {"role": "developer", "content": CBRA_PROMPT + "\n\n" + ANTI_COMPRESSION_POLICY},
-            {"role": "user", "content": f"{user_text}{sources_block}{placement_rule}{output_rule}"},
+            {"role": "user", "content": articulation_prompt},
         ],
     )
 
     text = getattr(resp, "output_text", "") or ""
     text = _normalize_terminology(text, user_text=user_text)
 
-    # Auto-repair if user did not ask for compression but model produced it
     if (not _user_asked_for_bullets_or_summary(user_text)) and _looks_like_outline_or_bullets(text):
+        repair_prompt = (
+            "Rewrite as continuous prose paragraphs.\n"
+            "Do not summarize. Do not outline. Do not use bullet points.\n"
+            "Produce finished prose in full sentences.\n\n"
+            "Use ONLY information present in FIELD_PAYLOAD.\n"
+            "Do not introduce new concepts.\n"
+            "Do not use the word 'lens'.\n\n"
+            f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
+            f"USER_INPUT:\n{user_text}"
+        )
+
         repair = client.responses.create(
             model=model,
             input=[
                 {"role": "system", "content": system_identity},
                 {"role": "developer", "content": CBRA_PROMPT + "\n\n" + ANTI_COMPRESSION_POLICY},
-                {
-                    "role": "user",
-                    "content": (
-                        "Rewrite as continuous prose paragraphs. "
-                        "Do not summarize. Do not outline. Do not use bullet points. "
-                        "Produce finished prose in full sentences.\n\n"
-                        "User request:\n" + user_text
-                    ),
-                },
+                {"role": "user", "content": repair_prompt},
             ],
         )
         text = getattr(repair, "output_text", "") or text
         text = _normalize_terminology(text, user_text=user_text)
 
     # --- LoopCycle record (internal storage) ---
-    # --- Drift detection (structural, minimal v0) ---
-    drift_detected = False
-    reintegration_stage = None
-
-    if isinstance(stage_diffractive, dict):
-        posthuman = stage_diffractive.get("posthumanist_reading") or {}
-        exclusions = stage_diffractive.get("exclusions_revealed") or []
-        loop_impact = stage_diffractive.get("loop_impact") or {}
-        drift_risk = (loop_impact.get("drift_risk") or "").lower()
-
-        if not posthuman or (isinstance(exclusions, list) and len(exclusions) == 0):
-            drift_detected = True
-            reintegration_stage = (loop_impact.get("reintegration_target") or "Noticing")
-
-        if "high" in drift_risk:
-            drift_detected = True
-            reintegration_stage = (loop_impact.get("reintegration_target") or "Diffractive Mapping")
-
     loopcycle: Dict[str, Any] = {
         "field_id": field_id,
         "field_signature": stage_field_signature or {},
