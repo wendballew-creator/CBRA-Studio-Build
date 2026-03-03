@@ -442,7 +442,6 @@ def run_cbra(
             "apparatus_effects {discursive, material, institutional}, "
             "loop_impact {activation_shift, drift_risk, reintegration_stage}"
             "reintegration_stage must be one of: Field Entry, Noticing Register, Relational Framing, Diffractive Mapping, Situated Relevance Selection, Articulation. "
-            'Do not use the word "lens" anywhere in the output.'
             "Return ONLY JSON."
         ),
         user_text=user_text,
@@ -471,6 +470,7 @@ def run_cbra(
         se = stage_relevance.get("selected_elements")
         if isinstance(se, list):
             selected_elements = se
+
     # --- Drift detection (structural, minimal v0) ---
     drift_detected = False
     reintegration_stage = None
@@ -479,22 +479,19 @@ def run_cbra(
         posthuman = stage_diffractive.get("posthumanist_reading") or {}
         exclusions = stage_diffractive.get("exclusions_revealed") or []
         loop_impact = stage_diffractive.get("loop_impact") or {}
+        drift_risk = (loop_impact.get("drift_risk") or "").lower()
+
         # Mirror reintegration_stage from diffractive loop_impact even when drift_detected is False
         if isinstance(loop_impact, dict):
             reintegration_stage = loop_impact.get("reintegration_stage") or reintegration_stage
-        drift_risk = (loop_impact.get("drift_risk") or "").lower()
 
         if not posthuman or (isinstance(exclusions, list) and len(exclusions) == 0):
             drift_detected = True
-            reintegration_stage = (
-                loop_impact.get("reintegration_stage") or "Noticing Register"
-            )
+            reintegration_stage = loop_impact.get("reintegration_stage") or "Noticing Register"
 
         if "high" in drift_risk:
             drift_detected = True
-            reintegration_stage = (
-                loop_impact.get("reintegration_stage") or "Diffractive Mapping"
-            )
+            reintegration_stage = loop_impact.get("reintegration_stage") or "Diffractive Mapping"
 
     if field_id:
         update_field(
@@ -531,7 +528,6 @@ def run_cbra(
         "- Do not output stage labels.\n"
         "- Do not explain the architecture.\n"
         "- Do not introduce new concepts not present in FIELD_PAYLOAD.\n"
-        "- Do not use the word 'lens'.\n"
         "- If FIELD_PAYLOAD.notes.drift_detected is true, be concise and orient toward FIELD_PAYLOAD.notes.reintegration_stage.\n\n"
         f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
         f"USER_INPUT:\n{user_text}\n\n"
@@ -557,7 +553,6 @@ def run_cbra(
             "Produce finished prose in full sentences.\n\n"
             "Use ONLY information present in FIELD_PAYLOAD.\n"
             "Do not introduce new concepts.\n"
-            "Do not use the word 'lens'.\n\n"
             f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
             f"USER_INPUT:\n{user_text}"
         )

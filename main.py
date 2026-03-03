@@ -95,7 +95,7 @@ def chat(thread_id: str, request: GenerateRequest):
             append_drift_event(
                 thread_id,
                 DriftEvent(
-                    type="DRIFT_DETECTED",
+                    kind="DRIFT_DETECTED",
                     detected_at_stage="Articulation",
                     reintegration_stage=lc.get("reintegration_stage") or "Field Entry",
                     timestamp=datetime.utcnow(),
