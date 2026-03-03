@@ -33,7 +33,7 @@ class FieldArtifact(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     thread_id: str
 
-    # Default diffractive lens
+    # Default diffractive orientation
     # Default diffractive ground (CBRA ontology)
     diffractive_ground: str = "CBRA"
 
