@@ -70,6 +70,7 @@ class LoopCycle(BaseModel):
     relevance_gradient: Dict[str, Any] = Field(default_factory=dict)
 
     selected_elements: List[Dict[str, Any]] = Field(default_factory=list)
+    notes: Dict[str, Any] = Field(default_factory=dict)
 
     articulation_output: Optional[str] = None
     action_vector: Optional[Dict[str, Any]] = None

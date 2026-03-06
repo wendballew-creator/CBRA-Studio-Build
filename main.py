@@ -101,17 +101,32 @@ def chat(thread_id: str, request: GenerateRequest):
         # If drift detected, log DriftEvent
         lc = result.get("loopcycle") if isinstance(result.get("loopcycle"), dict) else None
         if lc and lc.get("drift_detected"):
-            append_drift_event(
-                thread_id,
-                DriftEvent(
-                    kind="DRIFT_DETECTED",
-                    severity="low",
-                    reintegration_target=(lc.get("reintegration_stage") or "Field Entry"),
-                    detected_at_stage="Articulation",
-                    reintegration_stage=lc.get("reintegration_stage"),
-                    notes="Drift detected during Articulation stage.",
-                ),
+            drift_notes = lc.get("notes") if isinstance(lc.get("notes"), dict) else {}
+            reintegration_target = drift_notes.get("reintegration_target") or lc.get("reintegration_stage") or "Field Entry"
+            detected_at_stage = drift_notes.get("detected_at_stage") or "Articulation"
+            reintegration_stage = drift_notes.get("reintegration_stage") or lc.get("reintegration_stage")
+
+            last_event = thread.drift_events[-1] if getattr(thread, "drift_events", None) else None
+            is_duplicate = (
+                last_event is not None
+                and last_event.kind == "DRIFT_DETECTED"
+                and last_event.reintegration_target == reintegration_target
+                and last_event.detected_at_stage == detected_at_stage
+                and last_event.reintegration_stage == reintegration_stage
             )
+
+            if not is_duplicate:
+                append_drift_event(
+                    thread_id,
+                    DriftEvent(
+                        kind="DRIFT_DETECTED",
+                        severity="low",
+                        reintegration_target=reintegration_target,
+                        detected_at_stage=detected_at_stage,
+                        reintegration_stage=reintegration_stage,
+                        notes=f"Drift detected during {detected_at_stage} stage.",
+                    ),
+                )
 
             append_message(
                 thread_id,

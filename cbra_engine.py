@@ -440,7 +440,7 @@ def run_cbra(
             "differences_that_matter (list of {difference, why_it_matters, what_becomes_possible}), "
             "exclusions_revealed (list of {previously_stabilized_element, now_visible_as_exclusion, implication}), "
             "apparatus_effects {discursive, material, institutional}, "
-            "loop_impact {activation_shift, drift_risk, reintegration_stage}"
+            "loop_impact {activation_shift, drift_risk, reintegration_stage}. "
             "reintegration_stage must be one of: Field Entry, Noticing Register, Relational Framing, Diffractive Mapping, Situated Relevance Selection, Articulation. "
             "Return ONLY JSON."
         ),
@@ -580,6 +580,12 @@ def run_cbra(
         "action_vector": None,
         "drift_detected": drift_detected,
         "reintegration_stage": reintegration_stage,
+        "notes": {
+            "drift_detected": drift_detected,
+            "detected_at_stage": "Articulation" if drift_detected else None,
+            "reintegration_target": reintegration_stage if drift_detected else None,
+            "reintegration_stage": reintegration_stage,
+        },
     }
 
     result: Dict[str, Any] = {"text": text, "loopcycle": loopcycle}
