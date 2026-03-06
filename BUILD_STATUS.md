@@ -85,3 +85,46 @@ curl -sS -X POST "http://127.0.0.1:8000/chat/build-status-check" \
   -d '{"user_text":"build status verification turn","mode":"production"}' \
   | python -m json.tool
 curl -sS "http://127.0.0.1:8000/thread/build-status-check" | python -m json.tool
+```
+
+## Turn-state definition
+
+### Aligned turn-state
+A turn produces one aligned turn-state.
+
+This aligned turn-state is the shared persisted formation for that turn.
+
+FieldArtifact and LoopCycle derive from the same aligned turn-state.
+
+Articulation is generated from the aligned turn-state.
+
+Drift metadata is carried in the aligned turn-state.
+
+`selected_elements` must match across:
+- top-level `selected_elements`
+- `relevance_gradient.selected_elements`
+
+within the same turn-state.
+
+The system should not persist two differently shaped versions of the same turn.
+
+### Role definitions
+
+#### FieldArtifact
+FieldArtifact is the canonical persisted field-state for the turn.
+
+#### LoopCycle
+LoopCycle is the persisted cycle snapshot derived from that same aligned turn-state.
+
+#### Articulation
+Articulation is generated from the aligned turn-state rather than from a differently shaped pre-alignment version.
+
+## Next recommended build task
+Build-stage handoff is complete after this file is committed.
+
+Next recommended technical task:
+- structural audit of runtime timing:
+  - field update timing
+  - loopcycle construction timing
+  - compression timing
+  - drift emission timing
