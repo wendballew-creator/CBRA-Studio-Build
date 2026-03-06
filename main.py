@@ -239,22 +239,14 @@ def chat_with_file(
     ))
 
     if "loopcycle" in result and isinstance(result["loopcycle"], dict):
-        
-            # --- Compression enforcement (FieldArtifact) ---
-            compression_violations = []
-            if isinstance(result, dict):
-                lc = result.get("loopcycle")
-                if isinstance(lc, dict):
-                    fa = lc.get("field_artifact") or lc.get("field")
-                    if isinstance(fa, dict):
-                        from cbra.compression import enforce_fieldartifact_compression
-                        enforced, compression_violations = enforce_fieldartifact_compression(fa)
-                        if "field_artifact" in lc:
-                            lc["field_artifact"] = enforced
-                        elif "field" in lc:
-                            lc["field"] = enforced
 
-            append_loopcycle(thread_id, LoopCycle(**result["loopcycle"]))
+        # --- Compression enforcement (FieldArtifact) ---
+        # loopcycle payload is the FieldArtifact/LoopCycle-shaped dict itself; enforce directly.
+        if isinstance(result, dict) and isinstance(result.get("loopcycle"), dict):
+            enforced_fa, _compression_violations = enforce_fieldartifact_compression(result["loopcycle"])
+            result["loopcycle"] = enforced_fa
+
+        append_loopcycle(thread_id, LoopCycle(**result["loopcycle"]))
 
     return {
         "request_id": str(uuid4()),

@@ -10,3 +10,7 @@ exports/
 *.swo
 *~
 *pre_rewrite*.bak
+
+# local patch backup files
+*.bak
+*.pre_*
