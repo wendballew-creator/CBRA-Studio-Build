@@ -253,5 +253,6 @@ def chat_with_file(
         "thread_id": thread_id,
         "text": result.get("text", ""),
         "debug": result.get("debug"),
+        "loopcycle": result.get("loopcycle"),
         "data": None,
     }

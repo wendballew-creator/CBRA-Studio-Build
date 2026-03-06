@@ -493,31 +493,30 @@ def run_cbra(
             drift_detected = True
             reintegration_stage = loop_impact.get("reintegration_stage") or "Diffractive Mapping"
 
-    if field_id:
-        update_field(
-            field_id,
-            {
-                "updated_at": _now_iso(),
-                "sources_citations": citations,
-                "field_signature": stage_field_signature or {},
-                "noticing_register": stage_noticing or {},
-                "relational_map": stage_relational or {},
-                "diffractive_map": stage_diffractive or {},
-                "relevance_gradient": stage_relevance or {},
-                "selected_elements": selected_elements,
-                "notes": {
-                    "drift_detected": drift_detected,
-                    "reintegration_stage": reintegration_stage,
-                },
-            },
-        )
+    aligned_turn_state: Dict[str, Any] = {
+        "updated_at": _now_iso(),
+        "sources_citations": citations,
+        "field_signature": stage_field_signature or {},
+        "noticing_register": stage_noticing or {},
+        "relational_map": stage_relational or {},
+        "diffractive_map": stage_diffractive or {},
+        "relevance_gradient": stage_relevance or {},
+        "selected_elements": selected_elements,
+        "notes": {
+            "drift_detected": drift_detected,
+            "detected_at_stage": "Articulation" if drift_detected else None,
+            "reintegration_target": reintegration_stage if drift_detected else None,
+            "reintegration_stage": reintegration_stage,
+        },
+    }
 
-    persisted_field = get_field(field_id) if field_id else None
+    if field_id:
+        update_field(field_id, aligned_turn_state)
 
     placement_rule = _placement_rule_text() if placement_q else ""
     output_rule = _output_rule_text() if mode == "debug" else ""
 
-    field_payload = persisted_field.model_dump() if persisted_field else {}
+    field_payload = {"id": field_id, **aligned_turn_state} if field_id else dict(aligned_turn_state)
 
     articulation_prompt = (
         "ARTICULATION\n"
@@ -571,21 +570,17 @@ def run_cbra(
     # --- LoopCycle record (internal storage) ---
     loopcycle: Dict[str, Any] = {
         "field_id": field_id,
-        "field_signature": stage_field_signature or {},
-        "noticing_register": stage_noticing or {},
-        "relational_map": stage_relational or {},
-        "diffractive_map": stage_diffractive or {},
-        "relevance_gradient": stage_relevance or {},
+        "field_signature": aligned_turn_state.get("field_signature") or {},
+        "noticing_register": aligned_turn_state.get("noticing_register") or {},
+        "relational_map": aligned_turn_state.get("relational_map") or {},
+        "diffractive_map": aligned_turn_state.get("diffractive_map") or {},
+        "relevance_gradient": aligned_turn_state.get("relevance_gradient") or {},
+        "selected_elements": aligned_turn_state.get("selected_elements") or [],
+        "notes": aligned_turn_state.get("notes") or {},
         "articulation_output": text,
         "action_vector": None,
         "drift_detected": drift_detected,
         "reintegration_stage": reintegration_stage,
-        "notes": {
-            "drift_detected": drift_detected,
-            "detected_at_stage": "Articulation" if drift_detected else None,
-            "reintegration_target": reintegration_stage if drift_detected else None,
-            "reintegration_stage": reintegration_stage,
-        },
     }
 
     result: Dict[str, Any] = {"text": text, "loopcycle": loopcycle}
