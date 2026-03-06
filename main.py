@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+from dotenv import load_dotenv, find_dotenv
+import os
+
+# Load .env from current working directory (reliable under uvicorn reload)
+dotenv_path = find_dotenv(usecwd=True)
+load_dotenv(dotenv_path, override=True)
+
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Optional, Literal, Any
 
 from cbra_engine import run_cbra
+from cbra.compression import enforce_fieldartifact_compression
 
 from uuid import uuid4
 from datetime import datetime
@@ -70,15 +78,10 @@ def chat(thread_id: str, request: GenerateRequest):
         thread = get_thread(thread_id)
         if thread is None:
             thread = create_thread(thread_id)
-        else:
-            # Back-compat: attach a field if missing
-            if not getattr(thread, "current_field_id", None):
-                f = create_field(thread_id=thread_id)
-                thread.current_field_id = f.id
 
         append_message(
             thread_id,
-            Message(role="user", content=request.user_text, timestamp=datetime.utcnow()),
+            Message(role="user", content=request.user_text),
         )
 
         result = run_cbra(
@@ -88,6 +91,12 @@ def chat(thread_id: str, request: GenerateRequest):
             field_id=thread.current_field_id,
         )
         if "loopcycle" in result and isinstance(result["loopcycle"], dict):
+            
+            # --- Compression enforcement (FieldArtifact) ---
+            # loopcycle payload is the FieldArtifact dict itself; enforce compression on it directly.
+            if isinstance(result, dict) and isinstance(result.get("loopcycle"), dict):
+                enforced_fa, _compression_violations = enforce_fieldartifact_compression(result["loopcycle"])
+                result["loopcycle"] = enforced_fa
             append_loopcycle(thread_id, LoopCycle(**result["loopcycle"]))
         # If drift detected, log DriftEvent
         lc = result.get("loopcycle") if isinstance(result.get("loopcycle"), dict) else None
@@ -96,48 +105,42 @@ def chat(thread_id: str, request: GenerateRequest):
                 thread_id,
                 DriftEvent(
                     kind="DRIFT_DETECTED",
+                    severity="low",
+                    reintegration_target=(lc.get("reintegration_stage") or "Field Entry"),
                     detected_at_stage="Articulation",
-                    reintegration_stage=lc.get("reintegration_stage") or "Field Entry",
-                    timestamp=datetime.utcnow(),
+                    reintegration_stage=lc.get("reintegration_stage"),
+                    notes="Drift detected during Articulation stage.",
                 ),
             )
 
-        append_message(
-            thread_id,
-            Message(role="assistant", content=result["text"], timestamp=datetime.utcnow()),
-        )
+            append_message(
+                thread_id,
+                Message(role="assistant", content=result["text"]),
+            )
 
-        return ok(
-            request_id=request_id,
-            thread_id=thread_id,
-            text=result.get("text"),
-            debug=result.get("debug"),
-            data=None,
-        )
+        return result
     except Exception as e:
         return err(request_id=request_id, code="INTERNAL_ERROR", message=str(e))
 
 @app.get("/thread/{thread_id}")
-def read_thread(thread_id: str):
+def get_thread_route(thread_id: str):
     request_id = str(uuid4())
+
     thread = get_thread(thread_id)
     if thread is None:
-        return err(request_id=request_id, code="THREAD_NOT_FOUND", message="Thread not found")
+        thread = create_thread(thread_id)
 
     return ok(
         request_id=request_id,
-        thread_id=thread_id,
+        thread_id=thread.id,
         text=None,
         debug=None,
-        data=thread.dict(),
+        data=thread.model_dump(),
     )
 
 @app.get("/thread/{thread_id}/export")
 def export_thread(thread_id: str):
     request_id = str(uuid4())
-    thread = get_thread(thread_id)
-    if thread is None:
-        return err(request_id=request_id, code="THREAD_NOT_FOUND", message="Thread not found")
 
     return ok(
         request_id=request_id,
@@ -211,7 +214,6 @@ def chat_with_file(
     append_message(thread_id, Message(
         role="user",
         content=f"{user_text}\n\n[Attached: {upload.filename}]",
-        timestamp=datetime.utcnow()
     ))
 
     result = run_cbra(user_text=combined, mode=mode)
@@ -219,11 +221,25 @@ def chat_with_file(
     append_message(thread_id, Message(
         role="assistant",
         content=result.get("text", ""),
-        timestamp=datetime.utcnow()
     ))
 
     if "loopcycle" in result and isinstance(result["loopcycle"], dict):
-        append_loopcycle(thread_id, LoopCycle(**result["loopcycle"]))
+        
+            # --- Compression enforcement (FieldArtifact) ---
+            compression_violations = []
+            if isinstance(result, dict):
+                lc = result.get("loopcycle")
+                if isinstance(lc, dict):
+                    fa = lc.get("field_artifact") or lc.get("field")
+                    if isinstance(fa, dict):
+                        from cbra.compression import enforce_fieldartifact_compression
+                        enforced, compression_violations = enforce_fieldartifact_compression(fa)
+                        if "field_artifact" in lc:
+                            lc["field_artifact"] = enforced
+                        elif "field" in lc:
+                            lc["field"] = enforced
+
+            append_loopcycle(thread_id, LoopCycle(**result["loopcycle"]))
 
     return {
         "request_id": str(uuid4()),

@@ -21,9 +21,13 @@ class DriftEvent(BaseModel):
     ts: str = Field(default_factory=_now_iso)
     kind: str
     severity: str = "low"
-    reintegration_target: Optional[str] = None
-    notes: Optional[str] = None
 
+    # Keep both: target + explicit stage metadata
+    reintegration_target: Optional[str] = None
+    detected_at_stage: Optional[str] = None
+    reintegration_stage: Optional[str] = None
+
+    notes: Optional[str] = None
 
 class FieldArtifact(BaseModel):
     """
@@ -49,6 +53,7 @@ class FieldArtifact(BaseModel):
     relevance_gradient: Dict[str, Any] = Field(default_factory=dict)
 
     selected_elements: List[Dict[str, Any]] = Field(default_factory=list)
+
     notes: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -63,6 +68,8 @@ class LoopCycle(BaseModel):
     relational_map: Dict[str, Any] = Field(default_factory=dict)
     diffractive_map: Dict[str, Any] = Field(default_factory=dict)
     relevance_gradient: Dict[str, Any] = Field(default_factory=dict)
+
+    selected_elements: List[Dict[str, Any]] = Field(default_factory=list)
 
     articulation_output: Optional[str] = None
     action_vector: Optional[Dict[str, Any]] = None
