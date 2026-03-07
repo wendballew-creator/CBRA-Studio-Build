@@ -30,7 +30,7 @@ from cbra.store import (
 )
 
 app = FastAPI(title="CBRA Writing Support")
-app.mount("/ui", StaticFiles(directory=".", html=True), name="static")
+app.mount("/ui", StaticFiles(directory="ui", html=True), name="static")
 
 def ok(*, request_id: str, thread_id: Optional[str], text: Optional[str] = None, debug: Any = None, data: Any = None):
     return {
