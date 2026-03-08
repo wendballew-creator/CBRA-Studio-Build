@@ -128,10 +128,10 @@ def chat(thread_id: str, request: GenerateRequest):
                     ),
                 )
 
-            append_message(
-                thread_id,
-                Message(role="assistant", content=result["text"]),
-            )
+        append_message(
+            thread_id,
+            Message(role="assistant", content=result["text"]),
+        )
 
         return result
     except Exception as e:
