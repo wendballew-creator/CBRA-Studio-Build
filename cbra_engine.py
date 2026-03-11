@@ -332,6 +332,180 @@ def _run_json_stage(
     raw = getattr(resp, "output_text", "") or ""
     return _safe_json_loads(raw)
 
+def _select_response_formation(user_text: str, aligned_turn_state: Dict[str, Any]) -> str:
+    """
+    Selects which response formation the turn is calling for.
+
+    Returns one of:
+    - operative
+    - noticing
+    - diffractive
+    """
+    u = (user_text or "").strip().lower()
+
+    # Direct user correction can immediately reshape formation
+    correction_markers = [
+        "plain language",
+        "say it plainly",
+        "ordinary sentence",
+        "ordinary language",
+        "everyday language",
+        "no theory words",
+        "no theory word",
+        "one sentence",
+        "one direct sentence",
+        "one short sentence",
+        "one short ordinary sentence",
+        "one concrete next step",
+        "give me one concrete next step",
+        "stop explaining",
+        "answer briefly",
+        "just answer",
+        "direct answer",
+        "give me a list",
+        "give me options",
+        "tips",
+        "suggest",
+        "recommend",
+        "what should i do",
+        "next step",
+    ]
+    if any(m in u for m in correction_markers):
+        return "operative"
+
+    # Explicit conceptual working / requested diffraction
+    diffractive_markers = [
+        "provide a diffraction",
+        "give me a diffraction",
+        "diffract",
+        "clarify the difference",
+        "what changes under cbra",
+        "explain this operator",
+        "architecture explanation",
+        "ontological distinction",
+        "why does this fail",
+        "explain why",
+        "explain the difference",
+    ]
+    if any(m in u for m in diffractive_markers):
+        return "diffractive"
+
+    # Natural practical support
+    operative_markers = [
+        "what should i do",
+        "what do i do",
+        "help me choose",
+        "list",
+        "options",
+        "recommend",
+        "suggest",
+        "tips",
+        "next step",
+        "steps",
+        "restaurants",
+        "where should i go",
+        "give me",
+        "plain answer",
+        "concise",
+        "short answer",
+    ]
+    if any(m in u for m in operative_markers):
+        return "operative"
+
+    # Unfinishedness / subtle signal / staying with what is forming
+    noticing_markers = [
+        "i can't quite say it",
+        "i cant quite say it",
+        "something feels off",
+        "unfinished",
+        "stay with",
+        "what is happening here",
+        "what's happening here",
+        "what is forming",
+        "circling around an idea",
+        "not fully articulated",
+        "something is forming",
+        "remain with",
+    ]
+    if any(m in u for m in noticing_markers):
+        return "noticing"
+
+    # Default:
+    # practical questions should tend toward movement;
+    # otherwise stay close to noticing rather than defaulting to explanation.
+    if "?" in u:
+        return "operative"
+    return "noticing"
+
+
+def _run_response_formation(
+    *,
+    formation: str,
+    client: OpenAI,
+    model: str,
+    system_identity: str,
+    field_payload: Dict[str, Any],
+    user_text: str,
+) -> str:
+    """
+    Forms user-facing response from the aligned turn-state.
+    """
+    if formation == "operative":
+        prompt = (
+            "OPERATIVE FORMATION\n"
+            "Form a response that supports movement from within FIELD_PAYLOAD.\n\n"
+            "Requirements:\n"
+            "- Respond directly to the user's ask.\n"
+            "- Plain language is valid.\n"
+            "- Lists, steps, options, and direct answers are valid stabilizations.\n"
+            "- Give the action itself, not discourse about choosing, identifying, articulating, noticing, mapping, or surfacing the action.\n"
+            "- Do not tell the user to identify the next step. Give the next step.\n"
+            "- If the user asks for one concrete next step, output exactly one concrete imperative sentence.\n"
+            "- If the user asks for options or a list, provide them directly.\n"
+            "- Use specific, ordinary wording.\n"
+            "- Do not explain the architecture.\n"
+            "- Do not substitute discourse about action for action.\n\n"
+            f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
+            f"USER_INPUT:\n{user_text}\n"
+        )
+    elif formation == "noticing":
+        prompt = (
+            "NOTICING FORMATION\n"
+            "Form a response that registers what is forming in this exchange from within FIELD_PAYLOAD.\n\n"
+            "Requirements:\n"
+            "- Stay close to this exchange.\n"
+            "- Register tensions, pressures, signals, or unfinishedness.\n"
+            "- Keep the response specific and provisional.\n"
+            "- Ordinary language is valid.\n"
+            "- Do not generalize into portable academic discourse.\n"
+            "- Do not explain the architecture.\n\n"
+            f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
+            f"USER_INPUT:\n{user_text}\n"
+        )
+    else:
+        prompt = (
+            "DIFFRACTIVE CLARIFICATION\n"
+            "Form a bounded conceptual clarification from within FIELD_PAYLOAD.\n\n"
+            "Requirements:\n"
+            "- Work the user's framing through CBRA ground because conceptual clarification is being asked for.\n"
+            "- Keep the response bounded and readable.\n"
+            "- Answer the explicit conceptual question.\n"
+            "- Do not turn this into generalized theory performance.\n\n"
+            f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
+            f"USER_INPUT:\n{user_text}\n"
+        )
+
+    resp = client.responses.create(
+        model=model,
+        input=[
+            {"role": "system", "content": system_identity},
+            {"role": "developer", "content": CBRA_PROMPT + "\n\n" + ANTI_COMPRESSION_POLICY},
+            {"role": "user", "content": prompt},
+        ],
+    )
+    text = getattr(resp, "output_text", "") or ""
+    return _normalize_terminology(text, user_text=user_text)
+
 def run_cbra(
     user_text: str,
     mode: Literal["production", "debug"] = "production",
@@ -518,54 +692,21 @@ def run_cbra(
 
     field_payload = {"id": field_id, **aligned_turn_state} if field_id else dict(aligned_turn_state)
 
-    articulation_prompt = (
-        "ARTICULATION\n"
-        "Generate the user-facing response grounded ONLY in FIELD_PAYLOAD.\n\n"
-        "Constraints:\n"
-        "- Use ONLY information present in FIELD_PAYLOAD.\n"
-        "- Prioritize FIELD_PAYLOAD.selected_elements.\n"
-        "- Do not output stage labels.\n"
-        "- Do not explain the architecture.\n"
-        "- Do not introduce new concepts not present in FIELD_PAYLOAD.\n"
-        "- If FIELD_PAYLOAD.notes.drift_detected is true, be concise and orient toward FIELD_PAYLOAD.notes.reintegration_stage.\n\n"
-        f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
-        f"USER_INPUT:\n{user_text}\n\n"
-        f"{placement_rule}{output_rule}"
-    )
+    # Response formation selection happens before wording begins.
+    response_formation = _select_response_formation(user_text, aligned_turn_state)
 
-    resp = client.responses.create(
+    text = _run_response_formation(
+        formation=response_formation,
+        client=client,
         model=model,
-        input=[
-            {"role": "system", "content": system_identity},
-            {"role": "developer", "content": CBRA_PROMPT + "\n\n" + ANTI_COMPRESSION_POLICY},
-            {"role": "user", "content": articulation_prompt},
-        ],
+        system_identity=system_identity,
+        field_payload=field_payload,
+        user_text=user_text + ("\n\n" + placement_rule if placement_rule else "") + ("\n\n" + output_rule if output_rule else ""),
     )
 
-    text = getattr(resp, "output_text", "") or ""
-    text = _normalize_terminology(text, user_text=user_text)
-
-    if (not _user_asked_for_bullets_or_summary(user_text)) and _looks_like_outline_or_bullets(text):
-        repair_prompt = (
-            "Rewrite as continuous prose paragraphs.\n"
-            "Do not summarize. Do not outline. Do not use bullet points.\n"
-            "Produce finished prose in full sentences.\n\n"
-            "Use ONLY information present in FIELD_PAYLOAD.\n"
-            "Do not introduce new concepts.\n"
-            f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
-            f"USER_INPUT:\n{user_text}"
-        )
-
-        repair = client.responses.create(
-            model=model,
-            input=[
-                {"role": "system", "content": system_identity},
-                {"role": "developer", "content": CBRA_PROMPT + "\n\n" + ANTI_COMPRESSION_POLICY},
-                {"role": "user", "content": repair_prompt},
-            ],
-        )
-        text = getattr(repair, "output_text", "") or text
-        text = _normalize_terminology(text, user_text=user_text)
+    # Persist formation choice in notes for debugging / audit.
+    if isinstance(aligned_turn_state.get("notes"), dict):
+        aligned_turn_state["notes"]["response_formation"] = response_formation
 
     # --- LoopCycle record (internal storage) ---
     loopcycle: Dict[str, Any] = {
@@ -589,10 +730,12 @@ def run_cbra(
         result["debug"] = {
             "field_signature": _local_field_signature(user_text, citations),
             "noticing_register": _local_noticing_register(user_text),
-            "drift_signal": drift_signal,
+            "drift_signal": {"drift_detected": drift_detected, "reintegration_stage": reintegration_stage},
             "sources_used": citations,
             "retrieval_hits": _compress_hits_for_debug(raw_hits),
             "retrieval_labels": retrieval_labels,
+            "response_formation": response_formation,
+            "response_formation": response_formation,
         }
 
     return result

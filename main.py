@@ -231,7 +231,12 @@ def chat_with_file(
         content=f"{user_text}\n\n[Attached: {upload.filename}]",
     ))
 
-    result = run_cbra(user_text=combined, mode=mode)
+    result = run_cbra(
+        user_text=combined,
+        mode=mode,
+        thread_id=thread_id,
+        field_id=thread.current_field_id,
+    )
 
     append_message(thread_id, Message(
         role="assistant",
