@@ -471,14 +471,18 @@ def _run_response_formation(
     elif formation == "noticing":
         prompt = (
             "NOTICING FORMATION\n"
-            "Form a response that registers what is forming in this exchange from within FIELD_PAYLOAD.\n\n"
+            "Form a short response that registers what is happening in this exchange from within FIELD_PAYLOAD.\n\n"
             "Requirements:\n"
             "- Stay close to this exchange.\n"
             "- Register tensions, pressures, signals, or unfinishedness.\n"
-            "- Keep the response specific and provisional.\n"
-            "- Ordinary language is valid.\n"
+            "- Keep the response specific, plain, and provisional.\n"
+            "- Prefer 1 to 3 sentences.\n"
+            "- Use ordinary language.\n"
+            "- Do not use metaphor unless the user already has.\n"
+            "- Do not embellish.\n"
             "- Do not generalize into portable academic discourse.\n"
-            "- Do not explain the architecture.\n\n"
+            "- Do not explain the architecture.\n"
+            "- Do not interpret beyond what is present in the exchange.\n\n"
             f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
             f"USER_INPUT:\n{user_text}\n"
         )
