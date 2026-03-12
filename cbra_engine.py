@@ -610,14 +610,17 @@ def run_cbra(
         client=client,
         model=model,
         system_identity=system_identity,
-        stage_name="Diffractive Mapping (Humanism → CBRA ontology)",
+        stage_name="Diffractive Working",
         instructions=(
-            "Produce a DIFFRACTIVE MAP as JSON using CBRA ontology as the diffractive ground. "
-            "Include keys: phenomenon, humanist_configuration {core_assumptions, subject_position, agency_model, knowledge_model, stabilization_mechanisms}, "
-            "posthumanist_reading {ontology_shift, agency_reconfiguration, boundary_redefinition, material_discursive_entanglements}, "
-            "differences_that_matter (list of {difference, why_it_matters, what_becomes_possible}), "
-            "exclusions_revealed (list of {previously_stabilized_element, now_visible_as_exclusion, implication}), "
+            "Produce a DIFFRACTIVE MAP as JSON using CBRA ground. "
+            "Work the field through difference, interference, exclusions, and emergent patterning without requiring a contrastive humanism-versus-CBRA frame. "
+            "Include keys: "
+            "phenomenon, "
+            "patterning_through_difference (list of {pattern, why_it_matters, what_it_conditions}), "
+            "interference_points (list of {site, tension, effect}), "
+            "exclusions_revealed (list of {stabilized_element, exclusion, implication}), "
             "apparatus_effects {discursive, material, institutional}, "
+            "stabilization_dynamics {what_is_stabilizing, how_it_is_forming, whether_it_supports_movement}, "
             "loop_impact {activation_shift, drift_risk, reintegration_stage}. "
             "reintegration_stage must be one of: Field Entry, Noticing Register, Relational Framing, Diffractive Mapping, Situated Relevance Selection, Articulation. "
             "Return ONLY JSON."
@@ -638,6 +641,7 @@ def run_cbra(
             "what_to_hold_open (list), what_to_act_on (list), what_to_defer (list)."
         ),
         user_text=user_text,
+
         sources_block=sources_block,
         field_id=field_id or "NO_FIELD",
     )
@@ -649,24 +653,32 @@ def run_cbra(
         if isinstance(se, list):
             selected_elements = se
 
-    # --- Drift detection (structural, minimal v0) ---
+    # --- Drift detection (matched to current diffractive schema) ---
     drift_detected = False
     reintegration_stage = None
 
     if isinstance(stage_diffractive, dict):
-        posthuman = stage_diffractive.get("posthumanist_reading") or {}
+        patterning = stage_diffractive.get("patterning_through_difference") or []
+        interference = stage_diffractive.get("interference_points") or []
         exclusions = stage_diffractive.get("exclusions_revealed") or []
+        stabilization = stage_diffractive.get("stabilization_dynamics") or {}
         loop_impact = stage_diffractive.get("loop_impact") or {}
         drift_risk = (loop_impact.get("drift_risk") or "").lower()
 
-        # Mirror reintegration_stage from diffractive loop_impact even when drift_detected is False
+        # Mirror reintegration_stage from loop_impact even when drift_detected is False
         if isinstance(loop_impact, dict):
             reintegration_stage = loop_impact.get("reintegration_stage") or reintegration_stage
 
-        if not posthuman or (isinstance(exclusions, list) and len(exclusions) == 0):
+        has_patterning = isinstance(patterning, list) and len(patterning) > 0
+        has_interference = isinstance(interference, list) and len(interference) > 0
+        has_exclusions = isinstance(exclusions, list) and len(exclusions) > 0
+        has_stabilization = isinstance(stabilization, dict) and len(stabilization) > 0
+
+        if not (has_patterning and has_interference and has_stabilization):
             drift_detected = True
             reintegration_stage = loop_impact.get("reintegration_stage") or "Noticing Register"
 
+        # Exclusions are useful but not required every turn.
         if "high" in drift_risk:
             drift_detected = True
             reintegration_stage = loop_impact.get("reintegration_stage") or "Diffractive Mapping"
