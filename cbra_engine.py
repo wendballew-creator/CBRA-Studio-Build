@@ -386,6 +386,24 @@ def _select_response_formation(user_text: str, aligned_turn_state: Dict[str, Any
         "why does this fail",
         "explain why",
         "explain the difference",
+        "don't explain cbra",
+        "dont explain cbra",
+        "answer from it",
+        "without citing the framework",
+        "without citing the framework behind it",
+        "don't explain the framework",
+        "dont explain the framework",
+        "say that again without citing",
+        "say it without citing",
+        "what does cbra mean by",
+        "how does cbra use",
+        "within cbra",
+        "in cbra",
+        "cbra's use of",
+        "cbra use of",
+        "how is this used in cbra",
+        "how does this function in cbra",
+        "what is this operator in cbra",
     ]
     if any(m in u for m in diffractive_markers):
         return "diffractive"
@@ -437,6 +455,74 @@ def _select_response_formation(user_text: str, aligned_turn_state: Dict[str, Any
         return "operative"
     return "noticing"
 
+def _select_conceptual_mode(user_text: str) -> str:
+    """
+    Select conceptual clarification stance for diffractive responses.
+
+    Returns one of:
+    - grounded_response
+    - framework_internal_clarification
+    - lineage_context_clarification
+    """
+    u = (user_text or "").strip().lower()
+
+    grounded_markers = [
+        "don't explain cbra",
+        "dont explain cbra",
+        "answer from it",
+        "without citing the framework",
+        "without citing the framework behind it",
+        "don't explain the framework",
+        "dont explain the framework",
+        "say that again without citing",
+        "say it without citing",
+    ]
+    if any(m in u for m in grounded_markers):
+        return "grounded_response"
+
+    framework_internal_markers = [
+        "what does cbra mean by",
+        "how does cbra use",
+        "within cbra",
+        "in cbra",
+        "cbra's use of",
+        "cbra use of",
+        "how is this used in cbra",
+        "how does this function in cbra",
+        "what is this operator in cbra",
+        "action orientation",
+        "noticing register",
+        "relational framing",
+        "situated relevance selection",
+        "action vector",
+        "field entry",
+        "loop reintegration",
+        "drift constraints",
+        "generative stabilization",
+    ]
+    if any(m in u for m in framework_internal_markers):
+        return "framework_internal_clarification"
+
+    lineage_context_markers = [
+        "diffraction",
+        "reflection",
+        "barad",
+        "posthumanism",
+        "agential realism",
+        "agential cut",
+        "intra-action",
+        "entanglement",
+        "material-discursive",
+        "performativity",
+        "lineage",
+        "context",
+        "broader context",
+        "larger context",
+    ]
+    if any(m in u for m in lineage_context_markers):
+        return "lineage_context_clarification"
+
+    return "framework_internal_clarification"
 
 def _run_response_formation(
     *,
@@ -446,6 +532,7 @@ def _run_response_formation(
     system_identity: str,
     field_payload: Dict[str, Any],
     user_text: str,
+    conceptual_mode: Optional[str] = None,
 ) -> str:
     """
     Forms user-facing response from the aligned turn-state.
@@ -487,17 +574,51 @@ def _run_response_formation(
             f"USER_INPUT:\n{user_text}\n"
         )
     else:
-        prompt = (
-            "DIFFRACTIVE CLARIFICATION\n"
-            "Form a bounded conceptual clarification from within FIELD_PAYLOAD.\n\n"
-            "Requirements:\n"
-            "- Work the user's framing through CBRA ground because conceptual clarification is being asked for.\n"
-            "- Keep the response bounded and readable.\n"
-            "- Answer the explicit conceptual question.\n"
-            "- Do not turn this into generalized theory performance.\n\n"
-            f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
-            f"USER_INPUT:\n{user_text}\n"
-        )
+        conceptual_mode = conceptual_mode or "framework_internal_clarification"
+
+        if conceptual_mode == "grounded_response":
+            prompt = (
+                "GROUNDED RESPONSE\n"
+                "Answer from the aligned turn-state without turning CBRA, the framework, the sources, or the architecture into the object of explanation.\n\n"
+                "Requirements:\n"
+                "- Answer directly.\n"
+                "- Do not mention CBRA, framework, sources, field material, or architecture.\n"
+                "- Do not describe the user's instruction.\n"
+                "- Do not comment on the exchange.\n"
+                "- Do not explain what you are doing.\n"
+                "- Output only the revised answer.\n\n"
+                f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
+                f"USER_INPUT:\n{user_text}\n"
+            )
+
+        elif conceptual_mode == "lineage_context_clarification":
+            prompt = (
+                "LINEAGE / CONTEXT CLARIFICATION\n"
+                "Clarify the term in its broader lineage or context first, then state how CBRA works within or operationalizes it.\n\n"
+                "Requirements:\n"
+                "- Begin with the broader lineage, context, or inheritance of the term.\n"
+                "- Then state how CBRA uses, works within, or operationalizes that term.\n"
+                "- Do not imply that CBRA contains or exhausts the concept.\n"
+                "- Do not begin with 'within CBRA' or treat CBRA as the primary container of meaning.\n"
+                "- Keep the response bounded and readable.\n"
+                "- Answer the explicit conceptual question.\n\n"
+                f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
+                f"USER_INPUT:\n{user_text}\n"
+            )
+
+        else:
+            prompt = (
+                "FRAMEWORK-INTERNAL CLARIFICATION\n"
+                "Clarify how the concept functions within CBRA.\n\n"
+                "Requirements:\n"
+                "- Explain the concept as it functions inside CBRA.\n"
+                "- Focus on runtime role, operator function, stage placement, or design use.\n"
+                "- Keep the response bounded and readable.\n"
+                "- Answer the explicit conceptual question.\n"
+                "- Do not drift into broader lineage unless the user asks for it.\n\n"
+                f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
+                f"USER_INPUT:\n{user_text}\n"
+            )
 
     resp = client.responses.create(
         model=model,
@@ -711,6 +832,10 @@ def run_cbra(
     # Response formation selection happens before wording begins.
     response_formation = _select_response_formation(user_text, aligned_turn_state)
 
+    conceptual_mode = None
+    if response_formation == "diffractive":
+        conceptual_mode = _select_conceptual_mode(user_text)
+
     text = _run_response_formation(
         formation=response_formation,
         client=client,
@@ -718,11 +843,14 @@ def run_cbra(
         system_identity=system_identity,
         field_payload=field_payload,
         user_text=user_text + ("\n\n" + placement_rule if placement_rule else "") + ("\n\n" + output_rule if output_rule else ""),
+        conceptual_mode=conceptual_mode,
     )
 
     # Persist formation choice in notes for debugging / audit.
     if isinstance(aligned_turn_state.get("notes"), dict):
         aligned_turn_state["notes"]["response_formation"] = response_formation
+        if conceptual_mode:
+            aligned_turn_state["notes"]["conceptual_mode"] = conceptual_mode
 
     # --- LoopCycle record (internal storage) ---
     loopcycle: Dict[str, Any] = {
@@ -751,7 +879,7 @@ def run_cbra(
             "retrieval_hits": _compress_hits_for_debug(raw_hits),
             "retrieval_labels": retrieval_labels,
             "response_formation": response_formation,
-            "response_formation": response_formation,
+            "conceptual_mode": conceptual_mode,
         }
 
     return result
