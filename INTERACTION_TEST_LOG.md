@@ -847,3 +847,16 @@ Status
 
 Unresolved.
 
+# Test 026 — Direct Question Failure / Live Lookup Avoidance
+
+**Prompt Set**
+
+```text
+How are you answering direct questions now?
+
+Give some ideas about what to do in Atlanta this weekend. It is March 13, 2026
+
+Yes, the restraints are time and what is happening. Give me some options.
+
+What is happening in Atlanta this weekend? Answer my question and stop avoiding. Look it up.
+
