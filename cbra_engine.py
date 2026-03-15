@@ -343,6 +343,10 @@ def _select_response_formation(user_text: str, aligned_turn_state: Dict[str, Any
     """
     u = (user_text or "").strip().lower()
 
+    # Route current/local factual questions to verified direct answer mode
+    if _is_verified_direct_question(user_text):
+        return "verified_direct"
+
     # Direct user correction can immediately reshape formation
     correction_markers = [
         "plain language",
@@ -524,6 +528,48 @@ def _select_conceptual_mode(user_text: str) -> str:
 
     return "framework_internal_clarification"
 
+def _is_verified_direct_question(user_text: str) -> bool:
+    """
+    Detect current, local, time-bound, factual questions that should trigger
+    retrieval-bounded direct answering.
+    """
+    u = (user_text or "").strip().lower()
+
+    current_markers = [
+        "this weekend",
+        "tonight",
+        "today",
+        "right now",
+        "this week",
+        "what's happening",
+        "what is happening",
+        "what events",
+        "what concerts",
+        "what shows",
+        "what games",
+        "what's on",
+        "what is on",
+        "look it up",
+        "current",
+        "happening in",
+        "near me",
+        "in atlanta",
+    ]
+
+    factual_verbs = [
+        "what",
+        "is there",
+        "are there",
+        "when",
+        "where",
+        "which",
+    ]
+
+    has_current_marker = any(m in u for m in current_markers)
+    has_factual_shape = any(v in u for v in factual_verbs)
+
+    return has_current_marker and has_factual_shape
+
 def _run_response_formation(
     *,
     formation: str,
@@ -573,6 +619,28 @@ def _run_response_formation(
             f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
             f"USER_INPUT:\n{user_text}\n"
         )
+
+    elif formation == "verified_direct":
+        prompt = (
+            "VERIFIED DIRECT ANSWER\n"
+            "Answer the user's factual question directly using only information supported by available material in FIELD_PAYLOAD.\n\n"
+            "Requirements:\n"
+            "- Answer the question directly.\n"
+            "- Use only information supported by available material in FIELD_PAYLOAD.\n"
+            "- Do not invent details, examples, dates, venues, names, or likely possibilities.\n"
+            "- Do not fill gaps with plausible guesses.\n"
+            "- If the available material does not support a current answer, say that plainly.\n"
+            "- If fresh external verification is not available in this runtime, say that plainly.\n"
+            "- Prefer a short honest answer over a fuller speculative one.\n"
+            "- Use plain, ordinary language.\n"
+            "- If a short list is supported, give a short list.\n"
+            "- Do not describe the exchange.\n"
+            "- Do not explain your process.\n"
+            "- Do not talk about frameworks or architecture.\n\n"
+            f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
+            f"USER_INPUT:\n{user_text}\n"
+        )
+
     else:
         conceptual_mode = conceptual_mode or "framework_internal_clarification"
 
@@ -834,6 +902,10 @@ def run_cbra(
 
     field_payload = {"id": field_id, **aligned_turn_state} if field_id else dict(aligned_turn_state)
 
+    if response_formation == "verified_direct":
+        field_payload["verification_mode"] = "available_sources_only"
+        field_payload["fresh_external_verification"] = "unavailable_in_this_runtime"
+
     # Response formation selection happens before wording begins.
     response_formation = _select_response_formation(user_text, aligned_turn_state)
 
@@ -854,6 +926,9 @@ def run_cbra(
     # Persist formation choice in notes for debugging / audit.
     if isinstance(aligned_turn_state.get("notes"), dict):
         aligned_turn_state["notes"]["response_formation"] = response_formation
+        if response_formation == "verified_direct":
+            aligned_turn_state["notes"]["verification_mode"] = "available_sources_only"
+            aligned_turn_state["notes"]["fresh_external_verification"] = "unavailable_in_this_runtime"
         if conceptual_mode:
             aligned_turn_state["notes"]["conceptual_mode"] = conceptual_mode
 
@@ -884,6 +959,8 @@ def run_cbra(
             "retrieval_hits": _compress_hits_for_debug(raw_hits),
             "retrieval_labels": retrieval_labels,
             "response_formation": response_formation,
+            "verification_mode": "available_sources_only" if response_formation == "verified_direct" else None,
+            "fresh_external_verification": "unavailable_in_this_runtime" if response_formation == "verified_direct" else None,
             "conceptual_mode": conceptual_mode,
         }
 
