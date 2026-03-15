@@ -860,3 +860,10 @@ Yes, the restraints are time and what is happening. Give me some options.
 
 What is happening in Atlanta this weekend? Answer my question and stop avoiding. Look it up.
 
+# Test 027 — Direct Answer with Unsupported Event Insertion
+
+**Prompt Set**
+
+```text
+What events are happening this weekend in Atlanta? It is March 13, 2026
+
