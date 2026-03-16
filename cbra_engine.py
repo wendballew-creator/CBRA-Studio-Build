@@ -1,4 +1,3 @@
-# cbra_engine.py
 from __future__ import annotations
 
 import os
@@ -7,25 +6,31 @@ import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
-import json
-from datetime import datetime
-
-from cbra.store import get_field, update_field, create_field
-
 from dotenv import load_dotenv
 from openai import OpenAI
 
 load_dotenv()
 
-# ------------------------------
-# Configuration
-# ------------------------------
+try:
+    from cbra.corpus import get_active_corpus_files, get_source_role
+except ImportError:
+    from corpus import get_active_corpus_files, get_source_role
+
+try:
+    from cbra.store import update_field
+except ImportError:
+    try:
+        from store import update_field
+    except ImportError:
+        update_field = None
+
 
 DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")
-CORPUS_DIR = Path(__file__).parent / "corpus"
+BASE_DIR = Path(__file__).parent
+CORPUS_DIR = BASE_DIR / "corpus"
+if not CORPUS_DIR.exists():
+    CORPUS_DIR = BASE_DIR
 
-# If you set CBRA_KERNEL_TEXT in .env it will be used.
-# Otherwise we fall back to loading kernel from corpus/CBRA_Kernel_v10_2.md if present.
 ENV_KERNEL = (os.getenv("CBRA_KERNEL_TEXT", "") or "").strip()
 KERNEL_FALLBACK_PATH = CORPUS_DIR / "CBRA_Kernel_v10_2.md"
 
@@ -35,8 +40,7 @@ def _load_kernel_text() -> str:
         return ENV_KERNEL
     if KERNEL_FALLBACK_PATH.exists():
         return KERNEL_FALLBACK_PATH.read_text(encoding="utf-8", errors="replace").strip()
-    # Last resort placeholder so the system still runs
-    return "CBRA kernel not found. (Set CBRA_KERNEL_TEXT or add corpus/CBRA_Kernel_v10_2.md)"
+    return "CBRA kernel not found. (Set CBRA_KERNEL_TEXT or add CBRA_Kernel_v10_2.md)"
 
 
 CBRA_PROMPT = _load_kernel_text()
@@ -47,158 +51,6 @@ def _require_api_key() -> str:
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is not set")
     return api_key
-
-
-# ------------------------------
-# Retrieval (simple local lexical)
-# ------------------------------
-
-def _tokenize(text: str) -> List[str]:
-    s = unicodedata.normalize("NFKC", text or "")
-    s = s.replace("–", "-").replace("—", "-").replace("−", "-")
-    s = s.lower()
-    return re.findall(r"[a-z0-9]+", s)
-
-
-def retrieve_sources(
-    query: str,
-    k: int = 6,
-    *,
-    placement_q: bool = False,
-) -> Tuple[List[str], List[str], List[Dict[str, Any]]]:
-    """
-    Returns:
-      sources:   list[str] chunks to pass into the model as field material
-      citations: list[str] stable refs like "[CBRA_Glossary_v3.md L607+]"
-      hits:      list[dict] raw hit objects for debug (file/line/score/snippet/text)
-    """
-    query = (query or "").strip()
-    if not query:
-        return [], [], []
-
-    if not CORPUS_DIR.exists():
-        return [], [], []
-
-    terms = _tokenize(query)
-    if not terms:
-        return [], [], []
-
-    EXCLUDE = {"CBRA_Corpus_Index.md"}
-    BOOST_FILES = {
-        "CBRA_Loops_Core.md": 2.5 if placement_q else 1.2,
-        "Drift_Constraints.md": 2.0 if "drift" in query.lower() else 1.1,
-        "CBRA_Kernel_v10_2.md": 1.2,
-        "CBRA_Glossary_v3.md": 1.3,
-    }
-
-    hits: List[Dict[str, Any]] = []
-
-    for md_path in CORPUS_DIR.glob("*.md"):
-        if md_path.name in EXCLUDE:
-            continue
-
-        try:
-            lines = md_path.read_text(encoding="utf-8", errors="replace").splitlines()
-        except Exception:
-            continue
-
-        boost = float(BOOST_FILES.get(md_path.name, 1.0))
-
-        for i, line in enumerate(lines, start=1):
-            ltoks = _tokenize(line)
-            if not ltoks:
-                continue
-
-            score = 0
-            for t in terms:
-                if t in ltoks:
-                    score += 1
-
-            if score <= 0:
-                continue
-
-            score = float(score) * boost
-
-            snippet = line.strip()
-            if len(snippet) > 160:
-                snippet = snippet[:160]
-
-            hits.append(
-                {
-                    "file": md_path.name,
-                    "line": i,
-                    "score": score,
-                    "snippet": snippet,
-                    "text": line.strip(),
-                }
-            )
-
-    hits.sort(key=lambda h: h["score"], reverse=True)
-    top = hits[: max(0, int(k))]
-
-    sources = [h["text"] for h in top]
-    citations = [f"[{h['file']} L{h['line']}+]" for h in top]
-
-    return sources, citations, hits
-
-
-def _compress_hits_for_debug(hits: List[Dict[str, Any]], limit: int = 8) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
-    for h in hits[:limit]:
-        out.append(
-            {
-                "file": h.get("file", ""),
-                "line": h.get("line", 0),
-                "score": h.get("score", 0),
-                "snippet": h.get("snippet", ""),
-            }
-        )
-    return out
-
-
-# ------------------------------
-# Rules / Helpers
-# ------------------------------
-
-def _needs_loop_placement_rule(user_text: str) -> bool:
-    q = (user_text or "").lower()
-    triggers = [
-        "where does",
-        "where it sits",
-        "where it belongs",
-        "placement",
-        "in the loop",
-        "cbra loop",
-        "what phase",
-        "between stages",
-        "give placement",
-    ]
-    return any(t in q for t in triggers)
-
-
-def _placement_rule_text() -> str:
-    return (
-        "\n\nPLACEMENT RULE (CBRA_Loops_Core grounding):\n"
-        "When asked where something sits in the CBRA loop, you MUST use the exact canonical stage titles from CBRA_Loops_Core.md.\n"
-        "Allowed stage titles are ONLY:\n"
-        "- Field Entry\n"
-        "- Noticing\n"
-        "- Relational Framing\n"
-        "- Diffractive Mapping\n"
-        "- Situated Relevance Selection\n"
-        "- Articulation\n"
-        "- Action Orientation\n"
-        "Give placement as: 'between <Stage A> and <Stage B>'.\n"
-        "Do not paraphrase stage names. Do not invent stage names.\n"
-        "If uncertain, choose the closest adjacent stages and keep the answer short.\n"
-    )
-
-
-def _output_rule_text() -> str:
-    return (
-        "\n\nOUTPUT RULE:\n"
-        "Return only the user-facing text. Do not include JSON, debug objects, labels, citations, or analysis.\n"
-    )
 
 
 ANTI_COMPRESSION_POLICY = """
@@ -213,13 +65,40 @@ ANTI-COMPRESSION POLICY (MUST FOLLOW)
 """.strip()
 
 
+ROLE_WEIGHT = {
+    "ground_anchor": 50.0,
+    "operator_anchor": 35.0,
+    "constraint_anchor": 30.0,
+    "contextual_evidence": 10.0,
+}
+
+PROFILE_OPERATOR_TERMS = {
+    "verified_direct": ["relevance", "actionable", "visible", "situated"],
+    "correction": ["drift", "instruction", "articulation", "plain language", "directness"],
+    "action": ["action orientation", "next step", "feedback", "visible next-step vectors"],
+    "conceptual": ["diffractive", "difference", "interference", "entanglement", "apparatus", "agential"],
+    "noticing": ["field", "noticing", "signals", "pressure", "unfinished"],
+    "grounded": ["field", "relational", "articulation", "coherence", "ground"],
+}
+
+PROFILE_ACTIVE_STAGES = {
+    "verified_direct": ["Field Entry", "Situated Relevance Selection", "Articulation"],
+    "correction": ["Field Entry", "Situated Relevance Selection", "Articulation"],
+    "action": ["Field Entry", "Situated Relevance Selection", "Action Orientation", "Articulation"],
+    "conceptual": ["Field Entry", "Relational Framing", "Diffractive Mapping", "Situated Relevance Selection", "Articulation"],
+    "noticing": ["Field Entry", "Noticing", "Relational Framing", "Articulation"],
+    "grounded": ["Field Entry", "Relational Framing", "Situated Relevance Selection", "Articulation"],
+}
+
+
+def _tokenize(text: str) -> List[str]:
+    s = unicodedata.normalize("NFKC", text or "")
+    s = s.replace("–", "-").replace("—", "-").replace("−", "-")
+    s = s.lower()
+    return re.findall(r"[a-z0-9]+", s)
+
+
 def _normalize_terminology(text: str, user_text: str = "") -> str:
-    """
-    Silent terminology guard:
-    - avoids treating interaction/intra-action as interchangeable
-    - uses intra-action when ontology markers are present
-    - keeps interaction for UI/software contexts
-    """
     t = text or ""
     u = (user_text or "").lower()
 
@@ -236,17 +115,14 @@ def _normalize_terminology(text: str, user_text: str = "") -> str:
 
 
 def _looks_like_outline_or_bullets(s: str) -> bool:
-    # Defensive: import in-function so it can never be missing.
-    import re as _re
-
     if not s:
         return False
     s2 = s.strip()
     if "\n- " in s2 or "\n* " in s2:
         return True
-    if _re.search(r"(?m)^\s*\d+\.\s+", s2):
+    if re.search(r"(?m)^\s*\d+\.\s+", s2):
         return True
-    if _re.search(r"(?m)^\s*(outline|summary|key points|bullets)\b", s2.lower()):
+    if re.search(r"(?m)^\s*(outline|summary|key points|bullets)\b", s2.lower()):
         return True
     return False
 
@@ -256,319 +132,319 @@ def _user_asked_for_bullets_or_summary(u: str) -> bool:
     return any(k in u for k in ["summarize", "summary", "bullet", "bullets", "outline", "key points", "tl;dr", "tldr"])
 
 
-# ------------------------------
-# Local loop record stubs (you can deepen later)
-# ------------------------------
+def _detect_turn_profile(user_text: str) -> str:
+    u = (user_text or "").strip().lower()
 
-def _local_field_signature(user_text: str, citations: List[str]) -> Dict[str, Any]:
-    return {"query_len": len((user_text or "")), "citations_count": len(citations or [])}
+    verified_markers = [
+        "this weekend", "tonight", "today", "this week", "right now",
+        "what events", "what is happening", "what's happening",
+        "what concerts", "what games", "look it up", "current", "in atlanta", "near me"
+    ]
+    correction_markers = [
+        "plain language", "say it plainly", "ordinary sentence", "ordinary language",
+        "everyday language", "no theory words", "one sentence", "one short sentence",
+        "one direct sentence", "stop explaining", "answer briefly", "just answer",
+        "direct answer", "without citing the framework", "don't explain cbra"
+    ]
+    action_markers = [
+        "one concrete next step", "give me one concrete next step", "give me three options",
+        "practical options", "what should i do", "next step"
+    ]
+    conceptual_markers = [
+        "explain", "difference between", "what does", "what is", "meaning of", "define",
+        "diffraction", "reflection", "entanglement", "intra-action", "barad"
+    ]
+    noticing_markers = [
+        "feels off", "something is off", "circling around", "can't quite say it", "i'm stuck",
+        "this conversation feels", "uneasy", "misaligned"
+    ]
 
-
-def _local_noticing_register(user_text: str) -> List[str]:
-    return ["conceptual_operator_work"]
-
-
-def _local_drift_signal(user_text: str) -> List[str]:
-    q = (user_text or "").lower()
-    # Minimal, conservative: only flags when user is explicitly asking about drift
-    return ["drift_query"] if "drift" in q else []
-
-
-# ------------------------------
-# Engine entrypoint
-# ------------------------------
-
-def _now_iso() -> str:
-    return datetime.utcnow().isoformat() + "Z"
-
-
-def _safe_json_loads(s: str) -> Dict[str, Any]:
-    if not s:
-        return {}
-    s = s.strip()
-    s = re.sub(r"^```(?:json)?\s*", "", s)
-    s = re.sub(r"\s*```$", "", s)
-    try:
-        return json.loads(s)
-    except Exception:
-        pass
-    m = re.search(r"\{.*\}", s, flags=re.DOTALL)
-    if not m:
-        return {}
-    try:
-        return json.loads(m.group(0))
-    except Exception:
-        return {}
+    if any(m in u for m in verified_markers):
+        return "verified_direct"
+    if any(m in u for m in correction_markers):
+        return "correction"
+    if any(m in u for m in action_markers):
+        return "action"
+    if any(m in u for m in noticing_markers):
+        return "noticing"
+    if any(m in u for m in conceptual_markers):
+        return "conceptual"
+    return "grounded"
 
 
-def _run_json_stage(
-    *,
-    client: OpenAI,
-    model: str,
-    system_identity: str,
-    stage_name: str,
-    instructions: str,
-    user_text: str,
-    sources_block: str,
-    field_id: str,
-) -> Dict[str, Any]:
-    prompt = (
-        f"INTERNAL CBRA STAGE: {stage_name}\n"
-        f"FIELD_ID: {field_id}\n\n"
-        f"{instructions}\n\n"
-        "Return ONLY valid JSON. No markdown. No prose.\n\n"
-        f"USER_INPUT:\n{user_text}\n"
-        f"{sources_block}"
-    )
 
-    resp = client.responses.create(
-        model=model,
-        input=[
-            {"role": "system", "content": system_identity},
-            {"role": "developer", "content": CBRA_PROMPT + "\n\n" + ANTI_COMPRESSION_POLICY},
-            {"role": "user", "content": prompt},
-        ],
-    )
-    raw = getattr(resp, "output_text", "") or ""
-    return _safe_json_loads(raw)
-
-def _select_response_formation(user_text: str, aligned_turn_state: Dict[str, Any]) -> str:
+def _is_pure_correction_turn(user_text: str) -> bool:
     """
-    Selects which response formation the turn is calling for.
-
-    Returns one of:
-    - operative
-    - noticing
-    - diffractive
+    True when the user is only correcting format / behavior and is not also
+    asking for new substantive content.
     """
     u = (user_text or "").strip().lower()
 
-    # Route current/local factual questions to verified direct answer mode
-    if _is_verified_direct_question(user_text):
-        return "verified_direct"
-
-    # Direct user correction can immediately reshape formation
     correction_markers = [
+        "stop explaining",
+        "just answer",
+        "answer directly",
+        "answer briefly",
+        "one sentence",
+        "one short sentence",
+        "one direct sentence",
         "plain language",
         "say it plainly",
-        "ordinary sentence",
         "ordinary language",
         "everyday language",
         "no theory words",
-        "no theory word",
-        "one sentence",
-        "one direct sentence",
-        "one short sentence",
-        "one short ordinary sentence",
-        "one concrete next step",
+        "without citing the framework",
+        "don't explain cbra",
+        "dont explain cbra",
+        "don't explain the framework",
+        "dont explain the framework",
+    ]
+
+    content_markers = [
+        "what is",
+        "what does",
+        "what are",
+        "explain ",
+        "difference between",
         "give me one concrete next step",
-        "stop explaining",
-        "answer briefly",
-        "just answer",
-        "direct answer",
-        "give me a list",
+        "give me three",
         "give me options",
-        "tips",
-        "suggest",
-        "recommend",
-        "what should i do",
-        "next step",
-    ]
-    if any(m in u for m in correction_markers):
-        return "operative"
-
-    # Explicit conceptual working / requested diffraction
-    diffractive_markers = [
-        "provide a diffraction",
-        "give me a diffraction",
-        "diffract",
-        "clarify the difference",
-        "what changes under cbra",
-        "explain this operator",
-        "architecture explanation",
-        "ontological distinction",
-        "why does this fail",
-        "explain why",
-        "explain the difference",
-        "don't explain cbra",
-        "dont explain cbra",
-        "answer from it",
-        "without citing the framework",
-        "without citing the framework behind it",
-        "don't explain the framework",
-        "dont explain the framework",
-        "say that again without citing",
-        "say it without citing",
-        "what does cbra mean by",
-        "how does cbra use",
-        "within cbra",
-        "in cbra",
-        "cbra's use of",
-        "cbra use of",
-        "how is this used in cbra",
-        "how does this function in cbra",
-        "what is this operator in cbra",
-    ]
-    if any(m in u for m in diffractive_markers):
-        return "diffractive"
-
-    # Natural practical support
-    operative_markers = [
-        "what should i do",
-        "what do i do",
-        "help me choose",
-        "list",
-        "options",
         "recommend",
         "suggest",
-        "tips",
-        "next step",
-        "steps",
+        "events",
         "restaurants",
-        "where should i go",
-        "give me",
-        "plain answer",
-        "concise",
-        "short answer",
-    ]
-    if any(m in u for m in operative_markers):
-        return "operative"
-
-    # Unfinishedness / subtle signal / staying with what is forming
-    noticing_markers = [
-        "i can't quite say it",
-        "i cant quite say it",
-        "something feels off",
-        "unfinished",
-        "stay with",
-        "what is happening here",
-        "what's happening here",
-        "what is forming",
-        "circling around an idea",
-        "not fully articulated",
-        "something is forming",
-        "remain with",
-    ]
-    if any(m in u for m in noticing_markers):
-        return "noticing"
-
-    # Default:
-    # practical questions should tend toward movement;
-    # otherwise stay close to noticing rather than defaulting to explanation.
-    if "?" in u:
-        return "operative"
-    return "noticing"
-
-def _select_conceptual_mode(user_text: str) -> str:
-    """
-    Select conceptual clarification stance for diffractive responses.
-
-    Returns one of:
-    - grounded_response
-    - framework_internal_clarification
-    - lineage_context_clarification
-    """
-    u = (user_text or "").strip().lower()
-
-    grounded_markers = [
-        "don't explain cbra",
-        "dont explain cbra",
-        "answer from it",
-        "without citing the framework",
-        "without citing the framework behind it",
-        "don't explain the framework",
-        "dont explain the framework",
-        "say that again without citing",
-        "say it without citing",
-    ]
-    if any(m in u for m in grounded_markers):
-        return "grounded_response"
-
-    framework_internal_markers = [
-        "what does cbra mean by",
-        "how does cbra use",
-        "within cbra",
-        "in cbra",
-        "cbra's use of",
-        "cbra use of",
-        "how is this used in cbra",
-        "how does this function in cbra",
-        "what is this operator in cbra",
-        "action orientation",
-        "noticing register",
-        "relational framing",
-        "situated relevance selection",
-        "action vector",
-        "field entry",
-        "loop reintegration",
-        "drift constraints",
-        "generative stabilization",
-    ]
-    if any(m in u for m in framework_internal_markers):
-        return "framework_internal_clarification"
-
-    lineage_context_markers = [
-        "diffraction",
-        "reflection",
-        "barad",
-        "posthumanism",
-        "agential realism",
-        "agential cut",
-        "intra-action",
-        "entanglement",
-        "material-discursive",
-        "performativity",
-        "lineage",
-        "context",
-        "broader context",
-        "larger context",
-    ]
-    if any(m in u for m in lineage_context_markers):
-        return "lineage_context_clarification"
-
-    return "framework_internal_clarification"
-
-def _is_verified_direct_question(user_text: str) -> bool:
-    """
-    Detect current, local, time-bound, factual questions that should trigger
-    retrieval-bounded direct answering.
-    """
-    u = (user_text or "").strip().lower()
-
-    current_markers = [
+        "in atlanta",
         "this weekend",
         "tonight",
         "today",
-        "right now",
-        "this week",
-        "what's happening",
-        "what is happening",
-        "what events",
-        "what concerts",
-        "what shows",
-        "what games",
-        "what's on",
-        "what is on",
-        "look it up",
-        "current",
-        "happening in",
-        "near me",
-        "in atlanta",
+        "how do",
+        "why does",
+        "say that again",
     ]
 
-    factual_verbs = [
-        "what",
-        "is there",
-        "are there",
-        "when",
-        "where",
-        "which",
-    ]
+    has_correction = any(m in u for m in correction_markers)
+    has_content = any(m in u for m in content_markers)
 
-    has_current_marker = any(m in u for m in current_markers)
-    has_factual_shape = any(v in u for v in factual_verbs)
+    return has_correction and not has_content
 
-    return has_current_marker and has_factual_shape
+
+def _select_response_formation(profile: str, user_text: str) -> str:
+    if profile == "verified_direct":
+        return "verified_direct"
+
+    # Pure correction turns should acknowledge and contain, not generate content
+    if _is_pure_correction_turn(user_text):
+        return "correction_ack"
+    if profile == "correction":
+        u = (user_text or "").lower()
+        if "one sentence" in u or "plain language" in u or "just answer" in u:
+            return "operative"
+        return "grounded_response"
+    if profile == "action":
+        return "operative"
+    if profile == "conceptual":
+        return "diffractive"
+    if profile == "noticing":
+        return "noticing"
+    return "grounded_response"
+
+
+def _needs_constraint_anchor(profile: str, user_text: str) -> bool:
+    u = (user_text or "").lower()
+    if profile in {"correction", "verified_direct"}:
+        return True
+    drift_markers = ["stop explaining", "just answer", "plain language", "direct", "drift", "avoid"]
+    return any(m in u for m in drift_markers)
+
+
+def _operator_terms_for_profile(profile: str) -> List[str]:
+    return PROFILE_OPERATOR_TERMS.get(profile, [])
+
+
+def _score_line(query_terms: List[str], line_terms: List[str], role: str, operator_terms: List[str], line_text: str) -> float:
+    if not line_terms:
+        return 0.0
+
+    score = ROLE_WEIGHT.get(role, 0.0)
+
+    score += sum(1.0 for t in query_terms if t in line_terms)
+
+    line_lower = (line_text or "").lower()
+    for term in operator_terms:
+        if term in line_lower:
+            score += 4.0
+
+    if role == "constraint_anchor" and ("drift" in line_lower or "compression" in line_lower or "authority" in line_lower):
+        score += 2.0
+
+    return score
+
+
+def compose_grounded_sources(
+    query: str,
+    profile: str,
+    *,
+    max_total_sources: int = 5,
+) -> Tuple[List[str], List[str], List[Dict[str, Any]]]:
+    """
+    Ground-Enforced Retrieval:
+    1. one ground anchor
+    2. one operator anchor
+    3. optional constraint anchor
+    4. up to remaining contextual evidence
+    """
+    query = (query or "").strip()
+    if not query:
+        return [], [], []
+
+    query_terms = _tokenize(query)
+    operator_terms = _operator_terms_for_profile(profile)
+
+    hits: List[Dict[str, Any]] = []
+
+    for md_path in get_active_corpus_files(CORPUS_DIR):
+        try:
+            lines = md_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except Exception:
+            continue
+
+        role = get_source_role(md_path.name)
+
+        for i, line in enumerate(lines, start=1):
+            line_terms = _tokenize(line)
+            score = _score_line(query_terms, line_terms, role, operator_terms, line)
+            if score <= 0:
+                continue
+
+            snippet = line.strip()
+            if len(snippet) > 160:
+                snippet = snippet[:160]
+
+            hits.append(
+                {
+                    "file": md_path.name,
+                    "line": i,
+                    "score": score,
+                    "role": role,
+                    "snippet": snippet,
+                    "text": line.strip(),
+                }
+            )
+
+    hits.sort(key=lambda h: h["score"], reverse=True)
+
+    selected: List[Dict[str, Any]] = []
+    selected_keys = set()
+
+    def pick_first(role_name: str) -> None:
+        for h in hits:
+            key = (h["file"], h["line"])
+            if h["role"] == role_name and key not in selected_keys:
+                selected.append(h)
+                selected_keys.add(key)
+                return
+
+    # Phase 1: mandatory anchors
+    pick_first("ground_anchor")
+    pick_first("operator_anchor")
+
+    # Phase 2: optional constraint anchor
+    if _needs_constraint_anchor(profile, query):
+        pick_first("constraint_anchor")
+
+    # Phase 3: contextual evidence fill
+    for h in hits:
+        if len(selected) >= max_total_sources:
+            break
+        key = (h["file"], h["line"])
+        if key in selected_keys:
+            continue
+        selected.append(h)
+        selected_keys.add(key)
+
+    selected.sort(key=lambda h: h["score"], reverse=True)
+
+    sources = [h["text"] for h in selected]
+    citations = [f"[{h['file']} L{h['line']}+]" for h in selected]
+
+    return sources, citations, hits
+
+
+def _compress_hits_for_debug(hits: List[Dict[str, Any]], limit: int = 8) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for h in hits[:limit]:
+        out.append(
+            {
+                "file": h.get("file", ""),
+                "line": h.get("line", 0),
+                "role": h.get("role", ""),
+                "score": h.get("score", 0),
+                "snippet": h.get("snippet", ""),
+            }
+        )
+    return out
+
+
+def _local_field_signature(user_text: str, citations: List[str], profile: str) -> Dict[str, Any]:
+    return {
+        "phenomena": (user_text or "").strip(),
+        "time_pressure": "high" if profile == "verified_direct" else "moderate",
+        "constraints": ["CBRA ground enforced through canonical retrieval"],
+        "participants": ["user", "runtime", "canonical sources"],
+        "uncertainty": "Fresh external verification unavailable in this runtime" if profile == "verified_direct" else "Open, situated",
+        "citations_used": citations,
+    }
+
+
+def _local_noticing_register(user_text: str) -> Dict[str, Any]:
+    tokens = _tokenize(user_text)[:8]
+    return {
+        "signals": tokens,
+        "affect_markers": [],
+        "somatic_markers": [],
+        "attentional_shifts": [],
+    }
+
+
+def _local_relational_map(profile: str) -> Dict[str, Any]:
+    return {
+        "actors": ["user", "assistant", "field material"],
+        "relations": [{"from": "user", "to": "assistant", "type": "prompt"}],
+        "constraints": [f"profile:{profile}"],
+        "amplifiers": ["ground anchors"],
+        "dampeners": ["drift"],
+    }
+
+
+def _local_diffractive_map(user_text: str) -> Dict[str, Any]:
+    return {
+        "phenomenon": (user_text or "").strip(),
+        "patterning_through_difference": [],
+        "interference_points": [],
+        "exclusions_revealed": [],
+        "apparatus_effects": {},
+        "stabilization_dynamics": {},
+        "loop_impact": {},
+    }
+
+
+def _local_relevance_gradient(hits: List[Dict[str, Any]]) -> Dict[str, Any]:
+    selected_elements = []
+    for h in hits[:3]:
+        selected_elements.append(
+            {
+                "label": h.get("snippet", "")[:120],
+                "rationale": f"Selected as {h.get('role', 'contextual_evidence')}",
+                "stage_source": h.get("file", ""),
+            }
+        )
+    return {
+        "selected_elements": selected_elements,
+        "what_to_hold_open": [],
+        "what_to_act_on": [],
+        "what_to_defer": [],
+    }
+
 
 def _run_response_formation(
     *,
@@ -578,48 +454,21 @@ def _run_response_formation(
     system_identity: str,
     field_payload: Dict[str, Any],
     user_text: str,
-    conceptual_mode: Optional[str] = None,
 ) -> str:
-    """
-    Forms user-facing response from the aligned turn-state.
-    """
-    if formation == "operative":
+    if formation == "correction_ack":
         prompt = (
-            "OPERATIVE FORMATION\n"
-            "Form a response that supports movement from within FIELD_PAYLOAD.\n\n"
+            "CORRECTION ACKNOWLEDGMENT\n"
+            "The user is correcting response behavior or format without asking for new substantive content.\n\n"
             "Requirements:\n"
-            "- Respond directly to the user's ask.\n"
-            "- Plain language is valid.\n"
-            "- Lists, steps, options, and direct answers are valid stabilizations.\n"
-            "- Give the action itself, not discourse about choosing, identifying, articulating, noticing, mapping, or surfacing the action.\n"
-            "- Do not tell the user to identify the next step. Give the next step.\n"
-            "- If the user asks for one concrete next step, output exactly one concrete imperative sentence.\n"
-            "- If the user asks for options or a list, provide them directly.\n"
-            "- Use specific, ordinary wording.\n"
-            "- Do not explain the architecture.\n"
-            "- Do not substitute discourse about action for action.\n\n"
-            f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
+            "- Reply with exactly one short ordinary sentence.\n"
+            "- Acknowledge the correction.\n"
+            "- Do not generate conceptual content.\n"
+            "- Do not explain the framework.\n"
+            "- Do not restate the instruction at length.\n"
+            "- Good examples: 'Okay.' 'Understood.' 'Got it.'\n\n"
+            f"FIELD_PAYLOAD:\n{field_payload}\n\n"
             f"USER_INPUT:\n{user_text}\n"
         )
-    elif formation == "noticing":
-        prompt = (
-            "NOTICING FORMATION\n"
-            "Form a short response that registers what is happening in this exchange from within FIELD_PAYLOAD.\n\n"
-            "Requirements:\n"
-            "- Stay close to this exchange.\n"
-            "- Register tensions, pressures, signals, or unfinishedness.\n"
-            "- Keep the response specific, plain, and provisional.\n"
-            "- Prefer 1 to 3 sentences.\n"
-            "- Use ordinary language.\n"
-            "- Do not use metaphor unless the user already has.\n"
-            "- Do not embellish.\n"
-            "- Do not generalize into portable academic discourse.\n"
-            "- Do not explain the architecture.\n"
-            "- Do not interpret beyond what is present in the exchange.\n\n"
-            f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
-            f"USER_INPUT:\n{user_text}\n"
-        )
-
     elif formation == "verified_direct":
         prompt = (
             "VERIFIED DIRECT ANSWER\n"
@@ -630,68 +479,64 @@ def _run_response_formation(
             "- Do not invent details, examples, dates, venues, names, or likely possibilities.\n"
             "- Do not fill gaps with plausible guesses.\n"
             "- If the available material does not support a current answer, say that plainly.\n"
-            "- If fresh external verification is not available in this runtime, say that plainly.\n"
+            "- Fresh external verification is not available in this runtime.\n"
             "- Prefer a short honest answer over a fuller speculative one.\n"
             "- Use plain, ordinary language.\n"
-            "- If a short list is supported, give a short list.\n"
             "- Do not describe the exchange.\n"
             "- Do not explain your process.\n"
             "- Do not talk about frameworks or architecture.\n\n"
-            f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
+            f"FIELD_PAYLOAD:\n{field_payload}\n\n"
             f"USER_INPUT:\n{user_text}\n"
         )
-
+    elif formation == "operative":
+        prompt = (
+            "OPERATIVE FORMATION\n"
+            "Respond directly in plain language.\n\n"
+            "Requirements:\n"
+            "- Give the answer or action itself.\n"
+            "- Do not explain the framework.\n"
+            "- If the user asks for one next step, give exactly one next step.\n"
+            "- If the user asks for options, give only the requested number of options.\n"
+            "- Keep it ordinary and usable.\n\n"
+            f"FIELD_PAYLOAD:\n{field_payload}\n\n"
+            f"USER_INPUT:\n{user_text}\n"
+        )
+    elif formation == "noticing":
+        prompt = (
+            "NOTICING FORMATION\n"
+            "Respond briefly and closely to the exchange.\n\n"
+            "Requirements:\n"
+            "- Prefer 1 to 3 sentences.\n"
+            "- Stay plain and provisional.\n"
+            "- Register what feels present without embellishment.\n"
+            "- Do not explain the framework.\n\n"
+            f"FIELD_PAYLOAD:\n{field_payload}\n\n"
+            f"USER_INPUT:\n{user_text}\n"
+        )
+    elif formation == "grounded_response":
+        prompt = (
+            "GROUNDED RESPONSE\n"
+            "Answer from within the current ground using ordinary conversational cadence.\n\n"
+            "Requirements:\n"
+            "- Sound like a person speaking plainly, not a framework describing itself.\n"
+            "- Do not explain CBRA unless explicitly asked to define it.\n"
+            "- Keep the answer close, direct, and natural.\n"
+            "- Do not become polished explanatory prose.\n\n"
+            f"FIELD_PAYLOAD:\n{field_payload}\n\n"
+            f"USER_INPUT:\n{user_text}\n"
+        )
     else:
-        conceptual_mode = conceptual_mode or "framework_internal_clarification"
-
-        if conceptual_mode == "grounded_response":
-            prompt = (
-                "GROUNDED RESPONSE\n"
-                "Answer from within the present turn and situation, not about the turn, not about the framework, and not about your own process.\n\n"
-                "Requirements:\n"
-                "- Speak from inside the present situation.\n"
-                "- Keep the answer close to what can be noticed, felt, understood, or done right now.\n"
-                "- Prefer 1 to 3 sentences.\n"
-                "- Use plain, direct language.\n"
-                "- Use ordinary conversational cadence, as a person would naturally say it out loud.\n"
-                "- Do not restate or describe the user's instruction.\n"
-                "- Do not comment on the exchange.\n"
-                "- Do not explain your process.\n"
-                "- Keep the sentence rhythm ordinary and spoken, not polished, formal, or essay-like.\n"
-                "- Do not mention CBRA, framework, sources, field material, architecture, or ontology.\n"
-                "- Give only the answer.\n\n"
-                f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
-                f"USER_INPUT:\n{user_text}\n"
-            )
-
-        elif conceptual_mode == "lineage_context_clarification":
-            prompt = (
-                "LINEAGE / CONTEXT CLARIFICATION\n"
-                "Clarify the term in its broader lineage or context first, then state how CBRA works within or operationalizes it.\n\n"
-                "Requirements:\n"
-                "- Begin with the broader lineage, context, or inheritance of the term.\n"
-                "- Then state how CBRA uses, works within, or operationalizes that term.\n"
-                "- Do not imply that CBRA contains or exhausts the concept.\n"
-                "- Do not begin with 'within CBRA' or treat CBRA as the primary container of meaning.\n"
-                "- Keep the response bounded and readable.\n"
-                "- Answer the explicit conceptual question.\n\n"
-                f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
-                f"USER_INPUT:\n{user_text}\n"
-            )
-
-        else:
-            prompt = (
-                "FRAMEWORK-INTERNAL CLARIFICATION\n"
-                "Clarify how the concept functions within CBRA.\n\n"
-                "Requirements:\n"
-                "- Explain the concept as it functions inside CBRA.\n"
-                "- Focus on runtime role, operator function, stage placement, or design use.\n"
-                "- Keep the response bounded and readable.\n"
-                "- Answer the explicit conceptual question.\n"
-                "- Do not drift into broader lineage unless the user asks for it.\n\n"
-                f"FIELD_PAYLOAD:\n{json.dumps(field_payload, indent=2)}\n\n"
-                f"USER_INPUT:\n{user_text}\n"
-            )
+        prompt = (
+            "DIFFRACTIVE CLARIFICATION\n"
+            "Give a bounded conceptual clarification from within the current ground.\n\n"
+            "Requirements:\n"
+            "- Answer the conceptual question directly.\n"
+            "- Keep it readable and bounded.\n"
+            "- Do not inflate into generalized theory performance.\n"
+            "- Clarify lineage or larger context only if the user is asking for it.\n\n"
+            f"FIELD_PAYLOAD:\n{field_payload}\n\n"
+            f"USER_INPUT:\n{user_text}\n"
+        )
 
     resp = client.responses.create(
         model=model,
@@ -704,6 +549,7 @@ def _run_response_formation(
     text = getattr(resp, "output_text", "") or ""
     return _normalize_terminology(text, user_text=user_text)
 
+
 def run_cbra(
     user_text: str,
     mode: Literal["production", "debug"] = "production",
@@ -714,11 +560,6 @@ def run_cbra(
     system_identity: str = "CBRA Studio (local prototype).",
     model: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Core CBRA execution call.
-    - production: returns only user-facing text (+ loopcycle record for internal storage)
-    - debug: returns user-facing text + local debug object (no model-produced debug)
-    """
     if not user_text or not user_text.strip():
         raise ValueError("user_text is empty")
 
@@ -726,25 +567,15 @@ def run_cbra(
     client = OpenAI()
     model = model or DEFAULT_MODEL
 
-    if thread_id and not field_id:
-        f = create_field(thread_id=thread_id)
-        field_id = f.id
+    profile = _detect_turn_profile(user_text)
+    active_stages = PROFILE_ACTIVE_STAGES[profile]
+    response_formation = _select_response_formation(profile, user_text)
 
-    if field_id:
-        existing = get_field(field_id)
-        if existing is None and thread_id:
-            f = create_field(thread_id=thread_id)
-            field_id = f.id
-
-    placement_q = _needs_loop_placement_rule(user_text)
-
-    # --- Retrieval ---
     citations: List[str] = []
     raw_hits: List[Dict[str, Any]] = []
 
     if sources is None:
-        k_retrieval = 12 if placement_q else 6
-        sources, citations, raw_hits = retrieve_sources(user_text, k=k_retrieval, placement_q=placement_q)
+        sources, citations, raw_hits = compose_grounded_sources(user_text, profile=profile, max_total_sources=5)
     else:
         sources = sources or []
 
@@ -753,165 +584,41 @@ def run_cbra(
         first = (s.splitlines()[0].strip() if isinstance(s, str) else str(s))
         retrieval_labels.append(first[:180])
 
-    sources_block = ""
-    if sources:
-        joined = "\n\n---\n\n".join(sources)
-        sources_block = f"\n\nSOURCES (field material):\n{joined}\n"
-
-    stage_field_signature = _run_json_stage(
-        client=client,
-        model=model,
-        system_identity=system_identity,
-        stage_name="Field Entry",
-        instructions=(
-            "Produce a FIELD SIGNATURE as JSON with keys: "
-            "phenomena, time_pressure, stakes, constraints, participants, uncertainty, citations_used (list)."
-        ),
-        user_text=user_text,
-        sources_block=sources_block,
-        field_id=field_id or "NO_FIELD",
-    )
-
-    stage_noticing = _run_json_stage(
-        client=client,
-        model=model,
-        system_identity=system_identity,
-        stage_name="Noticing Register",
-        instructions=(
-            "Produce a NOTICING REGISTER as JSON with keys: "
-            "signals (list), affect_markers (list), somatic_markers (list), attentional_shifts (list)."
-        ),
-        user_text=user_text,
-        sources_block=sources_block,
-        field_id=field_id or "NO_FIELD",
-    )
-
-    stage_relational = _run_json_stage(
-        client=client,
-        model=model,
-        system_identity=system_identity,
-        stage_name="Relational Framing",
-        instructions=(
-            "Produce a RELATIONAL MAP as JSON with keys: "
-            "actors (list), relations (list of {from,to,type}), constraints (list), amplifiers (list), dampeners (list)."
-        ),
-        user_text=user_text,
-        sources_block=sources_block,
-        field_id=field_id or "NO_FIELD",
-    )
-
-    stage_diffractive = _run_json_stage(
-        client=client,
-        model=model,
-        system_identity=system_identity,
-        stage_name="Diffractive Working",
-        instructions=(
-            "Produce a DIFFRACTIVE MAP as JSON using CBRA ground. "
-            "Work the field through difference, interference, exclusions, and emergent patterning without requiring a contrastive humanism-versus-CBRA frame. "
-            "Include keys: "
-            "phenomenon, "
-            "patterning_through_difference (list of {pattern, why_it_matters, what_it_conditions}), "
-            "interference_points (list of {site, tension, effect}), "
-            "exclusions_revealed (list of {stabilized_element, exclusion, implication}), "
-            "apparatus_effects {discursive, material, institutional}, "
-            "stabilization_dynamics {what_is_stabilizing, how_it_is_forming, whether_it_supports_movement}, "
-            "loop_impact {activation_shift, drift_risk, reintegration_stage}. "
-            "reintegration_stage must be one of: Field Entry, Noticing Register, Relational Framing, Diffractive Mapping, Situated Relevance Selection, Articulation. "
-            "Return ONLY JSON."
-        ),
-        user_text=user_text,
-        sources_block=sources_block,
-        field_id=field_id or "NO_FIELD",
-    )
-
-    stage_relevance = _run_json_stage(
-        client=client,
-        model=model,
-        system_identity=system_identity,
-        stage_name="Situated Relevance Selection",
-        instructions=(
-            "Produce a RELEVANCE GRADIENT as JSON with keys: "
-            "selected_elements (list of {label, rationale, stage_source}), "
-            "what_to_hold_open (list), what_to_act_on (list), what_to_defer (list)."
-        ),
-        user_text=user_text,
-
-        sources_block=sources_block,
-        field_id=field_id or "NO_FIELD",
-    )
-
-    # Derive selected_elements from relevance_gradient.selected_elements (single source of truth)
-    selected_elements = []
-    if isinstance(stage_relevance, dict):
-        se = stage_relevance.get("selected_elements")
-        if isinstance(se, list):
-            selected_elements = se
-
-    # --- Drift detection (matched to current diffractive schema) ---
-    drift_detected = False
-    reintegration_stage = None
-
-    if isinstance(stage_diffractive, dict):
-        patterning = stage_diffractive.get("patterning_through_difference") or []
-        interference = stage_diffractive.get("interference_points") or []
-        exclusions = stage_diffractive.get("exclusions_revealed") or []
-        stabilization = stage_diffractive.get("stabilization_dynamics") or {}
-        loop_impact = stage_diffractive.get("loop_impact") or {}
-        drift_risk = (loop_impact.get("drift_risk") or "").lower()
-
-        # Mirror reintegration_stage from loop_impact even when drift_detected is False
-        if isinstance(loop_impact, dict):
-            reintegration_stage = loop_impact.get("reintegration_stage") or reintegration_stage
-
-        has_patterning = isinstance(patterning, list) and len(patterning) > 0
-        has_interference = isinstance(interference, list) and len(interference) > 0
-        has_exclusions = isinstance(exclusions, list) and len(exclusions) > 0
-        has_stabilization = isinstance(stabilization, dict) and len(stabilization) > 0
-
-        if not (has_patterning and has_interference and has_stabilization):
-            drift_detected = True
-            reintegration_stage = loop_impact.get("reintegration_stage") or "Noticing Register"
-
-        # Exclusions are useful but not required every turn.
-        if "high" in drift_risk:
-            drift_detected = True
-            reintegration_stage = loop_impact.get("reintegration_stage") or "Diffractive Mapping"
+    field_signature = _local_field_signature(user_text, citations, profile)
+    noticing_register = _local_noticing_register(user_text) if "Noticing" in active_stages else {}
+    relational_map = _local_relational_map(profile) if "Relational Framing" in active_stages else {}
+    diffractive_map = _local_diffractive_map(user_text) if "Diffractive Mapping" in active_stages else {}
+    relevance_gradient = _local_relevance_gradient(raw_hits) if "Situated Relevance Selection" in active_stages else {}
+    selected_elements = relevance_gradient.get("selected_elements", []) if isinstance(relevance_gradient, dict) else []
 
     aligned_turn_state: Dict[str, Any] = {
-        "updated_at": _now_iso(),
+        "updated_at": None,
         "sources_citations": citations,
-        "field_signature": stage_field_signature or {},
-        "noticing_register": stage_noticing or {},
-        "relational_map": stage_relational or {},
-        "diffractive_map": stage_diffractive or {},
-        "relevance_gradient": stage_relevance or {},
+        "field_signature": field_signature,
+        "noticing_register": noticing_register,
+        "relational_map": relational_map,
+        "diffractive_map": diffractive_map,
+        "relevance_gradient": relevance_gradient,
         "selected_elements": selected_elements,
         "notes": {
-            "drift_detected": drift_detected,
-            "detected_at_stage": "Articulation" if drift_detected else None,
-            "reintegration_target": reintegration_stage if drift_detected else None,
-            "reintegration_stage": reintegration_stage,
+            "response_formation": response_formation,
+            "turn_profile": profile,
+            "active_stages": active_stages,
+            "ground_enforced_retrieval": True,
+            "drift_detected": False,
+            "detected_at_stage": None,
+            "reintegration_target": None,
+            "reintegration_stage": active_stages[-2] if len(active_stages) > 1 else active_stages[-1],
         },
     }
 
-    if field_id:
-        update_field(field_id, aligned_turn_state)
-
-    placement_rule = _placement_rule_text() if placement_q else ""
-    output_rule = _output_rule_text() if mode == "debug" else ""
-
     field_payload = {"id": field_id, **aligned_turn_state} if field_id else dict(aligned_turn_state)
-
-    # Response formation selection happens before wording begins.
-    response_formation = _select_response_formation(user_text, aligned_turn_state)
 
     if response_formation == "verified_direct":
         field_payload["verification_mode"] = "available_sources_only"
         field_payload["fresh_external_verification"] = "unavailable_in_this_runtime"
-
-    conceptual_mode = None
-    if response_formation == "diffractive":
-        conceptual_mode = _select_conceptual_mode(user_text)
+        aligned_turn_state["notes"]["verification_mode"] = "available_sources_only"
+        aligned_turn_state["notes"]["fresh_external_verification"] = "unavailable_in_this_runtime"
 
     text = _run_response_formation(
         formation=response_formation,
@@ -919,29 +626,57 @@ def run_cbra(
         model=model,
         system_identity=system_identity,
         field_payload=field_payload,
-        user_text=user_text + ("\n\n" + placement_rule if placement_rule else "") + ("\n\n" + output_rule if output_rule else ""),
-        conceptual_mode=conceptual_mode,
+        user_text=user_text,
     )
 
-    # Persist formation choice in notes for debugging / audit.
-    if isinstance(aligned_turn_state.get("notes"), dict):
-        aligned_turn_state["notes"]["response_formation"] = response_formation
-        if response_formation == "verified_direct":
-            aligned_turn_state["notes"]["verification_mode"] = "available_sources_only"
-            aligned_turn_state["notes"]["fresh_external_verification"] = "unavailable_in_this_runtime"
-        if conceptual_mode:
-            aligned_turn_state["notes"]["conceptual_mode"] = conceptual_mode
+    if (not _user_asked_for_bullets_or_summary(user_text)) and _looks_like_outline_or_bullets(text):
+        repair = client.responses.create(
+            model=model,
+            input=[
+                {"role": "system", "content": system_identity},
+                {"role": "developer", "content": CBRA_PROMPT + "\n\n" + ANTI_COMPRESSION_POLICY},
+                {
+                    "role": "user",
+                    "content": (
+                        "Rewrite as continuous prose or direct sentences only. "
+                        "Do not use bullets or outline formatting.\n\n"
+                        "User request:\n" + user_text + "\n\n"
+                        "Current output:\n" + text
+                    ),
+                },
+            ],
+        )
+        text = getattr(repair, "output_text", "") or text
+        text = _normalize_terminology(text, user_text=user_text)
 
-    # --- LoopCycle record (internal storage) ---
+    # Simple drift heuristics
+    drift_detected = False
+    reintegration_stage: Optional[str] = aligned_turn_state["notes"]["reintegration_stage"]
+
+    if profile == "correction" and len(re.split(r"[.!?]+", text.strip())) > 3:
+        drift_detected = True
+        reintegration_stage = "Situated Relevance Selection"
+
+    if profile == "verified_direct" and "maybe" in text.lower():
+        drift_detected = True
+        reintegration_stage = "Field Entry"
+
+    aligned_turn_state["notes"]["drift_detected"] = drift_detected
+    aligned_turn_state["notes"]["detected_at_stage"] = "Articulation" if drift_detected else None
+    aligned_turn_state["notes"]["reintegration_target"] = reintegration_stage if drift_detected else None
+
+    if field_id and update_field is not None:
+        update_field(field_id, aligned_turn_state)
+
     loopcycle: Dict[str, Any] = {
         "field_id": field_id,
-        "field_signature": aligned_turn_state.get("field_signature") or {},
-        "noticing_register": aligned_turn_state.get("noticing_register") or {},
-        "relational_map": aligned_turn_state.get("relational_map") or {},
-        "diffractive_map": aligned_turn_state.get("diffractive_map") or {},
-        "relevance_gradient": aligned_turn_state.get("relevance_gradient") or {},
-        "selected_elements": aligned_turn_state.get("selected_elements") or [],
-        "notes": aligned_turn_state.get("notes") or {},
+        "field_signature": field_signature,
+        "noticing_register": noticing_register,
+        "relational_map": relational_map,
+        "diffractive_map": diffractive_map,
+        "relevance_gradient": relevance_gradient,
+        "selected_elements": selected_elements,
+        "notes": aligned_turn_state["notes"],
         "articulation_output": text,
         "action_vector": None,
         "drift_detected": drift_detected,
@@ -952,16 +687,24 @@ def run_cbra(
 
     if mode == "debug":
         result["debug"] = {
-            "field_signature": _local_field_signature(user_text, citations),
-            "noticing_register": _local_noticing_register(user_text),
-            "drift_signal": {"drift_detected": drift_detected, "reintegration_stage": reintegration_stage},
+            "field_signature": {
+                "query_len": len((user_text or "")),
+                "citations_count": len(citations),
+            },
+            "noticing_register": ["conceptual_operator_work"],
+            "drift_signal": {
+                "drift_detected": drift_detected,
+                "reintegration_stage": reintegration_stage,
+            },
             "sources_used": citations,
             "retrieval_hits": _compress_hits_for_debug(raw_hits),
             "retrieval_labels": retrieval_labels,
             "response_formation": response_formation,
+            "turn_profile": profile,
+            "active_stages": active_stages,
+            "ground_enforced_retrieval": True,
             "verification_mode": "available_sources_only" if response_formation == "verified_direct" else None,
             "fresh_external_verification": "unavailable_in_this_runtime" if response_formation == "verified_direct" else None,
-            "conceptual_mode": conceptual_mode,
         }
 
     return result
