@@ -902,12 +902,12 @@ def run_cbra(
 
     field_payload = {"id": field_id, **aligned_turn_state} if field_id else dict(aligned_turn_state)
 
+    # Response formation selection happens before wording begins.
+    response_formation = _select_response_formation(user_text, aligned_turn_state)
+
     if response_formation == "verified_direct":
         field_payload["verification_mode"] = "available_sources_only"
         field_payload["fresh_external_verification"] = "unavailable_in_this_runtime"
-
-    # Response formation selection happens before wording begins.
-    response_formation = _select_response_formation(user_text, aligned_turn_state)
 
     conceptual_mode = None
     if response_formation == "diffractive":
