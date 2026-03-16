@@ -90,6 +90,16 @@ PROFILE_ACTIVE_STAGES = {
     "grounded": ["Field Entry", "Relational Framing", "Situated Relevance Selection", "Articulation"],
 }
 
+PROFILE_SOURCE_LIMITS = {
+    "verified_direct": 3,
+    "correction": 2,
+    "action": 4,
+    "conceptual": 5,
+    "noticing": 4,
+    "grounded": 4,
+}
+
+
 
 def _tokenize(text: str) -> List[str]:
     s = unicodedata.normalize("NFKC", text or "")
@@ -291,12 +301,16 @@ def compose_grounded_sources(
     1. one ground anchor
     2. one operator anchor
     3. optional constraint anchor
-    4. up to remaining contextual evidence
+    4. profile-specific contextual fill
+
+    Retrieval composition is tightened by turn profile so small turns do not
+    carry unnecessary source load.
     """
     query = (query or "").strip()
     if not query:
         return [], [], []
 
+    profile_limit = PROFILE_SOURCE_LIMITS.get(profile, max_total_sources)
     query_terms = _tokenize(query)
     operator_terms = _operator_terms_for_profile(profile)
 
@@ -344,6 +358,18 @@ def compose_grounded_sources(
                 selected_keys.add(key)
                 return
 
+    def fill_from_roles(allowed_roles: List[str], limit: int) -> None:
+        for h in hits:
+            if len(selected) >= limit:
+                break
+            key = (h["file"], h["line"])
+            if key in selected_keys:
+                continue
+            if h["role"] not in allowed_roles:
+                continue
+            selected.append(h)
+            selected_keys.add(key)
+
     # Phase 1: mandatory anchors
     pick_first("ground_anchor")
     pick_first("operator_anchor")
@@ -352,15 +378,27 @@ def compose_grounded_sources(
     if _needs_constraint_anchor(profile, query):
         pick_first("constraint_anchor")
 
-    # Phase 3: contextual evidence fill
-    for h in hits:
-        if len(selected) >= max_total_sources:
-            break
-        key = (h["file"], h["line"])
-        if key in selected_keys:
-            continue
-        selected.append(h)
-        selected_keys.add(key)
+    # Phase 3: tightened profile-specific fill
+    if profile == "correction":
+        pass
+    elif profile == "verified_direct":
+        fill_from_roles(["contextual_evidence", "operator_anchor"], profile_limit)
+    elif profile == "action":
+        fill_from_roles(["operator_anchor", "contextual_evidence"], profile_limit)
+    elif profile == "noticing":
+        fill_from_roles(["operator_anchor", "constraint_anchor", "contextual_evidence"], profile_limit)
+    elif profile == "grounded":
+        fill_from_roles(["operator_anchor", "constraint_anchor", "contextual_evidence"], profile_limit)
+    elif profile == "conceptual":
+        fill_from_roles(
+            ["ground_anchor", "operator_anchor", "constraint_anchor", "contextual_evidence"],
+            profile_limit,
+        )
+    else:
+        fill_from_roles(
+            ["operator_anchor", "constraint_anchor", "contextual_evidence"],
+            profile_limit,
+        )
 
     selected.sort(key=lambda h: h["score"], reverse=True)
 
@@ -396,13 +434,55 @@ def _local_field_signature(user_text: str, citations: List[str], profile: str) -
     }
 
 
-def _local_noticing_register(user_text: str) -> Dict[str, Any]:
-    tokens = _tokenize(user_text)[:8]
+def _local_noticing_register(user_text: str, profile: str) -> Dict[str, Any]:
+    """
+    Small, turn-specific noticing register.
+    Keep this close to the exchange and avoid decorative conceptual phrasing.
+    """
+    u = (user_text or "").strip().lower()
+
+    signals: List[str] = []
+    affect_markers: List[str] = []
+    somatic_markers: List[str] = []
+    attentional_shifts: List[str] = []
+
+    if profile == "correction":
+        signals.append("user is correcting response format or behavior")
+        attentional_shifts.append("attention narrows toward direct compliance")
+
+    elif profile == "verified_direct":
+        signals.append("user is asking for current factual information")
+        if "weekend" in u or "today" in u or "tonight" in u or "this week" in u:
+            signals.append("request is time-bound")
+        if "atlanta" in u:
+            signals.append("request is location-bound")
+        attentional_shifts.append("attention narrows toward verifiable specifics")
+
+    elif profile == "action":
+        signals.append("user wants immediate next-step guidance")
+        attentional_shifts.append("attention moves toward action")
+
+    elif profile == "conceptual":
+        signals.append("user is asking for conceptual clarification")
+        attentional_shifts.append("attention moves toward distinction and framing")
+
+    elif profile == "noticing":
+        if "off" in u or "misaligned" in u or "uneasy" in u:
+            signals.append("user signals misalignment or unease")
+            affect_markers.append("unease")
+        if "can't quite say" in u or "circling" in u or "stuck" in u:
+            signals.append("something is present but not yet fully named")
+        attentional_shifts.append("attention moves toward what is emerging in the exchange")
+
+    else:
+        signals.append("user is asking from within the current exchange")
+        attentional_shifts.append("attention stays with present conditions")
+
     return {
-        "signals": tokens,
-        "affect_markers": [],
-        "somatic_markers": [],
-        "attentional_shifts": [],
+        "signals": signals[:3],
+        "affect_markers": affect_markers[:2],
+        "somatic_markers": somatic_markers[:1],
+        "attentional_shifts": attentional_shifts[:2],
     }
 
 
@@ -531,9 +611,16 @@ def _run_response_formation(
             "Give a bounded conceptual clarification from within the current ground.\n\n"
             "Requirements:\n"
             "- Answer the conceptual question directly.\n"
-            "- Keep it readable and bounded.\n"
+            "- Keep it readable, bounded, relational, and plain.\n"
+            "- Prefer ordinary conceptual prose over textbook, lecture, lyrical, or dramatic cadence.\n"
+            "- Do not sound like a physics lesson unless the user is explicitly asking for physics.\n"
+            "- Do not use metaphor unless the user introduces it.\n"
+            "- Do not anthropomorphize boundaries, patterns, or concepts.\n"
+            "- Emphasize relation, pattern, interference, entanglement, and situated distinction where relevant.\n"
             "- Do not inflate into generalized theory performance.\n"
-            "- Clarify lineage or larger context only if the user is asking for it.\n\n"
+            "- Do not become polished explanatory prose for its own sake.\n"
+            "- Clarify lineage or larger context only if the user is asking for it.\n"
+            "- Keep the answer close to the user's actual question.\n\n"
             f"FIELD_PAYLOAD:\n{field_payload}\n\n"
             f"USER_INPUT:\n{user_text}\n"
         )
@@ -585,7 +672,7 @@ def run_cbra(
         retrieval_labels.append(first[:180])
 
     field_signature = _local_field_signature(user_text, citations, profile)
-    noticing_register = _local_noticing_register(user_text) if "Noticing" in active_stages else {}
+    noticing_register = _local_noticing_register(user_text, profile) if "Noticing" in active_stages else _local_noticing_register(user_text, profile)
     relational_map = _local_relational_map(profile) if "Relational Framing" in active_stages else {}
     diffractive_map = _local_diffractive_map(user_text) if "Diffractive Mapping" in active_stages else {}
     relevance_gradient = _local_relevance_gradient(raw_hits) if "Situated Relevance Selection" in active_stages else {}
@@ -691,7 +778,7 @@ def run_cbra(
                 "query_len": len((user_text or "")),
                 "citations_count": len(citations),
             },
-            "noticing_register": ["conceptual_operator_work"],
+            "noticing_register": noticing_register,
             "drift_signal": {
                 "drift_detected": drift_detected,
                 "reintegration_stage": reintegration_stage,
