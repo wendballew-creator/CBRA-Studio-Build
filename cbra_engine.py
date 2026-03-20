@@ -208,6 +208,42 @@ def _contains_any(text: str, terms: List[str]) -> List[str]:
     lower = _normalize_text(text).lower()
     return [term for term in terms if term in lower]
 
+_WORD_NUMBERS = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+}
+
+
+def _extract_exact_quantity(lower: str) -> Optional[int]:
+    counted_nouns = r"(?:options|option|steps|step|sentences|sentence|bullets|bullet|points|point|things|definitions)"
+    optional_modifiers = r"(?:\s+[a-z][a-z\-]*){0,2}\s+"
+
+    digit_match = re.search(
+        rf"\b(\d{{1,2}}){optional_modifiers}{counted_nouns}\b",
+        lower,
+    )
+    if digit_match:
+        return int(digit_match.group(1))
+
+    word_match = re.search(
+        rf"\b(one|two|three|four|five|six|seven|eight|nine|ten){optional_modifiers}{counted_nouns}\b",
+        lower,
+    )
+    if word_match:
+        return _WORD_NUMBERS[word_match.group(1)]
+
+    if "one sentence" in lower or "one short sentence" in lower or "one step" in lower:
+        return 1
+
+    return None
 
 def _extract_turn_conditions(user_text: str, sources: Optional[List[str]] = None) -> Dict[str, Any]:
     lower = _normalize_text(user_text).lower()
@@ -227,17 +263,24 @@ def _extract_turn_conditions(user_text: str, sources: Optional[List[str]] = None
         "you keep",
         "that is not what you did",
     ]
+
     action_terms = [
         "what should i do",
         "next step",
-        "one step",
+        "next steps",
+        "next move",
+        "next moves",
+        "moving forward",
+        "move forward",
         "what action",
         "what can i do",
+        "what are my options",
         "give me options",
-        "give me three options",
+        "give me direct options",
         "practical",
         "concrete",
     ]
+
     conceptual_terms = [
         "difference between",
         "meaning of",
@@ -252,6 +295,7 @@ def _extract_turn_conditions(user_text: str, sources: Optional[List[str]] = None
         "agential cut",
         "relational emergence",
     ]
+
     conceptual_question_terms = [
         "what is diffraction",
         "what is entanglement",
@@ -262,6 +306,34 @@ def _extract_turn_conditions(user_text: str, sources: Optional[List[str]] = None
         "what does that mean",
         "what does this mean",
     ]
+
+    lineage_terms = [
+        "where does this come from",
+        "where does that come from",
+        "lineage",
+        "history of",
+        "origin of",
+        "broader context",
+        "outside cbra",
+        "beyond cbra",
+        "in barad",
+        "in deleuze",
+        "in queer theory",
+        "in posthumanism",
+        "tradition",
+        "genealogy",
+    ]
+
+    framework_internal_markers = [
+        "in cbra",
+        "here",
+        "in this build",
+        "in this system",
+        "for cbra",
+        "within cbra",
+        "as used here",
+    ]
+
     noticing_terms = [
         "something is off",
         "feels off",
@@ -272,6 +344,7 @@ def _extract_turn_conditions(user_text: str, sources: Optional[List[str]] = None
         "can't quite say",
         "cannot quite say",
     ]
+
     current_terms = [
         "today",
         "tonight",
@@ -287,6 +360,7 @@ def _extract_turn_conditions(user_text: str, sources: Optional[List[str]] = None
         "happening",
         "now",
     ]
+
     direct_terms = [
         "brief",
         "short",
@@ -298,15 +372,18 @@ def _extract_turn_conditions(user_text: str, sources: Optional[List[str]] = None
         "one sentence",
         "one short sentence",
     ]
+
     list_terms = ["bullet", "bullets", "list", "outline", "steps"]
     contrast_terms = [" but ", " however ", " although ", " at the same time ", " on the one hand "]
 
-    exact_quantity: Optional[int] = None
-    match = re.search(r"\b(\d{1,2})\s+(?:options|steps|sentences|bullets|points|things)\b", lower)
-    if match:
-        exact_quantity = int(match.group(1))
-    elif "one sentence" in lower or "one short sentence" in lower or "one step" in lower:
-        exact_quantity = 1
+    exact_quantity = _extract_exact_quantity(lower)
+
+    asks_action = (
+        any(term in lower for term in action_terms)
+        or bool(re.search(r"\b(options?|steps?|moves?)\b", lower))
+        or ("moving forward" in lower)
+        or ("move forward" in lower)
+    )
 
     asks_conceptual = (
         any(term in lower for term in conceptual_terms)
@@ -314,10 +391,35 @@ def _extract_turn_conditions(user_text: str, sources: Optional[List[str]] = None
         or bool(re.search(r"\bwhat does .+ mean\b", lower))
     )
 
+    clarification_scope = None
+    if asks_conceptual:
+        if any(term in lower for term in lineage_terms):
+            clarification_scope = "lineage_context"
+        elif any(term in lower for term in framework_internal_markers):
+            clarification_scope = "framework_internal"
+        else:
+            clarification_scope = "framework_internal"
+
+    asks_diffractive = asks_conceptual and any(
+        term in lower
+        for term in [
+            "through difference",
+            "through interference",
+            "competing interpretations",
+            "compare the readings",
+            "trace the pattern",
+            "diffractive mapping",
+            "interference",
+            "pattern through difference",
+        ]
+    )
+
     return {
         "correction": any(term in lower for term in hard_correction_terms),
-        "asks_action": any(term in lower for term in action_terms),
+        "asks_action": asks_action,
         "asks_conceptual": asks_conceptual,
+        "clarification_scope": clarification_scope,
+        "asks_diffractive": asks_diffractive,
         "asks_noticing": any(term in lower for term in noticing_terms),
         "asks_current_factual": any(term in lower for term in current_terms),
         "asks_plain_surface": any(term in lower for term in direct_terms),
@@ -1069,6 +1171,7 @@ def _reintegrate(field_context: Dict[str, Any], stage_outputs: Dict[str, Any], d
 
 def _articulation_constraints(turn_conditions: Dict[str, Any], field_signature: Dict[str, Any], relevance_gradient: Dict[str, Any]) -> Dict[str, Any]:
     mode = "grounded_response"
+
     if turn_conditions["correction"] and not (turn_conditions["asks_action"] or turn_conditions["asks_conceptual"]):
         mode = "correction_ack"
     elif turn_conditions["asks_current_factual"]:
@@ -1078,7 +1181,13 @@ def _articulation_constraints(turn_conditions: Dict[str, Any], field_signature: 
     elif turn_conditions["asks_noticing"]:
         mode = "noticing"
     elif turn_conditions["asks_conceptual"]:
-        mode = "diffractive"
+        if turn_conditions.get("asks_diffractive"):
+            mode = "diffractive"
+        elif turn_conditions.get("clarification_scope") == "lineage_context":
+            mode = "lineage_context_clarification"
+        else:
+            mode = "framework_internal_clarification"
+
     return {
         "mode": mode,
         "plain_language": bool(turn_conditions["asks_plain_surface"]),
@@ -1110,6 +1219,18 @@ def _articulation_prompt(stage_outputs: Dict[str, Any], user_text: str, citation
             "Keep multiple signals visible without forcing consolidation.",
             "Use descriptive language.",
         ],
+        "framework_internal_clarification": [
+            "Clarify how the concept operates inside CBRA.",
+            "State the broader meaning of the concept first, then state its CBRA-specific use.",
+            "Keep the explanation bounded and readable.",
+            "Avoid contrast framing and avoid explaining through what the concept is not.",
+        ],
+        "lineage_context_clarification": [
+            "Clarify the broader lineage or context of the concept.",
+            "Differentiate broader lineage/context from CBRA-specific use without collapsing them together.",
+            "Keep the explanation bounded and readable.",
+            "Avoid contrast framing and avoid explaining through what the concept is not.",
+        ],
         "diffractive": [
             "Clarify the concept through difference, relation, and interference.",
             "Keep competing readings visible where relevant.",
@@ -1120,17 +1241,51 @@ def _articulation_prompt(stage_outputs: Dict[str, Any], user_text: str, citation
             "Stay descriptive and additive.",
         ],
     }
+
     instructions = list(mode_instructions.get(constraints["mode"], mode_instructions["grounded_response"]))
+
     if constraints["plain_language"]:
         instructions.append("Use plain direct language.")
+
     if constraints["exact_quantity"]:
         instructions.append(f"Respect the user-requested quantity: {constraints['exact_quantity']}.")
+
     if constraints["mode"] == "correction_ack" and constraints["exact_quantity"] == 1:
         instructions.append("Your entire response must be exactly one sentence.")
         instructions.append("Register the correction inside that one sentence rather than using a separate acknowledgment sentence.")
- 
+
+    if constraints["mode"] == "operative" and constraints["exact_quantity"]:
+        instructions.append("Provide exactly that many options or steps.")
+        instructions.append("Make each option distinct and actionable.")
+        instructions.append("Do not add an introductory sentence before the options.")
+        instructions.append("Do not add a summary sentence, wrap-up sentence, or closing encouragement after the options.")
+        instructions.append("Output only the requested number of options.")
+        instructions.append("Use a numbered list when the user requested multiple options or steps.")
+
+    bare_definition_request = bool(
+        re.fullmatch(r"\s*what is [^?]+[?]?\s*", _normalize_text(user_text).lower())
+    )
+
+    if constraints["mode"] in {"framework_internal_clarification", "lineage_context_clarification"} and constraints["exact_quantity"] == 1:
+        instructions.append("Answer in one sentence only.")
+    elif constraints["mode"] == "framework_internal_clarification" and bare_definition_request and not constraints["exact_quantity"]:
+        instructions.append("This is a short definition request.")
+        instructions.append("Answer in no more than three sentences.")
+        instructions.append("Sentence 1 should give the broader meaning of the concept.")
+        instructions.append("Sentence 2 should state how CBRA uses the concept.")
+        instructions.append("Sentence 3 may name what the concept helps surface or do in the runtime if needed.")
+        instructions.append("Do not use contrastive reassurance or explain the concept by setting it against a lesser alternative.")
+    elif constraints["mode"] == "lineage_context_clarification" and bare_definition_request and not constraints["exact_quantity"]:
+        instructions.append("This is a short definition request.")
+        instructions.append("Answer in no more than three sentences.")
+        instructions.append("Sentence 1 should give the broader meaning or lineage of the concept.")
+        instructions.append("Sentence 2 should state how CBRA uses or adapts it.")
+        instructions.append("Sentence 3 may name what that adaptation does in the runtime if needed.")
+        instructions.append("Do not use contrastive reassurance or explain the concept by setting it against a lesser alternative.")
+
     if not constraints["allow_list_format"]:
-        instructions.append("Do not use bullets unless the user explicitly asked for a list.")
+        instructions.append("Do not use bullets unless the user explicitly asked for a list or the response mode requires numbered options.")
+
     if constraints["verification_mode"] == "available_sources_only":
         instructions.append("If current verification is incomplete, say that plainly.")
 
