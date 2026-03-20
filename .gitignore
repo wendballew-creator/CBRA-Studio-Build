@@ -14,3 +14,14 @@ exports/
 # local patch backup files
 *.bak
 *.pre_*
+
+# Local backups
+*.bak
+*.backup_before_patch
+*.broken_merge_backup
+*.syntax_error_backup
+backups/
+Give
+cbra_engine_best_effort
+cbra_engine_best_effort.py
+cbra_engine_regrounded.py
