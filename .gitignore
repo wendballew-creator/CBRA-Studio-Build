@@ -25,3 +25,7 @@ Give
 cbra_engine_best_effort
 cbra_engine_best_effort.py
 cbra_engine_regrounded.py
+
+# Local backup files
+cbra_engine.py.bak*
+main.py.bak*
