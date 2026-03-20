@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field
 from typing import Optional, Literal, Any
 
 from cbra_engine import run_cbra
-from cbra.compression import enforce_fieldartifact_compression
 
 from uuid import uuid4
 from datetime import datetime
@@ -91,12 +90,6 @@ def chat(thread_id: str, request: GenerateRequest):
             field_id=thread.current_field_id,
         )
         if "loopcycle" in result and isinstance(result["loopcycle"], dict):
-            
-            # --- Compression enforcement (FieldArtifact) ---
-            # loopcycle payload is the FieldArtifact dict itself; enforce compression on it directly.
-            if isinstance(result, dict) and isinstance(result.get("loopcycle"), dict):
-                enforced_fa, _compression_violations = enforce_fieldartifact_compression(result["loopcycle"])
-                result["loopcycle"] = enforced_fa
             append_loopcycle(thread_id, LoopCycle(**result["loopcycle"]))
         # If drift detected, log DriftEvent
         lc = result.get("loopcycle") if isinstance(result.get("loopcycle"), dict) else None
@@ -156,6 +149,9 @@ def get_thread_route(thread_id: str):
 @app.get("/thread/{thread_id}/export")
 def export_thread(thread_id: str):
     request_id = str(uuid4())
+    thread = get_thread(thread_id)
+    if thread is None:
+        thread = create_thread(thread_id)
 
     return ok(
         request_id=request_id,
@@ -244,12 +240,6 @@ def chat_with_file(
     ))
 
     if "loopcycle" in result and isinstance(result["loopcycle"], dict):
-
-        # --- Compression enforcement (FieldArtifact) ---
-        # loopcycle payload is the FieldArtifact/LoopCycle-shaped dict itself; enforce directly.
-        if isinstance(result, dict) and isinstance(result.get("loopcycle"), dict):
-            enforced_fa, _compression_violations = enforce_fieldartifact_compression(result["loopcycle"])
-            result["loopcycle"] = enforced_fa
 
         append_loopcycle(thread_id, LoopCycle(**result["loopcycle"]))
 
