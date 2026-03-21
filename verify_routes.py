@@ -34,6 +34,7 @@ for label, prompt in tests:
     print()
     print(label)
     print(json.dumps({
+        "raw_keys": list(d.keys()),
         "text": d.get("text"),
         "sentence_count": sentence_count(d.get("text")),
         "response_mode": d.get("loopcycle", {}).get("notes", {}).get("response_mode"),
@@ -41,4 +42,6 @@ for label, prompt in tests:
         "asks_action": d.get("debug", {}).get("turn_conditions", {}).get("asks_action"),
         "exact_quantity": d.get("debug", {}).get("turn_conditions", {}).get("exact_quantity"),
         "drift_detected": d.get("loopcycle", {}).get("drift_detected"),
+        "error": d.get("error"),
+        "detail": d.get("detail"),
     }, indent=2))
