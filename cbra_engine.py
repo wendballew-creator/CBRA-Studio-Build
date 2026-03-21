@@ -305,11 +305,19 @@ def _extract_turn_conditions(user_text: str, sources: Optional[List[str]] = None
         "what is agential cut",
         "what does that mean",
         "what does this mean",
+        "where does diffraction come from",
+        "where does entanglement come from",
+        "where does intra-action come from",
+        "where does agential cut come from",
     ]
 
     lineage_terms = [
         "where does this come from",
         "where does that come from",
+        "where does diffraction come from",
+        "where does entanglement come from",
+        "where does intra-action come from",
+        "where does agential cut come from",
         "lineage",
         "history of",
         "origin of",
@@ -332,6 +340,7 @@ def _extract_turn_conditions(user_text: str, sources: Optional[List[str]] = None
         "for cbra",
         "within cbra",
         "as used here",
+        "how does cbra use",
     ]
 
     noticing_terms = [
@@ -389,11 +398,12 @@ def _extract_turn_conditions(user_text: str, sources: Optional[List[str]] = None
         any(term in lower for term in conceptual_terms)
         or any(term in lower for term in conceptual_question_terms)
         or bool(re.search(r"\bwhat does .+ mean\b", lower))
+        or bool(re.search(r"\bwhere does .+ come from\b", lower))
     )
 
     clarification_scope = None
     if asks_conceptual:
-        if any(term in lower for term in lineage_terms):
+        if any(term in lower for term in lineage_terms) or bool(re.search(r"\bwhere does .+ come from\b", lower)):
             clarification_scope = "lineage_context"
         elif any(term in lower for term in framework_internal_markers):
             clarification_scope = "framework_internal"
@@ -557,9 +567,10 @@ def _extract_temporal_pressures(user_text: str, prior_field: Dict[str, Any]) -> 
     return _dedupe(pressures)[:5]
 
 
-def _extract_stakes(user_text: str, prior_field: Dict[str, Any]) -> List[str]:
+def _extract_stakes(user_text: str, prior_field: Dict[str, Any], turn_conditions: Optional[Dict[str, Any]] = None) -> List[str]:
     lower = _normalize_text(user_text).lower()
     stakes: List[str] = []
+    turn_conditions = turn_conditions or {}
 
     if _contains_any(user_text, ["safe", "unsafe", "danger", "harm", "risk"]):
         stakes.append("safety")
@@ -571,6 +582,13 @@ def _extract_stakes(user_text: str, prior_field: Dict[str, Any]) -> List[str]:
         stakes.append("work")
     if _contains_any(user_text, TIME_TERMS):
         stakes.append("timing")
+
+    if turn_conditions.get("asks_conceptual"):
+        if turn_conditions.get("clarification_scope") == "lineage_context":
+            stakes.append("concept lineage clarity")
+        else:
+            stakes.append("concept use clarity")
+
     if "i am correcting you" in lower or "you misunderstood" in lower or "that is not what i asked" in lower:
         stakes.append("correction alignment")
     if isinstance(prior_field.get("selected_elements"), list) and prior_field.get("selected_elements"):
@@ -591,6 +609,11 @@ def _extract_constraints(user_text: str, turn_conditions: Dict[str, Any], explic
         constraints.append(f"respect requested quantity: {turn_conditions['exact_quantity']}")
     if turn_conditions["asks_current_factual"]:
         constraints.append("use available sources only for current claims")
+    if turn_conditions["asks_conceptual"]:
+        if turn_conditions.get("clarification_scope") == "lineage_context":
+            constraints.append("contextual grounding is required for lineage clarification")
+        else:
+            constraints.append("contextual grounding is required for concept clarification")
     if explicit_sources:
         constraints.append("user-provided sources are present in the field")
     prior_notes = prior_field.get("notes") if isinstance(prior_field.get("notes"), dict) else {}
@@ -622,7 +645,7 @@ def _assemble_field(user_text: str, prior_field: Dict[str, Any], retrieved: List
     power_gradients = _extract_power_gradients(user_text)
     material_conditions = _extract_material_conditions(user_text, prior_field, explicit)
     temporal_pressures = _extract_temporal_pressures(user_text, prior_field)
-    stakes = _extract_stakes(user_text, prior_field)
+    stakes = _extract_stakes(user_text, prior_field, turn_conditions)
     constraints = _extract_constraints(user_text, turn_conditions, explicit, prior_field)
 
     return {
@@ -1227,7 +1250,7 @@ def _articulation_prompt(stage_outputs: Dict[str, Any], user_text: str, citation
         ],
         "lineage_context_clarification": [
             "Clarify the broader lineage or context of the concept.",
-            "Differentiate broader lineage/context from CBRA-specific use without collapsing them together.",
+            "State the broader lineage or source first, then state how CBRA uses or adapts the concept.",
             "Keep the explanation bounded and readable.",
             "Avoid contrast framing and avoid explaining through what the concept is not.",
         ],
@@ -1262,8 +1285,13 @@ def _articulation_prompt(stage_outputs: Dict[str, Any], user_text: str, citation
         instructions.append("Output only the requested number of options.")
         instructions.append("Use a numbered list when the user requested multiple options or steps.")
 
+    normalized_user = _normalize_text(user_text).lower()
+
     bare_definition_request = bool(
-        re.fullmatch(r"\s*what is [^?]+[?]?\s*", _normalize_text(user_text).lower())
+        re.fullmatch(r"\s*what is [^?]+[?]?\s*", normalized_user)
+    )
+    bare_lineage_request = bool(
+        re.fullmatch(r"\s*where does [^?]+ come from[?]?\s*", normalized_user)
     )
 
     if constraints["mode"] in {"framework_internal_clarification", "lineage_context_clarification"} and constraints["exact_quantity"] == 1:
@@ -1275,11 +1303,11 @@ def _articulation_prompt(stage_outputs: Dict[str, Any], user_text: str, citation
         instructions.append("Sentence 2 should state how CBRA uses the concept.")
         instructions.append("Sentence 3 may name what the concept helps surface or do in the runtime if needed.")
         instructions.append("Do not use contrastive reassurance or explain the concept by setting it against a lesser alternative.")
-    elif constraints["mode"] == "lineage_context_clarification" and bare_definition_request and not constraints["exact_quantity"]:
-        instructions.append("This is a short definition request.")
+    elif constraints["mode"] == "lineage_context_clarification" and bare_lineage_request and not constraints["exact_quantity"]:
+        instructions.append("This is a short lineage request.")
         instructions.append("Answer in no more than three sentences.")
-        instructions.append("Sentence 1 should give the broader meaning or lineage of the concept.")
-        instructions.append("Sentence 2 should state how CBRA uses or adapts it.")
+        instructions.append("Sentence 1 should name the broader lineage, source, or intellectual origin of the concept.")
+        instructions.append("Sentence 2 should state how CBRA uses or adapts the concept.")
         instructions.append("Sentence 3 may name what that adaptation does in the runtime if needed.")
         instructions.append("Do not use contrastive reassurance or explain the concept by setting it against a lesser alternative.")
 
