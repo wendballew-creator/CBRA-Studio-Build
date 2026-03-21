@@ -29,3 +29,7 @@ cbra_engine_regrounded.py
 # Local backup files
 cbra_engine.py.bak*
 main.py.bak*
+*.bak_*
+* copy.txt
+run_regression_checks.sh
+run_regression_checks_clean.sh
