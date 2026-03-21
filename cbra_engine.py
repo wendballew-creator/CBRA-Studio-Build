@@ -1144,27 +1144,6 @@ def _detect_drift(stage_outputs: Dict[str, Any], turn_conditions: Dict[str, Any]
 
 def _reintegrate(field_context: Dict[str, Any], stage_outputs: Dict[str, Any], drift_signal: Dict[str, Any]) -> Dict[str, Any]:
     target = drift_signal.get("reintegration_target") or "Field Entry"
-    field_context["constructed_field"]["constraints"] = _dedupe(
-        list(field_context["constructed_field"].get("constraints", [])) + [f"drift reintegration via {target}"]
-    )
-
-    if target in {"Field Entry", "Noticing"}:
-        return _fallback_stage_outputs(field_context)
-    if target == "Relational Framing":
-        stage_outputs["relational_map"] = _build_relational_map(field_context)
-        stage_outputs["diffractive_map"] = _build_diffractive_map(field_context)
-        stage_outputs["relevance_gradient"] = _build_relevance_gradient(field_context, stage_outputs["field_signature"], stage_outputs["relational_map"], stage_outputs["diffractive_map"])
-        stage_outputs["action_vector"] = _build_action_vector(field_context, stage_outputs["relevance_gradient"])
-        return stage_outputs
-    if target == "Diffractive Mapping":
-        stage_outputs["diffractive_map"] = _build_diffractive_map(field_context)
-        stage_outputs["relevance_gradient"] = _build_relevance_gradient(field_context, stage_outputs["field_signature"], stage_outputs["relational_map"], stage_outputs["diffractive_map"])
-        stage_outputs["action_vector"] = _build_action_vector(field_context, stage_outputs["relevance_gradient"])
-        return stage_outputs
-    return stage_outputs
-
-def _reintegrate(field_context: Dict[str, Any], stage_outputs: Dict[str, Any], drift_signal: Dict[str, Any]) -> Dict[str, Any]:
-    target = drift_signal.get("reintegration_target") or "Field Entry"
     if target not in {"Field Entry", "Noticing"}:
         target = "Noticing"
 
