@@ -1273,8 +1273,22 @@ def _articulation_prompt(stage_outputs: Dict[str, Any], user_text: str, citation
         re.fullmatch(r"\s*where does [^?]+ come from[?]?\s*", normalized_user)
     )
 
+    plain_internal_request = (
+        constraints["mode"] == "framework_internal_clarification"
+        and constraints["plain_language"]
+        and not constraints["exact_quantity"]
+    )
+
     if constraints["mode"] in {"framework_internal_clarification", "lineage_context_clarification"} and constraints["exact_quantity"] == 1:
         instructions.append("Answer in one sentence only.")
+    elif plain_internal_request:
+        instructions.append("This is a plain internal clarification request.")
+        instructions.append("Answer in no more than two sentences.")
+        instructions.append("Sentence 1 should define the concept in plain language.")
+        instructions.append("Sentence 2 should state how CBRA uses the concept in plain language if needed.")
+        instructions.append("Do not add a third sentence.")
+        instructions.append("Do not add source labels, wrap-up sentences, or extra explanatory framing.")
+        instructions.append("Do not use contrastive reassurance or explain the concept by setting it against a lesser alternative.")
     elif constraints["mode"] == "framework_internal_clarification" and bare_definition_request and not constraints["exact_quantity"]:
         instructions.append("This is a short definition request.")
         instructions.append("Answer in no more than three sentences.")
@@ -1286,9 +1300,6 @@ def _articulation_prompt(stage_outputs: Dict[str, Any], user_text: str, citation
         instructions.append("This is a short lineage request.")
         instructions.append("Answer in no more than three sentences.")
         instructions.append("Sentence 1 should name the broader lineage, source, or intellectual origin of the concept.")
-        instructions.append("Sentence 2 should state how CBRA uses or adapts the concept.")
-        instructions.append("Sentence 3 may name what that adaptation does in the runtime if needed.")
-        instructions.append("Do not use contrastive reassurance or explain the concept by setting it against a lesser alternative.")
 
     if not constraints["allow_list_format"]:
         instructions.append("Do not use bullets unless the user explicitly asked for a list or the response mode requires numbered options.")
