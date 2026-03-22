@@ -1018,13 +1018,45 @@ def _normalize_stage_outputs(candidate: Dict[str, Any], field_context: Dict[str,
         "relational_map": merge_dict(candidate.get("relational_map"), fallback["relational_map"]),
         "diffractive_map": merge_dict(candidate.get("diffractive_map"), fallback["diffractive_map"]),
         "relevance_gradient": merge_dict(candidate.get("relevance_gradient"), fallback["relevance_gradient"]),
-        "action_vector": merge_dict(candidate.get("action_vector"), fallback["action_vector"]) if isinstance(fallback["action_vector"], dict) else candidate.get("action_vector") or fallback["action_vector"],
+        "action_vector": (
+            merge_dict(candidate.get("action_vector"), fallback["action_vector"])
+            if isinstance(candidate.get("action_vector"), dict) and isinstance(fallback["action_vector"], dict)
+            else fallback["action_vector"]
+        ),
     }
 
     normalized["relevance_gradient"]["selected_elements"] = compress_selected_elements(
         normalized["relevance_gradient"].get("selected_elements")
     )
     return normalized
+
+
+def _fallback_articulation_text(user_text: str, turn_conditions: Dict[str, Any], constraints: Dict[str, Any]) -> str:
+    mode = constraints.get("mode")
+
+    if mode == "verified_direct":
+        return "Current verification is temporarily unavailable in this runtime. Please retry the request."
+
+    if mode == "correction_ack" and constraints.get("exact_quantity") == 1:
+        return "I am responding directly and plainly in one sentence as requested, but live generation is temporarily unavailable."
+
+    if mode == "operative" and constraints.get("exact_quantity") == 3:
+        return "\n".join([
+            "1. Pause and identify one concrete next step you could take right now.",
+            "2. Review the most recent field signal or selection and decide whether it still fits.",
+            "3. Retry this request once live generation is available if you want more tailored options.",
+        ])
+
+    if mode == "framework_internal_clarification" and constraints.get("plain_language"):
+        return "Live generation is temporarily unavailable. In CBRA, this request is being handled as a plain internal clarification."
+
+    if mode == "framework_internal_clarification":
+        return "Live generation is temporarily unavailable. In CBRA, this request is being handled as a framework-internal clarification."
+
+    if mode == "lineage_context_clarification":
+        return "Live generation is temporarily unavailable. This request is being handled as a lineage-context clarification."
+
+    return "Live generation is temporarily unavailable. Please retry this request."
 
 
 def _enrich_stage_outputs(client: OpenAI, model: str, system_identity: str, field_context: Dict[str, Any]) -> Dict[str, Any]:
@@ -1048,18 +1080,21 @@ def _enrich_stage_outputs(client: OpenAI, model: str, system_identity: str, fiel
         f"CANONICAL_RUNTIME:\n{_runtime_grounding()}\n\n"
         f"FIELD_PAYLOAD:\n{json.dumps(payload, ensure_ascii=False)}"
     )
-    response = client.responses.create(
-        model=model,
-        input=[
-            {"role": "system", "content": system_identity},
-            {"role": "developer", "content": "Return valid JSON only."},
-            {"role": "user", "content": prompt},
-        ],
-    )
-    parsed = _extract_json_object(getattr(response, "output_text", "") or "")
-    if parsed is None:
+    try:
+        response = client.responses.create(
+            model=model,
+            input=[
+                {"role": "system", "content": system_identity},
+                {"role": "developer", "content": "Return valid JSON only."},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        parsed = _extract_json_object(getattr(response, "output_text", "") or "")
+        if parsed is None:
+            return _fallback_stage_outputs(field_context)
+        return _normalize_stage_outputs(parsed, field_context)
+    except Exception:
         return _fallback_stage_outputs(field_context)
-    return _normalize_stage_outputs(parsed, field_context)
 
 
 def _detect_drift(stage_outputs: Dict[str, Any], turn_conditions: Dict[str, Any], draft_text: Optional[str] = None) -> Dict[str, Any]:
@@ -1290,16 +1325,20 @@ def _articulation_prompt(stage_outputs: Dict[str, Any], user_text: str, citation
         instructions.append("Do not add source labels, wrap-up sentences, or extra explanatory framing.")
         instructions.append("Do not use contrastive reassurance or explain the concept by setting it against a lesser alternative.")
     elif constraints["mode"] == "framework_internal_clarification" and bare_definition_request and not constraints["exact_quantity"]:
-        instructions.append("This is a short definition request.")
-        instructions.append("Answer in no more than three sentences.")
+        instructions.append("This is a short framework-internal definition request.")
+        instructions.append("Answer in no more than two sentences.")
         instructions.append("Sentence 1 should give the broader meaning of the concept.")
         instructions.append("Sentence 2 should state how CBRA uses the concept.")
-        instructions.append("Sentence 3 may name what the concept helps surface or do in the runtime if needed.")
+        instructions.append("Do not add a third sentence unless the user explicitly asks for elaboration.")
         instructions.append("Do not use contrastive reassurance or explain the concept by setting it against a lesser alternative.")
     elif constraints["mode"] == "lineage_context_clarification" and bare_lineage_request and not constraints["exact_quantity"]:
         instructions.append("This is a short lineage request.")
         instructions.append("Answer in no more than three sentences.")
-        instructions.append("Sentence 1 should name the broader lineage, source, or intellectual origin of the concept.")
+        instructions.append("Sentence 1 should name the broader lineage, source, or intellectual origin of the concept only when it is visible in retrieved material, explicit field context, or prior field carryover.")
+        instructions.append("Sentence 2 should state how CBRA uses or adapts the concept.")
+        instructions.append("Sentence 3 may name what that adaptation does in the runtime if needed.")
+        instructions.append("If broader lineage is not visible in current field material, say that plainly and then state how CBRA uses the concept.")
+        instructions.append("Do not use contrastive reassurance or explain the concept by setting it against a lesser alternative.")
 
     if not constraints["allow_list_format"]:
         instructions.append("Do not use bullets unless the user explicitly asked for a list or the response mode requires numbered options.")
@@ -1330,15 +1369,19 @@ def _articulation_prompt(stage_outputs: Dict[str, Any], user_text: str, citation
 
 
 def _generate_articulation(client: OpenAI, model: str, system_identity: str, stage_outputs: Dict[str, Any], user_text: str, citations: List[str], turn_conditions: Dict[str, Any], constraints: Dict[str, Any]) -> str:
-    response = client.responses.create(
-        model=model,
-        input=[
-            {"role": "system", "content": system_identity},
-            {"role": "developer", "content": "Produce the user-facing answer only."},
-            {"role": "user", "content": _articulation_prompt(stage_outputs, user_text, citations, turn_conditions, constraints)},
-        ],
-    )
-    return (getattr(response, "output_text", "") or "").strip()
+    try:
+        response = client.responses.create(
+            model=model,
+            input=[
+                {"role": "system", "content": system_identity},
+                {"role": "developer", "content": "Produce the user-facing answer only."},
+                {"role": "user", "content": _articulation_prompt(stage_outputs, user_text, citations, turn_conditions, constraints)},
+            ],
+        )
+        text = (getattr(response, "output_text", "") or "").strip()
+        return text or _fallback_articulation_text(user_text, turn_conditions, constraints)
+    except Exception:
+        return _fallback_articulation_text(user_text, turn_conditions, constraints)
 
 
 def _build_field_patch(field_context: Dict[str, Any], stage_outputs: Dict[str, Any], selected_elements: List[Dict[str, Any]], citations: List[str], text: str, drift_signal: Dict[str, Any], notes: Dict[str, Any]) -> Dict[str, Any]:
