@@ -1,9 +1,9 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
+<!DOCTYPE html>
+<!-- saved from url=(0056)file:///Users/gwendelynballew/Downloads/index%20(1).html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  
   <title>CBRA Chat UI</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root {
       color-scheme: light dark;
@@ -140,6 +140,18 @@
       font-size: 0.9rem;
       color: var(--muted);
     }
+    .file-meta {
+      font-size: 0.9rem;
+      color: var(--muted);
+      padding: 6px 2px 0 2px;
+    }
+    .file-input-wrap {
+      display: grid;
+      gap: 6px;
+    }
+    .file-input-wrap input[type="file"] {
+      padding: 10px;
+    }
     @media (max-width: 860px) {
       .layout {
         grid-template-columns: 1fr;
@@ -156,7 +168,7 @@
       <div class="title">CBRA Chat UI</div>
       <div class="row">
         <label for="threadId">Thread</label>
-        <input id="threadId" value="interaction-test-1" style="width: 220px;" />
+        <input id="threadId" value="interaction-test-1" style="width: 220px;">
       </div>
       <div class="row">
         <button id="loadThreadBtn" class="secondary">Load Thread</button>
@@ -165,14 +177,21 @@
 
     <div class="layout">
       <div class="panel">
-        <div class="meta" id="status">Ready.</div>
+        <div class="meta" id="status">Loading thread: interaction-test-1 ...</div>
         <div class="messages" id="messages"></div>
 
         <div class="composer">
           <textarea id="prompt" placeholder="Type a prompt for CBRA..."></textarea>
+
+          <div class="file-input-wrap">
+            <input id="fileInput" type="file" accept=".txt,.md,.docx,.pdf" multiple="">
+            <div class="file-meta" id="fileStatus">No attachment selected.</div>
+          </div>
+
           <div class="row">
             <button id="sendBtn">Send</button>
             <button id="clearPromptBtn" class="secondary">Clear Prompt</button>
+            <button id="clearFileBtn" class="secondary" type="button">Clear Active Attachments</button>
           </div>
         </div>
       </div>
@@ -195,7 +214,10 @@
     const loadThreadBtn = document.getElementById("loadThreadBtn");
     const sendBtn = document.getElementById("sendBtn");
     const clearPromptBtn = document.getElementById("clearPromptBtn");
+    const clearFileBtn = document.getElementById("clearFileBtn");
     const promptEl = document.getElementById("prompt");
+    const fileInput = document.getElementById("fileInput");
+    const fileStatus = document.getElementById("fileStatus");
     const messagesEl = document.getElementById("messages");
     const loopcycleView = document.getElementById("loopcycleView");
     const threadSummary = document.getElementById("threadSummary");
@@ -203,6 +225,18 @@
 
     function setStatus(text) {
       statusEl.textContent = text;
+    }
+
+    function setFileStatus() {
+      const files = Array.from(fileInput.files || []);
+      if (files.length === 1) {
+        fileStatus.textContent = `Attachment selected: ${files[0].name}`;
+      } else if (files.length > 1) {
+        const shown = files.slice(0, 3).map(f => f.name).join(", ");
+        fileStatus.textContent = `Attachments selected (${files.length}): ${shown}${files.length > 3 ? ", ..." : ""}`;
+      } else {
+        fileStatus.textContent = "No attachment selected.";
+      }
     }
 
     function escapeHtml(str) {
@@ -229,7 +263,10 @@
         messages_count: (threadData?.messages || []).length,
         loop_cycles_count: (threadData?.loop_cycles || []).length,
         drift_events_count: (threadData?.drift_events || []).length,
-        current_field_id: threadData?.current_field_id || null
+        current_field_id: threadData?.current_field_id || null,
+        active_attachment_name: threadData?.active_attachment_name || null,
+        active_attachment_count: (threadData?.active_attachments || []).length,
+        active_attachment_names: (threadData?.active_attachments || []).map(x => x?.name || null).filter(Boolean)
       };
       threadSummary.textContent = JSON.stringify(summary, null, 2);
     }
@@ -260,30 +297,50 @@
     async function sendPrompt() {
       const threadId = threadIdInput.value.trim();
       const userText = promptEl.value.trim();
+      const files = Array.from(fileInput.files || []);
 
       if (!threadId) {
         setStatus("Enter a thread id first.");
         return;
       }
-      if (!userText) {
-        setStatus("Enter a prompt first.");
+      if (!userText && files.length === 0) {
+        setStatus("Enter a prompt or choose an attachment first.");
         return;
       }
 
-      setStatus(`Sending turn to ${threadId} ...`);
       sendBtn.disabled = true;
 
       try {
-        const resp = await fetch(`/chat/${encodeURIComponent(threadId)}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            user_text: userText,
-            mode: "production"
-          })
-        });
+        let resp;
+
+        if (files.length > 0) {
+          setStatus(`Sending turn with ${files.length} attachment${files.length === 1 ? "" : "s"} to ${threadId} ...`);
+
+          const formData = new FormData();
+          formData.append("user_text", userText);
+          formData.append("mode", "production");
+          for (const file of files) {
+            formData.append("uploads", file);
+          }
+
+          resp = await fetch(`/chat/${encodeURIComponent(threadId)}/file`, {
+            method: "POST",
+            body: formData
+          });
+        } else {
+          setStatus(`Sending turn to ${threadId} ...`);
+
+          resp = await fetch(`/chat/${encodeURIComponent(threadId)}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              user_text: userText,
+              mode: "production"
+            })
+          });
+        }
 
         const data = await resp.json();
 
@@ -298,8 +355,18 @@
           renderLatestLoopcycle(threadData?.data || {});
         }
 
+        const sentFiles = files.map(f => f.name);
+
         promptEl.value = "";
-        setStatus(`Turn completed for ${threadId}`);
+        fileInput.value = "";
+        setFileStatus();
+
+        if (sentFiles.length) {
+          const shown = sentFiles.slice(0, 3).join(", ");
+          setStatus(`Turn completed for ${threadId} (attached: ${shown}${sentFiles.length > 3 ? ", ..." : ""})`);
+        } else {
+          setStatus(`Turn completed for ${threadId}`);
+        }
       } catch (err) {
         console.error(err);
         setStatus(`Request failed: ${err}`);
@@ -310,10 +377,47 @@
 
     loadThreadBtn.addEventListener("click", loadThread);
     sendBtn.addEventListener("click", sendPrompt);
+
     clearPromptBtn.addEventListener("click", () => {
       promptEl.value = "";
       promptEl.focus();
     });
+
+    clearFileBtn.addEventListener("click", async () => {
+      const threadId = threadIdInput.value.trim();
+      if (!threadId) {
+        setStatus("Enter a thread id first.");
+        return;
+      }
+
+      try {
+        const resp = await fetch(`/thread/${encodeURIComponent(threadId)}/attachments/clear`, {
+          method: "POST"
+        });
+        const data = await resp.json();
+
+        fileInput.value = "";
+        setFileStatus();
+
+        const threadResp = await fetch(`/thread/${encodeURIComponent(threadId)}`);
+        const threadData = await threadResp.json();
+        renderMessages(threadData?.data?.messages || []);
+        renderThreadSummary(threadData?.data || {});
+        renderLatestLoopcycle(threadData?.data || {});
+
+        const clearedNames = data?.data?.cleared_attachment_names || [];
+        if (clearedNames.length) {
+          setStatus(`Cleared active attachments: ${clearedNames.join(", ")}`);
+        } else {
+          setStatus(`No active attachment to clear for ${threadId}`);
+        }
+      } catch (err) {
+        console.error(err);
+        setStatus(`Failed to clear active attachment: ${err}`);
+      }
+    });
+
+    fileInput.addEventListener("change", setFileStatus);
 
     promptEl.addEventListener("keydown", (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
@@ -321,7 +425,9 @@
       }
     });
 
+    setFileStatus();
     loadThread();
   </script>
-</body>
-</html>
+
+
+</body></html>

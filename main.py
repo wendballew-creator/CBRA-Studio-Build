@@ -2,23 +2,25 @@ from __future__ import annotations
 
 from dotenv import load_dotenv, find_dotenv
 import os
+import io
+from uuid import uuid4
+from typing import Optional, Literal, Any, List, Dict
 
-# Load .env from current working directory (reliable under uvicorn reload)
-dotenv_path = find_dotenv(usecwd=True)
-load_dotenv(dotenv_path, override=True)
-
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from typing import Optional, Literal, Any
+from docx import Document
+from pypdf import PdfReader
 
 from cbra_engine import run_cbra
 
-from uuid import uuid4
-from datetime import datetime
+try:
+    from cbra.models import Message, LoopCycle, DriftEvent
+except ImportError:
+    from models import Message, LoopCycle, DriftEvent
 
-from cbra.models import Message, LoopCycle, DriftEvent
-from cbra.store import (
+try:
+    from cbra.store import (
     create_thread,
     get_thread,
     append_message,
@@ -27,9 +29,24 @@ from cbra.store import (
     get_field,
     create_field,
 )
+except ImportError:
+    from store import (
+        create_thread,
+        get_thread,
+        append_message,
+        append_loopcycle,
+        append_drift_event,
+        get_field,
+        create_field,
+    )
+
+# Load .env from current working directory (reliable under uvicorn reload)
+dotenv_path = find_dotenv(usecwd=True)
+load_dotenv(dotenv_path, override=True)
 
 app = FastAPI(title="CBRA Writing Support")
 app.mount("/ui", StaticFiles(directory="ui", html=True), name="static")
+
 
 def ok(*, request_id: str, thread_id: Optional[str], text: Optional[str] = None, debug: Any = None, data: Any = None):
     return {
@@ -50,9 +67,115 @@ def err(*, request_id: str, code: str, message: str):
         }
     }
 
+
 class GenerateRequest(BaseModel):
     user_text: str = Field(..., min_length=1)
     mode: Literal["production", "debug"] = "production"
+
+
+def _get_active_attachments(thread) -> List[Dict[str, Any]]:
+    attachments = getattr(thread, "active_attachments", None) or []
+    normalized: List[Dict[str, Any]] = []
+    for item in attachments:
+        if isinstance(item, dict):
+            text = str(item.get("text", "") or "")
+            name = str(item.get("name", "attachment") or "attachment")
+            media_type = item.get("media_type")
+            if text:
+                normalized.append({
+                    "name": name,
+                    "text": text,
+                    "media_type": media_type,
+                    "chars": len(text),
+                })
+    if not normalized:
+        legacy_name = getattr(thread, "active_attachment_name", None)
+        legacy_text = getattr(thread, "active_attachment_text", None)
+        if legacy_text:
+            normalized.append({
+                "name": legacy_name or "attachment",
+                "text": legacy_text,
+                "media_type": None,
+                "chars": len(legacy_text),
+            })
+    return normalized
+
+
+def _set_active_attachments(thread, attachments: List[Dict[str, Any]]) -> None:
+    thread.active_attachments = attachments
+    if attachments:
+        thread.active_attachment_name = attachments[0]["name"]
+        thread.active_attachment_text = attachments[0]["text"]
+    else:
+        thread.active_attachment_name = None
+        thread.active_attachment_text = None
+
+
+def _clear_active_attachments(thread) -> None:
+    thread.active_attachments = []
+    thread.active_attachment_name = None
+    thread.active_attachment_text = None
+
+
+def _active_attachment_names(thread) -> List[str]:
+    return [item["name"] for item in _get_active_attachments(thread)]
+
+
+def _active_attachment_sources(thread) -> Optional[list[str]]:
+    attachments = _get_active_attachments(thread)
+    if not attachments:
+        return None
+    return [f"ATTACHMENT ({item['name']}):\n{item['text']}" for item in attachments]
+
+
+def _combined_attachment_block(thread) -> str:
+    sources = _active_attachment_sources(thread) or []
+    return "\n\n".join(sources)
+
+
+def _inject_attachment_metadata(result: Dict[str, Any], thread) -> None:
+    names = _active_attachment_names(thread)
+    payload = {
+        "active_attachment_count": len(names),
+        "active_attachment_names": names,
+        "active_attachment_present": bool(names),
+    }
+    if isinstance(result.get("debug"), dict):
+        result["debug"]["attachments"] = payload
+    if isinstance(result.get("loopcycle"), dict):
+        notes = result["loopcycle"].setdefault("notes", {})
+        if isinstance(notes, dict):
+            notes["active_attachment_count"] = len(names)
+            notes["active_attachment_names"] = names
+
+
+def _extract_text_from_upload(upload: UploadFile) -> str:
+    name = (upload.filename or "").lower()
+    data = upload.file.read()
+
+    if name.endswith(".txt") or name.endswith(".md"):
+        return data.decode("utf-8", errors="replace")
+
+    if name.endswith(".docx"):
+        doc = Document(io.BytesIO(data))
+        parts = []
+        for p in doc.paragraphs:
+            t = (p.text or "").strip()
+            if t:
+                parts.append(t)
+        return "\n".join(parts)
+
+    if name.endswith(".pdf"):
+        parts = []
+        reader = PdfReader(io.BytesIO(data))
+        for page in reader.pages:
+            text = (page.extract_text() or "").strip()
+            if text:
+                parts.append(text)
+        return "\n\n".join(parts)
+
+    raise HTTPException(status_code=400, detail="Unsupported file type. Use .pdf, .docx, .txt, or .md")
+
 
 @app.post("/generate")
 async def generate(req: GenerateRequest):
@@ -67,8 +190,8 @@ async def generate(req: GenerateRequest):
             data=None,
         )
     except Exception as e:
-        # Keep it structured (no raw stack trace in response)
         return err(request_id=request_id, code="INTERNAL_ERROR", message=str(e))
+
 
 @app.post("/chat/{thread_id}")
 def chat(thread_id: str, request: GenerateRequest):
@@ -83,15 +206,19 @@ def chat(thread_id: str, request: GenerateRequest):
             Message(role="user", content=request.user_text),
         )
 
+        effective_user_text = request.user_text
+
         result = run_cbra(
-            request.user_text,
+            effective_user_text,
             mode=request.mode,
             thread_id=thread_id,
             field_id=thread.current_field_id,
+            sources=_active_attachment_sources(thread),
         )
+
         if "loopcycle" in result and isinstance(result["loopcycle"], dict):
             append_loopcycle(thread_id, LoopCycle(**result["loopcycle"]))
-        # If drift detected, log DriftEvent
+
         lc = result.get("loopcycle") if isinstance(result.get("loopcycle"), dict) else None
         if lc and lc.get("drift_detected"):
             drift_notes = lc.get("notes") if isinstance(lc.get("notes"), dict) else {}
@@ -126,9 +253,11 @@ def chat(thread_id: str, request: GenerateRequest):
             Message(role="assistant", content=result["text"]),
         )
 
+        _inject_attachment_metadata(result, thread)
         return result
     except Exception as e:
         return err(request_id=request_id, code="INTERNAL_ERROR", message=str(e))
+
 
 @app.get("/thread/{thread_id}")
 def get_thread_route(thread_id: str):
@@ -146,6 +275,7 @@ def get_thread_route(thread_id: str):
         data=thread.model_dump(),
     )
 
+
 @app.get("/thread/{thread_id}/export")
 def export_thread(thread_id: str):
     request_id = str(uuid4())
@@ -158,35 +288,9 @@ def export_thread(thread_id: str):
         thread_id=thread_id,
         text=None,
         debug=None,
-        data=thread.dict(),
+        data=thread.model_dump(),
     )
-# ------------------------------
-# Attachment Support (.docx, .txt, .md)
-# ------------------------------
 
-from fastapi import UploadFile, File
-import io
-from docx import Document
-
-def _extract_text_from_upload(upload: UploadFile) -> str:
-    name = (upload.filename or "").lower()
-    data = upload.file.read()
-
-    # txt / md
-    if name.endswith(".txt") or name.endswith(".md"):
-        return data.decode("utf-8", errors="replace")
-
-    # docx
-    if name.endswith(".docx"):
-        doc = Document(io.BytesIO(data))
-        parts = []
-        for p in doc.paragraphs:
-            t = (p.text or "").strip()
-            if t:
-                parts.append(t)
-        return "\n".join(parts)
-
-    raise HTTPException(status_code=400, detail="Unsupported file type. Use .docx, .txt, or .md")
 
 @app.get("/field/{field_id}")
 def read_field(field_id: str):
@@ -199,39 +303,59 @@ def read_field(field_id: str):
         thread_id=field.thread_id,
         text=None,
         debug=None,
-        data=field.dict(),
+        data=field.dict() if hasattr(field, "dict") else field.model_dump(),
     )
+
 
 @app.post("/chat/{thread_id}/file")
 def chat_with_file(
     thread_id: str,
     user_text: str = "",
     mode: Literal["production", "debug"] = "production",
-    upload: UploadFile = File(...)
+    upload: Optional[UploadFile] = File(None),
+    uploads: Optional[List[UploadFile]] = File(None),
 ):
     thread = get_thread(thread_id) or create_thread(thread_id)
 
-    doc_text = _extract_text_from_upload(upload)
+    incoming_uploads: List[UploadFile] = []
+    if upload is not None and getattr(upload, "filename", None):
+        incoming_uploads.append(upload)
+    for item in uploads or []:
+        if item is not None and getattr(item, "filename", None):
+            incoming_uploads.append(item)
 
+    if not incoming_uploads:
+        raise HTTPException(status_code=400, detail="No file uploaded")
+
+    attachments: List[Dict[str, Any]] = []
     MAX_CHARS = 25000
-    if len(doc_text) > MAX_CHARS:
-        doc_text = doc_text[:MAX_CHARS] + "\n\n[TRUNCATED]"
+    for item in incoming_uploads:
+        doc_text = _extract_text_from_upload(item)
+        if len(doc_text) > MAX_CHARS:
+            doc_text = doc_text[:MAX_CHARS] + "\n\n[TRUNCATED]"
+        attachments.append({
+            "name": item.filename or "attachment",
+            "text": doc_text,
+            "media_type": getattr(item, "content_type", None),
+            "chars": len(doc_text),
+        })
+
+    _set_active_attachments(thread, attachments)
 
     combined = (user_text or "").strip()
-    if combined:
-        combined += "\n\n"
-    combined += f"ATTACHMENT ({upload.filename}):\n{doc_text}"
 
+    attached_names = ", ".join(_active_attachment_names(thread))
     append_message(thread_id, Message(
         role="user",
-        content=f"{user_text}\n\n[Attached: {upload.filename}]",
+        content=f"{user_text}\n\n[Attached: {attached_names}]",
     ))
 
     result = run_cbra(
-        user_text=combined,
+        user_text=combined or "Use the attached document(s).",
         mode=mode,
         thread_id=thread_id,
         field_id=thread.current_field_id,
+        sources=_active_attachment_sources(thread),
     )
 
     append_message(thread_id, Message(
@@ -240,9 +364,9 @@ def chat_with_file(
     ))
 
     if "loopcycle" in result and isinstance(result["loopcycle"], dict):
-
         append_loopcycle(thread_id, LoopCycle(**result["loopcycle"]))
 
+    _inject_attachment_metadata(result, thread)
     return {
         "request_id": str(uuid4()),
         "thread_id": thread_id,
@@ -251,3 +375,29 @@ def chat_with_file(
         "loopcycle": result.get("loopcycle"),
         "data": None,
     }
+
+
+@app.post("/thread/{thread_id}/attachments/clear")
+def clear_active_attachment(thread_id: str):
+    request_id = str(uuid4())
+    thread = get_thread(thread_id)
+    if thread is None:
+        thread = create_thread(thread_id)
+
+    cleared_names = _active_attachment_names(thread)
+    _clear_active_attachments(thread)
+
+    return ok(
+        request_id=request_id,
+        thread_id=thread_id,
+        text=None,
+        debug=None,
+        data={
+            "cleared": bool(cleared_names),
+            "cleared_attachment_name": cleared_names[0] if cleared_names else None,
+            "cleared_attachment_names": cleared_names,
+            "active_attachment_name": None,
+            "active_attachment_names": [],
+            "active_attachment_count": 0,
+        },
+    )
