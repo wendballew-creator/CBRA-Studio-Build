@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from docx import Document
 from pypdf import PdfReader
 
-from cbra_engine import run_cbra
+from cbra.engine import run_cbra
 
 from cbra.models import Message, LoopCycle, DriftEvent
 

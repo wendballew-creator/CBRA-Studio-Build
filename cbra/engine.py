@@ -46,10 +46,13 @@ DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")
 LIVE_RETRIEVAL_ENABLED = (os.getenv("CBRA_ENABLE_LIVE_RETRIEVAL", "1") or "1").strip().lower() not in {"0", "false", "no"}
 LIVE_RETRIEVAL_MODEL = "gpt-5"
 MAX_LIVE_WEB_RESULTS = int((os.getenv("CBRA_MAX_LIVE_WEB_RESULTS", "4") or "4").strip())
-BASE_DIR = Path(__file__).parent
-CORPUS_DIR = BASE_DIR / "corpus"
+BASE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BASE_DIR.parent
+CORPUS_DIR = PROJECT_ROOT / "corpus"
 if not CORPUS_DIR.exists():
-    CORPUS_DIR = BASE_DIR
+    fallback_corpus = BASE_DIR / "corpus"
+    if fallback_corpus.exists():
+        CORPUS_DIR = fallback_corpus
 
 ROLE_WEIGHT = {
     "ground_anchor": 50.0,

@@ -1,6 +1,6 @@
 import unittest
 
-from cbra_engine import (
+from cbra.engine import (
     OPERATOR_SEQUENCE,
     execute_field_pipeline,
     initialize_field_state,
