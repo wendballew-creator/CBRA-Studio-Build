@@ -171,6 +171,33 @@ class FieldPipelineTests(unittest.TestCase):
         self.assertGreater(live_event.payload["body_chars"], 0)
         self.assertTrue(any(item.get("handle") == "external:extdoc:1" for item in state.diffractive_map["materials"]))
         self.assertTrue(any(item.get("label") == "external:extdoc:1" for item in state.diffractive_map["candidate_elements"]))
+    def test_attachment_count_operation_bypasses_generic_diffraction(self):
+        attachment_body = "intra-action matters. Intra-action continues. Another intra-action appears here."
+        state = initialize_field_state(
+            thread_id="thread-6",
+            field_id="field-6",
+            user_text="How many times is the word intra-action used in the attached document?",
+            sources=[f"ATTACHMENT (draft.txt):\n{attachment_body}"],
+            citations=[],
+            raw_hits=[],
+            prior_field=None,
+            live_retrieval=None,
+        )
+
+        state, invariants, _, _, _ = execute_field_pipeline(state)
+        self.assertTrue(invariants["ok"])
+
+        operation_event = next(event for event in state.events if event.kind == "attachment_operation_result")
+        self.assertEqual(operation_event.payload["operation"], "count")
+        self.assertEqual(operation_event.payload["term"], "intra-action")
+        self.assertEqual(operation_event.payload["value"], 3)
+
+        self.assertTrue(state.notes["attachment_operation_resolved"])
+        self.assertEqual(state.articulation_output, "3")
+        self.assertIn("number_only", state.surface_flags)
+        self.assertEqual(state.selected_elements, state.relevance_gradient["selected_elements"])
+        self.assertEqual(state.operator_path, OPERATOR_SEQUENCE)
+
     def test_run_cbra_debug_reports_operator_path_not_response_family(self):
         result = run_cbra(
             "Use the attached document.",

@@ -156,6 +156,190 @@ def _attachment_body(source: str) -> str:
     return "\n".join((source or "").splitlines()[1:]).strip()
 
 
+def _attachment_materials(state: FieldState) -> List[Dict[str, Any]]:
+    materials: List[Dict[str, Any]] = []
+    for event in state.events:
+        if event.kind != "attachment":
+            continue
+        body = str(event.payload.get("body", "") or "").strip()
+        handle = str(event.payload.get("material_handle", "attachment") or "attachment")
+        name = str(event.payload.get("name", handle) or handle)
+        if body:
+            materials.append({"handle": handle, "name": name, "body": body})
+    return materials
+
+
+def _normalize_attachment_lookup_term(term: str) -> str:
+    cleaned = str(term or "").strip()
+    for ch in ('"', "'", "“", "”", "‘", "’", "`"):
+        cleaned = cleaned.strip(ch)
+    cleaned = re.sub(r"^(the\s+word|the\s+term|the\s+phrase)\s+", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .,:;!?")
+    return cleaned
+
+
+def _attachment_term_pattern(term: str) -> str:
+    escaped = re.escape(term)
+    escaped = escaped.replace("\\-", "[-‐-‒–—]")
+    escaped = escaped.replace("\\ ", "\\s+")
+    return escaped
+
+
+def _extract_section_from_body(body: str, section_name: str) -> str:
+    wanted = str(section_name or "").strip()
+    if not wanted:
+        return ""
+    lines = body.splitlines()
+    wanted_norm = re.sub(r"\s+", " ", wanted).strip().lower()
+    heading_re = re.compile(r"^\s{0,3}(?:#{1,6}\s*)?(?P<title>[^\n]{1,200})\s*$")
+    start = None
+    for idx, line in enumerate(lines):
+        match = heading_re.match(line)
+        if not match:
+            continue
+        title_norm = re.sub(r"\s+", " ", match.group("title")).strip().lower().rstrip(":")
+        if title_norm == wanted_norm or title_norm.endswith(" " + wanted_norm):
+            start = idx + 1
+            break
+    if start is None:
+        return ""
+    collected: List[str] = []
+    for line in lines[start:]:
+        match = heading_re.match(line)
+        if match:
+            title_norm = re.sub(r"\s+", " ", match.group("title")).strip().lower().rstrip(":")
+            if title_norm and title_norm != wanted_norm:
+                break
+        collected.append(line)
+    return "\n".join(collected).strip()
+
+
+def _resolve_attachment_operation(state: FieldState) -> FieldState:
+    materials = _attachment_materials(state)
+    if not materials:
+        return state
+
+    user_text = str(state.field_signature.get("phenomena", "") or "").strip()
+
+    def finalize(operation: str, term: str, output: str, *, value: Any = None, matches: Optional[List[str]] = None, section: str = "") -> FieldState:
+        op_handle = f"attachment_operation:{operation}:{term or section or 'result'}"
+        payload: Dict[str, Any] = {
+            "operation": operation,
+            "term": term,
+            "section": section,
+            "value": value,
+            "matches": list(matches or []),
+            "output": str(output),
+            "material_handles": [item["handle"] for item in materials],
+        }
+        state.events.append(FieldEvent(kind="attachment_operation_result", source="attachment_operator", payload=payload))
+        state.notes["attachment_operation_resolved"] = True
+        state.notes["attachment_operation_result"] = payload
+        state.selected_elements = [{
+            "label": op_handle,
+            "rationale": str(output),
+            "stage_source": "attachment_operation",
+        }]
+        state.relevance_gradient = {
+            "candidate_elements": list(state.selected_elements),
+            "selected_elements": list(state.selected_elements),
+            "selection_basis": "direct_attachment_operation",
+            "held_open": [],
+        }
+        state.cut_ledger = CutLedger(
+            foregrounded=[op_handle],
+            held_open=[],
+            excluded=[],
+            reasons={op_handle: f"direct attachment {operation} resolved before generic diffraction"},
+            consequences={},
+        )
+        state.diffractive_map = {
+            "materials": [{"handle": item["handle"], "kind": "attachment", "source": item["name"], "body_chars": len(item["body"])} for item in materials],
+            "cross_readings": [],
+            "resonance": [term or section] if (term or section) else [],
+            "interference": [],
+            "exclusions": [],
+            "candidate_elements": list(state.selected_elements),
+            "direct_attachment_operation": payload,
+        }
+        return state
+
+    count_match = re.search(
+        r'(?:how many times(?: is| does)?|count)\s+(?:the\s+word\s+|the\s+term\s+|the\s+phrase\s+)?["“”\']?([^"“”\']+?)["“”\']?\s+(?:used|appear(?:s)?|occur(?:s)?|in\s+the\s+attached\s+document|in\s+the\s+attachment|in\s+this\s+document|in\s+this\s+attachment)',
+        user_text,
+        flags=re.IGNORECASE,
+    )
+    if not count_match:
+        count_match = re.search(
+            r'count\s+(?:the\s+word\s+|the\s+term\s+|the\s+phrase\s+)?["“”\']?([^"“”\']+?)["“”\']?(?:\s|$)',
+            user_text,
+            flags=re.IGNORECASE,
+        )
+    if count_match:
+        term = _normalize_attachment_lookup_term(count_match.group(1))
+        pattern = _attachment_term_pattern(term)
+        count = 0
+        for item in materials:
+            count += len(re.findall(pattern, item["body"], flags=re.IGNORECASE))
+        return finalize("count", term, str(count), value=count)
+
+    quote_match = re.search(
+        r'(?:quote|show)\s+(?:the\s+)?(?:line|lines|sentence|sentences|passage|passages|occurrence|occurrences)?\s*(?:where\s+|with\s+)?["“”\']?([^"“”\']+?)["“”\']?\s+(?:appears|occur(?:s)?|is\s+used)',
+        user_text,
+        flags=re.IGNORECASE,
+    )
+    if quote_match:
+        term = _normalize_attachment_lookup_term(quote_match.group(1))
+        pattern = re.compile(_attachment_term_pattern(term), flags=re.IGNORECASE)
+        hits: List[str] = []
+        for item in materials:
+            sentences = re.split(r'(?<=[.!?])\s+', item["body"])
+            for sentence in sentences:
+                if pattern.search(sentence):
+                    cleaned = sentence.strip()
+                    if cleaned:
+                        hits.append(cleaned)
+        hits = list(dict.fromkeys(hits))
+        output = hits[0] if hits else ""
+        return finalize("quote", term, output, matches=hits[:5])
+
+    find_match = re.search(
+        r'(?:find|locate|list)\s+(?:all\s+)?(?:occurrences|instances|places)?\s*(?:of\s+)?["“”\']?([^"“”\']+?)["“”\']?(?:\s|$)',
+        user_text,
+        flags=re.IGNORECASE,
+    )
+    if find_match:
+        term = _normalize_attachment_lookup_term(find_match.group(1))
+        pattern = re.compile(_attachment_term_pattern(term), flags=re.IGNORECASE)
+        hits: List[str] = []
+        for item in materials:
+            sentences = re.split(r'(?<=[.!?])\s+', item["body"])
+            for sentence in sentences:
+                if pattern.search(sentence):
+                    cleaned = sentence.strip()
+                    if cleaned:
+                        hits.append(cleaned)
+        hits = list(dict.fromkeys(hits))
+        output = "\n".join(hits[:5]) if hits else ""
+        return finalize("find", term, output, matches=hits[:5], value=len(hits))
+
+    extract_match = re.search(
+        r'(?:extract|show|get)\s+(?:the\s+)?section\s+(?:called|titled|named)?\s*["“”\']?([^"“”\']+?)["“”\']?(?:\s|$)',
+        user_text,
+        flags=re.IGNORECASE,
+    )
+    if extract_match:
+        section = _normalize_attachment_lookup_term(extract_match.group(1))
+        extracted = ""
+        for item in materials:
+            extracted = _extract_section_from_body(item["body"], section)
+            if extracted:
+                break
+        return finalize("extract", "", extracted, section=section)
+
+    return state
+
+
 def _read_canonical_body(file_name: str) -> str:
     cached = _CANONICAL_BODY_CACHE.get(file_name)
     if cached is not None:
@@ -1094,6 +1278,41 @@ def _compose_situated_expression(state: FieldState, frame: StabilizationFrame) -
 
 def articulate(state: FieldState) -> FieldState:
     state.operator_path.append("articulate")
+
+    direct_result = state.notes.get("attachment_operation_result")
+    if isinstance(direct_result, dict):
+        operation = str(direct_result.get("operation", "") or "")
+        output = str(direct_result.get("output", "") or "")
+        direct_mode = "scalar" if operation == "count" else "brief_sentence"
+        state.stabilization_frame = StabilizationFrame(
+            mode=direct_mode,
+            foregrounded_threads=list(state.cut_ledger.foregrounded[:1]),
+            held_open_threads=[],
+            excluded_threads=[],
+            movement_vector="",
+            closure_level="bounded",
+            format_affordances=[direct_mode],
+            language_constraints=["render direct attachment operation result"],
+            basis={"attachment_operation": direct_result},
+        )
+        state.surface_flags = ["plain"]
+        if operation == "count":
+            state.surface_flags.extend(["number_only", "brief"])
+        else:
+            state.surface_flags.append("brief")
+        state.situated_expression = SituatedExpression(
+            form="scalar" if operation == "count" else "sentence",
+            text=output,
+            segments=[output] if output else [],
+            supports=list(state.cut_ledger.foregrounded[:1]),
+            held_open=[],
+            movement_note="",
+        )
+        state.notes["surface_flags_deferred"] = False
+        state.notes["surface_flag_status"] = "derived_from_field_and_cut"
+        state.articulation_output = output
+        return state
+
     frame = _build_stabilization_frame(state)
     state.stabilization_frame = frame
     state.surface_flags = _derive_stabilization_constraints(state, frame)
@@ -1167,8 +1386,17 @@ def detect_drift(state: FieldState, invariants: Dict[str, Any]) -> Tuple[bool, O
 
 
 def execute_field_pipeline(state: FieldState) -> Tuple[FieldState, Dict[str, Any], bool, Optional[str], Optional[str]]:
-    for operator in [field_entry, notice, relational_frame, diffractive_read, situated_relevance_select]:
+    for operator in [field_entry, notice, relational_frame]:
         state = operator(state)
+
+    state = _resolve_attachment_operation(state)
+    if state.notes.get("attachment_operation_resolved"):
+        state.operator_path.append("diffractive_read")
+        state.operator_path.append("situated_relevance_select")
+    else:
+        for operator in [diffractive_read, situated_relevance_select]:
+            state = operator(state)
+
     if enforce_fieldartifact_compression is not None:
         compressed_field, compression_violations = enforce_fieldartifact_compression({"selected_elements": state.selected_elements, "relevance_gradient": state.relevance_gradient})
         state.selected_elements = compressed_field.get("selected_elements", [])
