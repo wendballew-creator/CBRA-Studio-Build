@@ -1006,12 +1006,30 @@ def _selection_phrase(state: FieldState, item: Dict[str, Any]) -> str:
 
 def _derive_stabilization_constraints(state: FieldState, frame: StabilizationFrame) -> List[str]:
     flags = ["plain"]
-    if frame.mode == "scalar":
+
+    user_text_lower = str(state.field_signature.get("phenomena", "") or "").lower()
+    explicit_number_only = any(
+        phrase in user_text_lower
+        for phrase in [
+            "only a number",
+            "only the number",
+            "just the number",
+            "number only",
+            "just a number",
+            "digits only",
+            "return only a number",
+            "give me only a number",
+            "answer with only a number",
+        ]
+    )
+
+    if frame.mode == "scalar" or explicit_number_only:
         flags.append("number_only")
     if frame.mode in {"scalar", "brief_sentence", "operative_sentence"}:
         flags.append("brief")
     if frame.mode in {"operative_sentence", "bounded_options"}:
         flags.append("operative")
+
     return list(dict.fromkeys(flags))
 
 
@@ -1107,9 +1125,19 @@ def articulate(state: FieldState) -> FieldState:
     state.situated_expression = _compose_situated_expression(state, frame)
     state.notes["surface_flags_deferred"] = False
     state.notes["surface_flag_status"] = "derived_from_field_and_cut"
-    state.articulation_output = _normalize_terminology(state.situated_expression.text, user_text=str(state.field_signature.get("phenomena", "") or ""))
+    state.articulation_output = _normalize_terminology(
+        state.situated_expression.text,
+        user_text=str(state.field_signature.get("phenomena", "") or ""),
+    )
     if "number_only" in state.surface_flags:
-        state.articulation_output = _extract_scalar_only(state.articulation_output or "")
+        preferred_scalar = _first_numeric_scalar(
+            str(state.field_signature.get("phenomena", "") or ""),
+            state.articulation_output or "",
+            *(item.get("label", "") for item in state.selected_elements),
+            *(item.get("rationale", "") for item in state.selected_elements),
+            *(state.cut_ledger.foregrounded or []),
+        )
+        state.articulation_output = preferred_scalar or _extract_scalar_only(state.articulation_output or "")
         state.situated_expression.text = state.articulation_output
         state.situated_expression.segments = [state.articulation_output]
     return state

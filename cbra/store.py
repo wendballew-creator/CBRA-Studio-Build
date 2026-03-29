@@ -3,7 +3,10 @@ from __future__ import annotations
 from typing import Dict, Optional
 from uuid import uuid4
 
-from cbra.models import DriftEvent, FieldArtifact, LoopCycle, Message, Thread
+try:
+    from cbra.models import DriftEvent, FieldArtifact, LoopCycle, Message, Thread
+except ImportError:
+    from models import DriftEvent, FieldArtifact, LoopCycle, Message, Thread
 
 
 THREADS: Dict[str, Thread] = {}

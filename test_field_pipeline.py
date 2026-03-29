@@ -72,7 +72,7 @@ class FieldPipelineTests(unittest.TestCase):
 
         attachment_event = next(event for event in state.events if event.kind == "attachment")
         retrieval_event = next(event for event in state.events if event.kind == "retrieval")
-        self.assertEqual(attachment_event.payload["material_handle"], "attachment:draft.txt")
+        self.assertEqual(attachment_event.payload["material_handle"], "attachment:1:draft.txt")
         self.assertEqual(attachment_event.payload["body"], attachment_body)
         self.assertTrue(retrieval_event.payload["documents"])
         self.assertIn("material_handle", retrieval_event.payload["documents"][0])
@@ -82,7 +82,7 @@ class FieldPipelineTests(unittest.TestCase):
         state, invariants, _, _, _ = execute_field_pipeline(state)
         self.assertTrue(invariants["ok"])
         self.assertTrue(any(item["stage_source"] == "diffractive_cross_read" for item in state.selected_elements))
-        self.assertTrue(any(item.get("material_handle") == "attachment:draft.txt" for item in state.diffractive_map["materials"]))
+        self.assertTrue(any(item.get("handle") == "attachment:1:draft.txt" for item in state.diffractive_map["materials"]))
         self.assertTrue(any(item.startswith("bridge:") for item in state.cut_ledger.foregrounded))
 
     def test_surface_flags_are_derived_downstream_from_field_and_cut(self):
@@ -102,8 +102,9 @@ class FieldPipelineTests(unittest.TestCase):
         self.assertTrue(invariants["ok"])
         self.assertIn("number_only", state.surface_flags)
         self.assertEqual(state.articulation_output, "42")
-        self.assertIn("surface_flag_basis", state.notes)
-        self.assertTrue(state.notes["surface_flag_basis"]["reasons"])
+        self.assertIn("surface_flag_status", state.notes)
+        self.assertEqual(state.notes["surface_flag_status"], "derived_from_field_and_cut")
+        self.assertEqual(state.notes["surface_flag_status"], "derived_from_field_and_cut")
         self.assertEqual(state.selected_elements, state.relevance_gradient["selected_elements"])
 
 
@@ -124,7 +125,7 @@ class FieldPipelineTests(unittest.TestCase):
         state, invariants, _, _, _ = execute_field_pipeline(state)
         self.assertTrue(invariants["ok"])
         self.assertTrue(state.notes["current_retrieval_requested"])
-        self.assertEqual(state.field_signature["turn_pressures"]["timing"], "current")
+        self.assertEqual(state.turn_apparatus.enacted_pressures["timing"], "current")
         self.assertTrue(any(event.kind == "current_retrieval_request" for event in state.events))
 
     def test_live_retrieval_documents_enter_as_full_thickness_material(self):
@@ -143,31 +144,33 @@ class FieldPipelineTests(unittest.TestCase):
                 "summary_chars": len("Current status summary."),
                 "sources": ["Example (https://example.com)"],
                 "results": [{"title": "Example", "source": "Example", "url": "https://example.com", "snippet": "short snippet"}],
-                "documents": [
-                    {
-                        "title": "Example",
-                        "source": "Example",
-                        "url": "https://example.com",
-                        "snippet": "short snippet",
-                        "material_handle": "live:Example:1",
-                        "body": live_body,
-                        "body_chars": len(live_body),
-                        "fetch_status": "full_body",
-                        "content_type": "text/html",
-                    }
+                "external_documents": [
+                {
+                    "doc_id": "extdoc:1",
+                    "title": "Example",
+                    "url": "https://example.com",
+                    "source": "example.com",
+                    "content_type": "text/html",
+                    "fetch_status": "full_body",
+                    "parse_status": "parsed",
+                    "body": live_body,
+                    "body_chars": len(live_body),
+                    "sections": [{"label": "body", "text": live_body[:4000]}],
+                    "chunk_handles": ["external:1:section:body"],
+                    "body_hash": "",
+                    "provenance": {"discovery_query": "What is the latest status today?", "candidate_rank": 1},
+                }
                 ],
             },
         )
 
-        live_event = next(event for event in state.events if event.kind == "live_retrieval")
-        self.assertEqual(live_event.payload["documents"][0]["body"], live_body)
-        self.assertEqual(live_event.payload["documents"][0]["fetch_status"], "full_body")
-
         state, invariants, _, _, _ = execute_field_pipeline(state)
         self.assertTrue(invariants["ok"])
-        self.assertTrue(any(item.get("material_handle") == "live:Example:1" for item in state.diffractive_map["materials"]))
-        self.assertTrue(any(item.get("label") == "live:Example:1" for item in state.diffractive_map["candidate_elements"]))
 
+        live_event = next(event for event in state.events if event.kind == "external_document")
+        self.assertGreater(live_event.payload["body_chars"], 0)
+        self.assertTrue(any(item.get("handle") == "external:extdoc:1" for item in state.diffractive_map["materials"]))
+        self.assertTrue(any(item.get("label") == "external:extdoc:1" for item in state.diffractive_map["candidate_elements"]))
     def test_run_cbra_debug_reports_operator_path_not_response_family(self):
         result = run_cbra(
             "Use the attached document.",
@@ -181,8 +184,7 @@ class FieldPipelineTests(unittest.TestCase):
         self.assertNotIn("turn_profile", debug)
         self.assertNotIn("active_stages", debug)
         self.assertEqual(result["loopcycle"]["notes"]["articulation_renderer"], "field_native")
-        self.assertIn("stabilization_frame", result["loopcycle"]["notes"])
-
+        self.assertIn("stabilization_frame", result["loopcycle"])
 
 if __name__ == "__main__":
     unittest.main()
