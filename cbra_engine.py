@@ -26,45 +26,20 @@ load_dotenv()
 
 from cbra.corpus import get_active_corpus_files, get_source_role
 
-try:
-    from cbra.models import (
-        CutLedger,
-        ExternalDocument,
-        ExternalDocumentApparatus,
-        FieldEvent,
-        FieldState,
-        SituatedExpression,
-        StabilizationFrame,
-        TurnApparatus,
-    )
-except ImportError:
-    from models import (
-        CutLedger,
-        ExternalDocument,
-        ExternalDocumentApparatus,
-        FieldEvent,
-        FieldState,
-        SituatedExpression,
-        StabilizationFrame,
-        TurnApparatus,
-    )
+from cbra.models import (
+    CutLedger,
+    ExternalDocument,
+    ExternalDocumentApparatus,
+    FieldEvent,
+    FieldState,
+    SituatedExpression,
+    StabilizationFrame,
+    TurnApparatus,
+)
 
-try:
-    from cbra.store import get_field, update_field
-except ImportError:
-    try:
-        from store import get_field, update_field
-    except ImportError:  # pragma: no cover
-        get_field = None  # type: ignore[assignment]
-        update_field = None  # type: ignore[assignment]
+from cbra.store import get_field, update_field
 
-try:
-    from cbra.compression import enforce_fieldartifact_compression
-except ImportError:
-    try:
-        from compression import enforce_fieldartifact_compression
-    except ImportError:  # pragma: no cover
-        enforce_fieldartifact_compression = None  # type: ignore[assignment]
+from cbra.compression import enforce_fieldartifact_compression
 
 
 DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")

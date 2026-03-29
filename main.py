@@ -14,13 +14,9 @@ from pypdf import PdfReader
 
 from cbra_engine import run_cbra
 
-try:
-    from cbra.models import Message, LoopCycle, DriftEvent
-except ImportError:
-    from models import Message, LoopCycle, DriftEvent
+from cbra.models import Message, LoopCycle, DriftEvent
 
-try:
-    from cbra.store import (
+from cbra.store import (
     create_thread,
     get_thread,
     append_message,
@@ -29,16 +25,6 @@ try:
     get_field,
     create_field,
 )
-except ImportError:
-    from store import (
-        create_thread,
-        get_thread,
-        append_message,
-        append_loopcycle,
-        append_drift_event,
-        get_field,
-        create_field,
-    )
 
 # Load .env from current working directory (reliable under uvicorn reload)
 dotenv_path = find_dotenv(usecwd=True)
