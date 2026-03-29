@@ -24,10 +24,7 @@ except ImportError:  # pragma: no cover
 
 load_dotenv()
 
-try:
-    from cbra.corpus import get_active_corpus_files, get_source_role
-except ImportError:
-    from corpus import get_active_corpus_files, get_source_role
+from cbra.corpus import get_active_corpus_files, get_source_role
 
 try:
     from cbra.models import (
