@@ -6,7 +6,7 @@ import io
 from uuid import uuid4
 from typing import Optional, Literal, Any, List, Dict
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from docx import Document
@@ -296,8 +296,8 @@ def read_field(field_id: str):
 @app.post("/chat/{thread_id}/file")
 def chat_with_file(
     thread_id: str,
-    user_text: str = "",
-    mode: Literal["production", "debug"] = "production",
+    user_text: str = Form(""),
+    mode: Literal["production", "debug"] = Form("production"),
     upload: Optional[UploadFile] = File(None),
     uploads: Optional[List[UploadFile]] = File(None),
 ):
