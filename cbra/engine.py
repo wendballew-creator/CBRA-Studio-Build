@@ -1167,23 +1167,69 @@ def notice(state: FieldState) -> FieldState:
 
 def relational_frame(state: FieldState) -> FieldState:
     state.operator_path.append("relational_frame")
+
+    ontology = state.ontology_ground
+    ontology_principles = dict(ontology.principles or {})
+    field_constraints = list(state.field_signature.get("constraints", []) or [])
+    material_lineages = list(state.field_signature.get("material_lineages", []) or [])
+    noticing_signals = list(state.noticing_register.get("signals", []) or [])
+
+    agency: List[str] = ["user", "runtime_apparatus"]
+    if ontology_principles.get("entanglement_primary"):
+        agency.append("entangled_field")
+    if "attachment" in material_lineages:
+        agency.append("attachment_material")
+    if "canonical_retrieval" in material_lineages:
+        agency.append("canonical_material")
+    if "external_document" in material_lineages:
+        agency.append("external_document_material")
+    if "prior_field" in material_lineages:
+        agency.append("prior_field_memory")
+
+    relational_constraints = list(field_constraints)
+    if ontology_principles.get("intra_action_emergent_identity"):
+        relational_constraints.append("identity is treated as emergent within relation")
+    if ontology_principles.get("agential_cuts_operative"):
+        relational_constraints.append("boundaries are treated as enacted, not pre-given")
+    if ontology_principles.get("posthuman_care_constrains_articulation"):
+        relational_constraints.append("future articulation must remain livable across affected systems")
+
+    capacity = {
+        "operator_sequence_locked": True,
+        "surface_flags_deferred": bool(state.notes.get("surface_flags_deferred", False)),
+        "live_external_document_count": len(state.external_document_apparatus.external_documents),
+        "multiplicity_preserved": ontology_principles.get("diffraction_pattern_mapping", False),
+        "field_conditioned_reasoning": True,
+    }
+
+    consequence_visibility = {
+        "held_open_required": True,
+        "excluded_urls_visible": bool(
+            state.external_document_apparatus.excluded_urls
+            or state.external_document_apparatus.inaccessible_documents
+        ),
+        "distributed_consequence": ontology_principles.get("entanglement_primary", False),
+        "articulation_constrained_by_posthuman_care": ontology_principles.get(
+            "posthuman_care_constrains_articulation",
+            False,
+        ),
+    }
+
     state.relational_map = {
-        "agency": ["user", "runtime apparatus", "canonical corpus", "attachments", "external documents"],
-        "constraints": list(state.field_signature.get("constraints", [])),
-        "capacity": {
-            "operator_sequence_locked": True,
-            "surface_flags_deferred": bool(state.notes.get("surface_flags_deferred", False)),
-            "live_external_document_count": len(state.external_document_apparatus.external_documents),
-        },
-        "consequence_visibility": {
-            "held_open_required": True,
-            "excluded_urls_visible": bool(state.external_document_apparatus.excluded_urls or state.external_document_apparatus.inaccessible_documents),
-        },
+        "agency": agency,
+        "constraints": list(dict.fromkeys(relational_constraints)),
+        "capacity": capacity,
+        "consequence_visibility": consequence_visibility,
+        "material_lineages": material_lineages,
+        "ontology_kind": ontology.ontology_kind,
+        "ontology_principles": ontology_principles,
+        "noticing_signals": noticing_signals,
         "apparatus": {
             "turn_apparatus": _dump_model(state.turn_apparatus),
             "external_document_apparatus": _dump_model(state.external_document_apparatus),
         },
     }
+    state.notes["ontology_ground_read_in_relational_frame"] = True
     return state
 
 

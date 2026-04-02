@@ -7,6 +7,7 @@ from cbra.engine import (
     field_entry,
     initialize_field_state,
     notice,
+    relational_frame,
     run_cbra,
 )
 
@@ -485,6 +486,44 @@ class FieldPipelineTests(unittest.TestCase):
         self.assertIn(
             "difference is available for pattern tracing without consolidation",
             state.noticing_register["signals"],
+        )
+    def test_relational_frame_reads_ontology_ground_into_relational_map(self):
+        state = initialize_field_state(
+            thread_id="thread-relational-1",
+            field_id="field-relational-1",
+            user_text="What is diffraction?",
+            sources=[],
+            citations=[],
+            raw_hits=[],
+            prior_field=None,
+            live_retrieval=None,
+        )
+
+        state = field_entry(state)
+        state = notice(state)
+        state = relational_frame(state)
+
+        self.assertTrue(state.notes["ontology_ground_read_in_relational_frame"])
+        self.assertEqual(
+            state.relational_map["ontology_kind"],
+            state.ontology_ground.ontology_kind,
+        )
+        self.assertTrue(
+            state.relational_map["ontology_principles"]["entanglement_primary"]
+        )
+        self.assertTrue(
+            state.relational_map["ontology_principles"]["diffraction_pattern_mapping"]
+        )
+        self.assertIn("entangled_field", state.relational_map["agency"])
+        self.assertIn(
+            "identity is treated as emergent within relation",
+            state.relational_map["constraints"],
+        )
+        self.assertTrue(
+            state.relational_map["capacity"]["field_conditioned_reasoning"]
+        )
+        self.assertTrue(
+            state.relational_map["consequence_visibility"]["distributed_consequence"]
         )
 
     def test_run_cbra_debug_reports_operator_path_not_response_family(self):
