@@ -1074,7 +1074,16 @@ def field_entry(state: FieldState) -> FieldState:
     pressures = state.turn_apparatus.enacted_pressures
     ontology = state.ontology_ground
     ontology_principles = dict(ontology.principles or {})
+    primary_operators = dict(ontology.primary_operators or {})
+    play_conditions = dict(ontology.play_conditions or {})
+    ethical_constraints = dict(ontology.ethical_constraints or {})
     ontology_constraints = list(ontology.articulation_constraints or [])
+
+    intra_action_active = bool(primary_operators.get("intra_action", {}).get("active"))
+    play_active = bool(primary_operators.get("play", {}).get("active"))
+    creative_becoming_active = bool(
+        primary_operators.get("creative_becoming", {}).get("active")
+    )
 
     material_lineages: List[str] = []
     if any(event.kind == "attachment" for event in state.events):
@@ -1093,6 +1102,16 @@ def field_entry(state: FieldState) -> FieldState:
         "surface flags are deferred until the cut stabilizes",
     ]
     constraints.extend(ontology_constraints[:3])
+
+    if intra_action_active:
+        constraints.append("relation is prior to isolated identity")
+    if play_active and play_conditions.get("low_consequence_experimentation"):
+        constraints.append("low-consequence experimentation remains available in the field")
+    if ethical_constraints.get("livability"):
+        constraints.append("articulation must remain livable across affected systems")
+    if ethical_constraints.get("non_closure"):
+        constraints.append("the field should not be forced into premature closure")
+
     if state.external_document_apparatus.external_documents:
         constraints.append("only fetched external document bodies may enter the field as live material")
 
@@ -1101,6 +1120,10 @@ def field_entry(state: FieldState) -> FieldState:
         "trace pattern across entangled difference",
         "stabilize livable articulation without closure",
     ]
+    if play_active:
+        stakes.append("keep exploratory movement available")
+    if creative_becoming_active:
+        stakes.append("support emergence rather than fixed identity")
 
     state.field_signature = {
         "phenomena": user_text,
@@ -1116,6 +1139,9 @@ def field_entry(state: FieldState) -> FieldState:
         "live_document_count": len(state.external_document_apparatus.external_documents),
         "ontology_kind": ontology.ontology_kind,
         "ontology_principles": ontology_principles,
+        "primary_operators": primary_operators,
+        "play_conditions": play_conditions,
+        "ethical_constraints": ethical_constraints,
         "material_lineages": material_lineages,
     }
     state.notes["ontology_ground_read_in_field_entry"] = True
@@ -1169,15 +1195,35 @@ def notice(state: FieldState) -> FieldState:
 
     ontology = state.ontology_ground
     ontology_principles = dict(ontology.principles or {})
+    primary_operators = dict(ontology.primary_operators or {})
+    play_conditions = dict(ontology.play_conditions or {})
+    ethical_constraints = dict(ontology.ethical_constraints or {})
     material_lineages = list(state.field_signature.get("material_lineages", []) or [])
 
+    intra_action_active = bool(primary_operators.get("intra_action", {}).get("active"))
+    play_active = bool(primary_operators.get("play", {}).get("active"))
+
     signals: List[str] = []
+    if intra_action_active:
+        signals.append("relational constitution is active before separate identity")
     if ontology_principles.get("entanglement_primary"):
         signals.append("entanglement is active as pre-interpretive ground")
+    if play_active and play_conditions.get("low_consequence_experimentation"):
+        signals.append("low-consequence experimentation is available in the field")
+    if play_active and play_conditions.get("repetition_as_generative"):
+        signals.append("repetition may function generatively rather than redundantly")
+    if play_active and play_conditions.get("embodied_responsiveness"):
+        signals.append("bodily responsiveness remains epistemically active")
+    if play_active and play_conditions.get("environmental_responsiveness"):
+        signals.append("environmental conditions remain active in emergence")
     if ontology_principles.get("agential_cuts_operative"):
         signals.append("agential cuts are already shaping visibility")
     if ontology_principles.get("diffraction_pattern_mapping"):
         signals.append("difference is available for pattern tracing without consolidation")
+    if ethical_constraints.get("livability"):
+        signals.append("livability constrains articulation from the outset")
+    if ethical_constraints.get("non_closure"):
+        signals.append("non-closure remains active during noticing")
 
     if any(event.kind == "attachment" for event in state.events):
         signals.append("explicit attachment material is present")
@@ -1198,6 +1244,9 @@ def notice(state: FieldState) -> FieldState:
         "external_document_count": len(state.external_document_apparatus.external_documents),
         "ontology_kind": ontology.ontology_kind,
         "ontology_principles": ontology_principles,
+        "primary_operators": primary_operators,
+        "play_conditions": play_conditions,
+        "ethical_constraints": ethical_constraints,
         "material_lineages": material_lineages,
     }
     state.notes["ontology_ground_read_in_notice"] = True
@@ -1209,13 +1258,28 @@ def relational_frame(state: FieldState) -> FieldState:
 
     ontology = state.ontology_ground
     ontology_principles = dict(ontology.principles or {})
+    primary_operators = dict(ontology.primary_operators or {})
+    play_conditions = dict(ontology.play_conditions or {})
+    ethical_constraints = dict(ontology.ethical_constraints or {})
     field_constraints = list(state.field_signature.get("constraints", []) or [])
     material_lineages = list(state.field_signature.get("material_lineages", []) or [])
     noticing_signals = list(state.noticing_register.get("signals", []) or [])
 
+    intra_action_active = bool(primary_operators.get("intra_action", {}).get("active"))
+    play_active = bool(primary_operators.get("play", {}).get("active"))
+    creative_becoming_active = bool(
+        primary_operators.get("creative_becoming", {}).get("active")
+    )
+
     agency: List[str] = ["user", "runtime_apparatus"]
     if ontology_principles.get("entanglement_primary"):
         agency.append("entangled_field")
+    if intra_action_active:
+        agency.append("relational_constitution")
+    if play_active:
+        agency.append("play_field")
+    if creative_becoming_active:
+        agency.append("becoming_process")
     if "attachment" in material_lineages:
         agency.append("attachment_material")
     if "canonical_retrieval" in material_lineages:
@@ -1230,8 +1294,22 @@ def relational_frame(state: FieldState) -> FieldState:
         relational_constraints.append("identity is treated as emergent within relation")
     if ontology_principles.get("agential_cuts_operative"):
         relational_constraints.append("boundaries are treated as enacted, not pre-given")
-    if ontology_principles.get("posthuman_care_constrains_articulation"):
-        relational_constraints.append("future articulation must remain livable across affected systems")
+    if play_active and play_conditions.get("low_consequence_experimentation"):
+        relational_constraints.append(
+            "exploratory movement remains available through low-consequence experimentation"
+        )
+    if play_active and play_conditions.get("repetition_as_generative"):
+        relational_constraints.append(
+            "repetition can intensify emergence rather than signal redundancy"
+        )
+    if ethical_constraints.get("livability"):
+        relational_constraints.append(
+            "future articulation must remain livable across affected systems"
+        )
+    if ethical_constraints.get("non_closure"):
+        relational_constraints.append(
+            "the field must remain open enough for further emergence"
+        )
 
     capacity = {
         "operator_sequence_locked": True,
@@ -1239,6 +1317,13 @@ def relational_frame(state: FieldState) -> FieldState:
         "live_external_document_count": len(state.external_document_apparatus.external_documents),
         "multiplicity_preserved": ontology_principles.get("diffraction_pattern_mapping", False),
         "field_conditioned_reasoning": True,
+        "exploratory_movement_available": play_active and play_conditions.get(
+            "low_consequence_experimentation", False
+        ),
+        "repetition_generative": play_conditions.get("repetition_as_generative", False),
+        "embodied_responsiveness_active": play_conditions.get(
+            "embodied_responsiveness", False
+        ),
     }
 
     consequence_visibility = {
@@ -1248,10 +1333,13 @@ def relational_frame(state: FieldState) -> FieldState:
             or state.external_document_apparatus.inaccessible_documents
         ),
         "distributed_consequence": ontology_principles.get("entanglement_primary", False),
-        "articulation_constrained_by_posthuman_care": ontology_principles.get(
-            "posthuman_care_constrains_articulation",
+        "articulation_constrained_by_posthuman_care": ethical_constraints.get(
+            "posthuman_care",
             False,
         ),
+        "livability_required": ethical_constraints.get("livability", False),
+        "non_closure_required": ethical_constraints.get("non_closure", False),
+        "surprise_visibility": play_conditions.get("surprise_as_signal", False),
     }
 
     state.relational_map = {
@@ -1262,6 +1350,9 @@ def relational_frame(state: FieldState) -> FieldState:
         "material_lineages": material_lineages,
         "ontology_kind": ontology.ontology_kind,
         "ontology_principles": ontology_principles,
+        "primary_operators": primary_operators,
+        "play_conditions": play_conditions,
+        "ethical_constraints": ethical_constraints,
         "noticing_signals": noticing_signals,
         "apparatus": {
             "turn_apparatus": _dump_model(state.turn_apparatus),
