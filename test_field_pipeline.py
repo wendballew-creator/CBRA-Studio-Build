@@ -6,6 +6,7 @@ from cbra.engine import (
     execute_field_pipeline,
     field_entry,
     initialize_field_state,
+    notice,
     run_cbra,
 )
 
@@ -450,6 +451,41 @@ class FieldPipelineTests(unittest.TestCase):
             state.field_signature["constraints"],
         )
 
+    def test_notice_reads_ontology_ground_into_noticing_register(self):
+        state = initialize_field_state(
+            thread_id="thread-notice-1",
+            field_id="field-notice-1",
+            user_text="What is diffraction?",
+            sources=[],
+            citations=[],
+            raw_hits=[],
+            prior_field=None,
+            live_retrieval=None,
+        )
+
+        state = field_entry(state)
+        state = notice(state)
+
+        self.assertTrue(state.notes["ontology_ground_read_in_notice"])
+        self.assertEqual(
+            state.noticing_register["ontology_kind"],
+            state.ontology_ground.ontology_kind,
+        )
+        self.assertTrue(
+            state.noticing_register["ontology_principles"]["entanglement_primary"]
+        )
+        self.assertTrue(
+            state.noticing_register["ontology_principles"]["diffraction_pattern_mapping"]
+        )
+        self.assertEqual(state.noticing_register["material_lineages"], ["user_turn"])
+        self.assertIn(
+            "entanglement is active as pre-interpretive ground",
+            state.noticing_register["signals"],
+        )
+        self.assertIn(
+            "difference is available for pattern tracing without consolidation",
+            state.noticing_register["signals"],
+        )
 
     def test_run_cbra_debug_reports_operator_path_not_response_family(self):
         result = run_cbra(

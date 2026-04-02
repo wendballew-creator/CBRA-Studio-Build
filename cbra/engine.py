@@ -1103,9 +1103,13 @@ def notice(state: FieldState) -> FieldState:
         )
         state.notes["correction_forced_reentry"] = True
     else:
-        state.notes["correction_forced_reentry"] = bool(any(event.kind == "correction" for event in state.events))
+        state.notes["correction_forced_reentry"] = bool(
+            any(event.kind == "correction" for event in state.events)
+        )
 
-    if pressures.get("requires_current_external_material") and not any(event.kind == "current_retrieval_request" for event in state.events):
+    if pressures.get("requires_current_external_material") and not any(
+        event.kind == "current_retrieval_request" for event in state.events
+    ):
         state.events.append(
             FieldEvent(
                 kind="current_retrieval_request",
@@ -1120,9 +1124,22 @@ def notice(state: FieldState) -> FieldState:
         )
         state.notes["current_retrieval_requested"] = True
     else:
-        state.notes["current_retrieval_requested"] = bool(pressures.get("requires_current_external_material"))
+        state.notes["current_retrieval_requested"] = bool(
+            pressures.get("requires_current_external_material")
+        )
+
+    ontology = state.ontology_ground
+    ontology_principles = dict(ontology.principles or {})
+    material_lineages = list(state.field_signature.get("material_lineages", []) or [])
 
     signals: List[str] = []
+    if ontology_principles.get("entanglement_primary"):
+        signals.append("entanglement is active as pre-interpretive ground")
+    if ontology_principles.get("agential_cuts_operative"):
+        signals.append("agential cuts are already shaping visibility")
+    if ontology_principles.get("diffraction_pattern_mapping"):
+        signals.append("difference is available for pattern tracing without consolidation")
+
     if any(event.kind == "attachment" for event in state.events):
         signals.append("explicit attachment material is present")
     if state.external_document_apparatus.external_documents:
@@ -1140,7 +1157,11 @@ def notice(state: FieldState) -> FieldState:
         "apparatus_signal_register": dict(state.turn_apparatus.signal_register),
         "external_document_status": state.external_document_apparatus.status,
         "external_document_count": len(state.external_document_apparatus.external_documents),
+        "ontology_kind": ontology.ontology_kind,
+        "ontology_principles": ontology_principles,
+        "material_lineages": material_lineages,
     }
+    state.notes["ontology_ground_read_in_notice"] = True
     return state
 
 
