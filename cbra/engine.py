@@ -1828,17 +1828,32 @@ def run_cbra(
 
     runtime_design_scope = _is_runtime_design_scope(user_text)
 
-    if sources is None:
+    input_sources = list(sources or [])
+    preflight_apparatus = _build_turn_apparatus(
+        user_text,
+        source_names=[
+            _extract_attachment_name(source)
+            for source in input_sources
+            if isinstance(source, str) and _is_attachment_source(source)
+        ],
+        phase="run_cbra_preflight",
+    )
+
+    material_sources: List[str] = []
+    citations: List[str] = []
+    raw_hits: List[Dict[str, Any]] = []
+
+    if not input_sources:
         if runtime_design_scope:
-            canonical_sources, citations, raw_hits = compose_grounded_sources(user_text, max_total_sources=5)
-        else:
-            canonical_sources, citations, raw_hits = [], [], []
+            material_sources, citations, raw_hits = compose_grounded_sources(
+                user_text,
+                max_total_sources=5,
+            )
     else:
-        canonical_sources = list(sources or [])
-        citations = []
-        raw_hits = []
+        material_sources = list(input_sources)
         attachment_only = [
-            source for source in canonical_sources
+            source
+            for source in material_sources
             if isinstance(source, str) and _is_attachment_source(source)
         ]
         if attachment_only and runtime_design_scope:
@@ -1847,33 +1862,16 @@ def run_cbra(
                 user_text + "\n" + source_text,
                 max_total_sources=5,
             )
-            canonical_sources = list(dict.fromkeys(list(canonical_sources) + supplemental_sources))
+            material_sources = list(dict.fromkeys(material_sources + supplemental_sources))
 
-    preflight_apparatus = _build_turn_apparatus(
+    external_document_apparatus = _build_external_document_apparatus(
+        client,
         user_text,
-        source_names=[
-            _extract_attachment_name(source)
-            for source in canonical_sources
-            if isinstance(source, str) and _is_attachment_source(source)
-        ],
-        phase="run_cbra_preflight",
+        preflight_apparatus,
     )
-    external_document_apparatus = _build_external_document_apparatus(client, user_text, preflight_apparatus)
-
-    world_material_eligible = (
-        not runtime_design_scope
-        and not canonical_sources
-        and not preflight_apparatus.enacted_pressures.get("requires_current_external_material")
-        and not preflight_apparatus.enacted_pressures.get("correction_requested")
-        and str(preflight_apparatus.enacted_pressures.get("inquiry_pressure", "open") or "open")
-        in {"definition", "explanation"}
-    )
-    world_material = _seed_world_material(client, user_text) if world_material_eligible else ""
-    if world_material:
-        canonical_sources = [f"ATTACHMENT (world_material_seed.txt):\n{world_material}"]
 
     retrieval_labels = []
-    for source in canonical_sources:
+    for source in material_sources:
         first = source.splitlines()[0].strip() if isinstance(source, str) else str(source)
         retrieval_labels.append(first[:180])
     retrieval_labels.extend(external_document_apparatus.candidate_urls)
@@ -1883,7 +1881,7 @@ def run_cbra(
         thread_id=thread_id,
         field_id=field_id,
         user_text=user_text,
-        sources=canonical_sources,
+        sources=material_sources,
         citations=citations,
         raw_hits=raw_hits,
         prior_field=prior_field,
@@ -1893,7 +1891,6 @@ def run_cbra(
     state.notes["articulation_client_available"] = bool(client is not None)
     state.notes["ground_enforced_retrieval"] = bool(citations)
     state.notes["grounding_scope"] = "runtime_design" if runtime_design_scope else "world_or_user_material"
-    state.notes["world_material_seeded"] = bool(world_material)
 
     state, invariants, drift_detected, drift_kind, reintegration_stage = execute_field_pipeline(state)
     state.notes["drift_detected"] = drift_detected
@@ -1903,7 +1900,7 @@ def run_cbra(
     if field_id and update_field is not None:
         update_field(field_id, _state_patch(state))
 
-    attachment_debug = _attachment_debug_from_sources(canonical_sources)
+    attachment_debug = _attachment_debug_from_sources(material_sources)
     loopcycle: Dict[str, Any] = {
         "field_id": field_id,
         "operator_path": list(state.operator_path),
