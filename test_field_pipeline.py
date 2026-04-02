@@ -3,6 +3,7 @@ import unittest
 from cbra.engine import (
     OPERATOR_SEQUENCE,
     _state_patch,
+    diffractive_read,
     execute_field_pipeline,
     field_entry,
     initialize_field_state,
@@ -524,6 +525,43 @@ class FieldPipelineTests(unittest.TestCase):
         )
         self.assertTrue(
             state.relational_map["consequence_visibility"]["distributed_consequence"]
+        )
+    def test_diffractive_read_reads_ontology_ground_into_diffractive_map(self):
+        state = initialize_field_state(
+            thread_id="thread-diffraction-1",
+            field_id="field-diffraction-1",
+            user_text="What is diffraction?",
+            sources=[
+                "ATTACHMENT (notes.txt):\nDiffraction traces patterns across difference."
+            ],
+            citations=[],
+            raw_hits=[],
+            prior_field=None,
+            live_retrieval=None,
+        )
+
+        state = field_entry(state)
+        state = notice(state)
+        state = relational_frame(state)
+        state = diffractive_read(state)
+
+        self.assertTrue(state.notes["ontology_ground_read_in_diffractive_read"])
+        self.assertEqual(
+            state.diffractive_map["ontology_kind"],
+            state.ontology_ground.ontology_kind,
+        )
+        self.assertTrue(
+            state.diffractive_map["ontology_principles"]["entanglement_primary"]
+        )
+        self.assertTrue(
+            state.diffractive_map["ontology_principles"]["diffraction_pattern_mapping"]
+        )
+        self.assertTrue(state.diffractive_map["candidate_elements"])
+        self.assertTrue(
+            any(
+                item["stage_source"] == "diffractive_material"
+                for item in state.diffractive_map["candidate_elements"]
+            )
         )
 
     def test_run_cbra_debug_reports_operator_path_not_response_family(self):

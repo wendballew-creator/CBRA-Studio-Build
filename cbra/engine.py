@@ -1276,6 +1276,11 @@ def _lexical_overlap(left: Sequence[str], right: Sequence[str]) -> List[str]:
 def diffractive_read(state: FieldState) -> FieldState:
     state.operator_path.append("diffractive_read")
     materials = _build_diffractive_materials(state)
+
+    ontology = state.ontology_ground
+    ontology_principles = dict(ontology.principles or {})
+    correction_active = bool(state.notes.get("correction_forced_reentry"))
+
     cross_readings: List[Dict[str, Any]] = []
     resonance: List[str] = []
     interference: List[str] = []
@@ -1285,12 +1290,31 @@ def diffractive_read(state: FieldState) -> FieldState:
     for idx, left in enumerate(materials):
         for right in materials[idx + 1 :]:
             shared = _lexical_overlap(left["terms"], right["terms"])
-            if not shared and "user_turn" not in {left["kind"], right["kind"]}:
+            pair_kinds = {left["kind"], right["kind"]}
+
+            if not shared and "user_turn" not in pair_kinds:
                 continue
+
             score = float(len(shared))
             if left["kind"] != right["kind"]:
                 score += 1.0
+
+            if ontology_principles.get("diffraction_pattern_mapping") and shared:
+                score += 0.5
+            if ontology_principles.get("entanglement_primary") and left["kind"] != right["kind"]:
+                score += 0.5
+            if "prior_field" in pair_kinds and not correction_active:
+                score -= 2.0
+
             label = f"bridge:{left['handle']}<->{right['handle']}"
+            rationale_parts: List[str] = []
+            if shared:
+                rationale_parts.append(f"pattern resonance through {', '.join(shared[:4])}")
+            if left["kind"] != right["kind"]:
+                rationale_parts.append(f"interference across {left['kind']} and {right['kind']}")
+            if not rationale_parts:
+                rationale_parts.append(f"cross-reading {left['kind']} with {right['kind']}")
+
             cross_readings.append(
                 {
                     "label": label,
@@ -1299,18 +1323,22 @@ def diffractive_read(state: FieldState) -> FieldState:
                     "shared_terms": shared,
                     "score": score,
                     "source_kinds": [left["kind"], right["kind"]],
+                    "ontology_kind": ontology.ontology_kind,
                 }
             )
+
             if shared:
                 resonance.append(label)
             if left["kind"] != right["kind"]:
                 interference.append(label)
+
             changed_salience[left["handle"]] = changed_salience.get(left["handle"], 0.0) + score
             changed_salience[right["handle"]] = changed_salience.get(right["handle"], 0.0) + score
+
             candidate_elements.append(
                 {
                     "label": label,
-                    "rationale": f"cross-reading {left['kind']} with {right['kind']} through {', '.join(shared[:4])}" if shared else f"cross-reading {left['kind']} with {right['kind']}",
+                    "rationale": "; ".join(rationale_parts),
                     "stage_source": "diffractive_cross_read",
                     "score": score,
                 }
@@ -1318,12 +1346,22 @@ def diffractive_read(state: FieldState) -> FieldState:
 
     for material in materials:
         changed_salience.setdefault(material["handle"], 0.0)
+        score = changed_salience[material["handle"]]
+        if material["kind"] == "prior_field" and not correction_active:
+            score -= 2.0
+
+        rationale = (
+            f"material remains available within entangled field patterning with salience {score:.1f}"
+            if ontology_principles.get("entanglement_primary")
+            else f"material remained available with salience {score:.1f}"
+        )
+
         candidate_elements.append(
             {
                 "label": material["handle"],
-                "rationale": f"material remained available with salience {changed_salience[material['handle']]:.1f}",
+                "rationale": rationale,
                 "stage_source": "diffractive_material",
-                "score": changed_salience[material["handle"]],
+                "score": score,
             }
         )
 
@@ -1332,16 +1370,28 @@ def diffractive_read(state: FieldState) -> FieldState:
         exclusions.append(f"inaccessible:{item.get('url', '')}")
     for item in state.external_document_apparatus.excluded_urls:
         exclusions.append(f"excluded:{item.get('url', '')}")
+    if not correction_active and any(m["kind"] == "prior_field" for m in materials):
+        exclusions.append("backgrounded:prior_field:snapshot")
 
     state.diffractive_map = {
-        "materials": [{"handle": m["handle"], "kind": m["kind"], "source": m["source"], "body_chars": len(m["body"])} for m in materials],
+        "materials": [
+            {
+                "handle": m["handle"],
+                "kind": m["kind"],
+                "source": m["source"],
+                "body_chars": len(m["body"]),
+            }
+            for m in materials
+        ],
         "cross_readings": sorted(cross_readings, key=lambda item: item["score"], reverse=True),
         "resonance": list(dict.fromkeys(resonance)),
         "interference": list(dict.fromkeys(interference)),
         "exclusions": exclusions,
-        "changed_salience": changed_salience,
         "candidate_elements": sorted(candidate_elements, key=lambda item: item["score"], reverse=True),
+        "ontology_kind": ontology.ontology_kind,
+        "ontology_principles": ontology_principles,
     }
+    state.notes["ontology_ground_read_in_diffractive_read"] = True
     return state
 
 
