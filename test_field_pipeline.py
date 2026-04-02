@@ -3,6 +3,7 @@ import unittest
 from cbra.engine import (
     OPERATOR_SEQUENCE,
     _state_patch,
+    articulate,
     diffractive_read,
     execute_field_pipeline,
     field_entry,
@@ -600,6 +601,41 @@ class FieldPipelineTests(unittest.TestCase):
         self.assertTrue(bundle["multiplicity_preserved"])
         self.assertIn(bundle["movement_priority"], ["movement", "movement_and_multiplicity"])
         self.assertEqual(state.selected_elements, state.relevance_gradient["selected_elements"])
+    def test_articulate_reads_ontology_ground_and_keeps_held_open_language(self):
+        state = initialize_field_state(
+            thread_id="thread-articulate-1",
+            field_id="field-articulate-1",
+            user_text="What is diffraction?",
+            sources=[
+                "ATTACHMENT (notes.txt):\nDiffraction traces patterns across difference."
+            ],
+            citations=[],
+            raw_hits=[],
+            prior_field=None,
+            live_retrieval=None,
+        )
+
+        state = field_entry(state)
+        state = notice(state)
+        state = relational_frame(state)
+        state = diffractive_read(state)
+        state = situated_relevance_select(state)
+        state = articulate(state)
+
+        self.assertTrue(state.notes["ontology_ground_read_in_articulate"])
+        self.assertIn(
+            "keep articulation livable across affected systems",
+            state.stabilization_frame.language_constraints,
+        )
+        self.assertIn(
+            "do not collapse held-open multiplicity into one closure",
+            state.stabilization_frame.language_constraints,
+        )
+        self.assertNotIn("Keep ", state.articulation_output)
+        self.assertNotIn(
+            "Move from the foregrounded cut without forcing full closure.",
+            state.articulation_output,
+        )
 
     def test_run_cbra_debug_reports_operator_path_not_response_family(self):
         result = run_cbra(

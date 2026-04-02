@@ -1864,10 +1864,29 @@ def articulate(state: FieldState) -> FieldState:
         )
         state.notes["surface_flags_deferred"] = False
         state.notes["surface_flag_status"] = "derived_from_field_and_cut"
+        state.notes["ontology_ground_read_in_articulate"] = True
         state.articulation_output = output
         return state
 
+    ontology = state.ontology_ground
+    ontology_principles = dict(ontology.principles or {})
+    posthuman_care = bool(
+        ontology_principles.get("posthuman_care_constrains_articulation", False)
+    )
+    preserve_multiplicity = bool(
+        ontology_principles.get("diffraction_pattern_mapping", False)
+    )
+
     frame = _build_stabilization_frame(state)
+    if posthuman_care:
+        livable_constraint = "keep articulation livable across affected systems"
+        if livable_constraint not in frame.language_constraints:
+            frame.language_constraints.append(livable_constraint)
+    if preserve_multiplicity:
+        multiplicity_constraint = "do not collapse held-open multiplicity into one closure"
+        if multiplicity_constraint not in frame.language_constraints:
+            frame.language_constraints.append(multiplicity_constraint)
+
     state.stabilization_frame = frame
     state.surface_flags = _derive_stabilization_constraints(state, frame)
     state.situated_expression = _compose_situated_expression(state, frame)
@@ -1877,6 +1896,32 @@ def articulate(state: FieldState) -> FieldState:
         state.situated_expression.text,
         user_text=str(state.field_signature.get("phenomena", "") or ""),
     )
+    if posthuman_care:
+        keep_match = re.match(
+            r"^(.*)\.\s+Keep\s+(.+?)\s+visible while you move\.$",
+            state.articulation_output or "",
+        )
+        if keep_match:
+            prefix = keep_match.group(1).strip()
+            held = keep_match.group(2).strip()
+            state.articulation_output = f"{prefix}. Held open: {held}."
+
+        state.articulation_output = (state.articulation_output or "").replace(
+            "Move from the foregrounded cut without forcing full closure.",
+            "Held-open material remains available without forced closure.",
+        )
+
+    if preserve_multiplicity and state.situated_expression and state.situated_expression.held_open:
+        if (
+            state.situated_expression.form in {"sentence", "operative_sentence"}
+            and "Held open:" not in (state.articulation_output or "")
+        ):
+            held = ", ".join(state.situated_expression.held_open[:2])
+            if held:
+                state.articulation_output = f"{state.articulation_output}. Held open: {held}."
+
+    state.notes["ontology_ground_read_in_articulate"] = True
+
     if "number_only" in state.surface_flags:
         preferred_scalar = _first_numeric_scalar(
             str(state.field_signature.get("phenomena", "") or ""),
@@ -1888,8 +1933,10 @@ def articulate(state: FieldState) -> FieldState:
         state.articulation_output = preferred_scalar or _extract_scalar_only(state.articulation_output or "")
         state.situated_expression.text = state.articulation_output
         state.situated_expression.segments = [state.articulation_output]
-    return state
+    if state.situated_expression is not None:
+        state.situated_expression.text = state.articulation_output or state.situated_expression.text
 
+    return state
 
 def orient_action(state: FieldState) -> FieldState:
     state.operator_path.append("orient_action")
