@@ -223,6 +223,34 @@ class FieldPipelineTests(unittest.TestCase):
         self.assertEqual(result["debug"]["retrieval_hits"], [])
         self.assertFalse(any(event.get("kind") == "retrieval" for event in result["debug"]["events"]))
         self.assertEqual(result["loopcycle"]["notes"]["grounding_scope"], "world_or_user_material")
+    def test_run_cbra_treats_attachment_as_field_matter_while_ontology_remains_ground(self):
+        result = run_cbra(
+            "What is diffraction in the attached document?",
+            mode="debug",
+            sources=[
+                "ATTACHMENT (notes.txt):\n"
+                "Diffraction traces patterns across difference and keeps multiplicity visible."
+            ],
+        )
+
+        self.assertEqual(result["debug"]["sources_used"], [])
+        self.assertEqual(result["debug"]["retrieval_hits"], [])
+        self.assertEqual(
+            result["loopcycle"]["notes"]["grounding_scope"],
+            "world_or_user_material",
+        )
+        self.assertEqual(
+            result["loopcycle"]["field_signature"]["material_lineages"],
+            ["attachment"],
+        )
+        self.assertEqual(
+            result["loopcycle"]["field_signature"]["ontology_kind"],
+            result["loopcycle"]["notes"]["ontology_kind"],
+        )
+        self.assertEqual(
+            result["debug"]["attachments"]["active_attachment_names"],
+            ["notes.txt"],
+        )
 
     def test_non_repair_turn_does_not_materialize_prior_field_state(self):
         prior_field = {
