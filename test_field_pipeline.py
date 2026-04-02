@@ -10,6 +10,7 @@ from cbra.engine import (
     notice,
     relational_frame,
     run_cbra,
+    situated_relevance_select,
 )
 
 
@@ -563,6 +564,42 @@ class FieldPipelineTests(unittest.TestCase):
                 for item in state.diffractive_map["candidate_elements"]
             )
         )
+    def test_situated_relevance_select_reads_ontology_ground_into_relevance_gradient(self):
+        state = initialize_field_state(
+            thread_id="thread-selection-1",
+            field_id="field-selection-1",
+            user_text="What is diffraction?",
+            sources=[
+                "ATTACHMENT (notes.txt):\nDiffraction traces patterns across difference."
+            ],
+            citations=[],
+            raw_hits=[],
+            prior_field=None,
+            live_retrieval=None,
+        )
+
+        state = field_entry(state)
+        state = notice(state)
+        state = relational_frame(state)
+        state = diffractive_read(state)
+        state = situated_relevance_select(state)
+
+        self.assertTrue(state.notes["ontology_ground_read_in_situated_relevance_select"])
+        self.assertEqual(
+            state.relevance_gradient["ontology_kind"],
+            state.ontology_ground.ontology_kind,
+        )
+        self.assertTrue(
+            state.relevance_gradient["ontology_principles"]["entanglement_primary"]
+        )
+        self.assertTrue(
+            state.relevance_gradient["ontology_principles"]["diffraction_pattern_mapping"]
+        )
+        bundle = state.relevance_gradient["grouped_selection_bundle"]
+        self.assertEqual(bundle["ontology_kind"], state.ontology_ground.ontology_kind)
+        self.assertTrue(bundle["multiplicity_preserved"])
+        self.assertIn(bundle["movement_priority"], ["movement", "movement_and_multiplicity"])
+        self.assertEqual(state.selected_elements, state.relevance_gradient["selected_elements"])
 
     def test_run_cbra_debug_reports_operator_path_not_response_family(self):
         result = run_cbra(
