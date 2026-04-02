@@ -32,6 +32,7 @@ from cbra.models import (
     ExternalDocumentApparatus,
     FieldEvent,
     FieldState,
+    OntologyGround,
     SituatedExpression,
     StabilizationFrame,
     TurnApparatus,
@@ -123,6 +124,64 @@ def _extract_scalar_only(text: str) -> str:
     t = (text or "").strip()
     m = re.search(r"-?\d+(?:,\d{3})*(?:\.\d+)?%?", t)
     return m.group(0) if m else (t.splitlines()[0].strip() if t else t)
+
+def _is_runtime_design_scope(user_text: str) -> bool:
+    text = unicodedata.normalize("NFKC", user_text or "").lower()
+    explicit_markers = [
+        "cbra",
+        "runtime",
+        "engine",
+        "kernel",
+        "loops core",
+        "drift constraints",
+        "glossary",
+        "canon",
+        "canonical",
+        "turn_apparatus",
+        "fieldstate",
+        "field state",
+        "fieldevent",
+        "field event",
+        "cutledger",
+        "cut ledger",
+        "stabilizationframe",
+        "stabilization frame",
+        "situatedexpression",
+        "situated expression",
+        "externaldocumentapparatus",
+        "external document apparatus",
+        "operator_path",
+        "run_cbra",
+        "field pipeline",
+        "runtime design",
+    ]
+    return any(marker in text for marker in explicit_markers)
+
+
+def _should_materialize_prior_field(user_text: str, prior_snapshot: Dict[str, Any]) -> bool:
+    if not prior_snapshot or not prior_snapshot.get("id"):
+        return False
+    text = unicodedata.normalize("NFKC", user_text or "").lower()
+    carry_markers = [
+        "you misunderstood",
+        "you misread",
+        "that is not what i asked",
+        "not what i meant",
+        "rewrite",
+        "revise",
+        "clarify",
+        "follow up",
+        "follow-up",
+        "continue",
+        "build on",
+        "earlier",
+        "previous",
+        "last response",
+        "that answer",
+        "this answer",
+        "what you said",
+    ]
+    return any(marker in text for marker in carry_markers)
 
 
 def _attachment_debug_from_sources(sources: Optional[List[str]]) -> Dict[str, Any]:
@@ -339,6 +398,28 @@ def _resolve_attachment_operation(state: FieldState) -> FieldState:
 
     return state
 
+def _seed_world_material(client: Any, user_text: str) -> str:
+    if client is None:
+        return ""
+    prompt = (
+        "Produce 3 to 5 short declarative sentences that can enter a reasoning field as worldly material. "
+        "Write in ordinary prose. "
+        "Keep the material grounded in broad world knowledge. "
+        "When a concept has scientific, philosophical, and posthuman significance, include those layers together. "
+        "Return only the material sentences.\n\n"
+        f"QUESTION:\n{user_text}"
+    )
+    try:
+        response = client.responses.create(
+            model=DEFAULT_MODEL,
+            input=[
+                {"role": "developer", "content": "Return only the material sentences."},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        return (getattr(response, "output_text", "") or "").strip()
+    except Exception:
+        return ""
 
 def _read_canonical_body(file_name: str) -> str:
     cached = _CANONICAL_BODY_CACHE.get(file_name)
@@ -352,6 +433,34 @@ def _read_canonical_body(file_name: str) -> str:
     _CANONICAL_BODY_CACHE[file_name] = ""
     return ""
 
+def _build_ontology_ground() -> OntologyGround:
+    return OntologyGround(
+        principles={
+            "creative_becoming": True,
+            "entanglement_primary": True,
+            "intra_action_emergent_identity": True,
+            "agential_cuts_operative": True,
+            "diffraction_pattern_mapping": True,
+            "posthuman_care_constrains_articulation": True,
+            "field_as_primary_context": True,
+        },
+        operator_functions={
+            "creative_becoming": "reality as ongoing relational emergence",
+            "entanglement": "matter, meaning, and relation are inseparable",
+            "intra_action": "entities emerge through relational engagement",
+            "agential_cut": "distinction is enacted within an entangled field",
+            "diffraction": "pattern mapping across difference while preserving multiplicity",
+            "posthuman_care": "articulation is constrained toward livable futures",
+            "field": "primary context container for each loop cycle",
+        },
+        articulation_constraints=[
+            "descriptive rather than corrective",
+            "additive rather than contrastive",
+            "openness maintained",
+            "no isolated-agent default",
+            "no humanist baseline assumption",
+        ],
+    )
 
 def _collect_pattern_matches(text: str, patterns: Sequence[Tuple[str, str]]) -> Dict[str, List[str]]:
     lowered = (text or "").lower()
@@ -397,6 +506,30 @@ def _build_turn_apparatus(
             ("prior_output_reference", r"\b(this|that|your|you|previous|earlier|last response)\b.*\b(answer|response|version|summary|rewrite)\b"),
         ],
     )
+    inquiry_signals = _collect_pattern_matches(
+        text,
+        [
+            ("definition_request", r"\b(what is|what's|define|definition of)\b"),
+            ("explanation_request", r"\b(explain|tell me about|how does|how do|how is|how are|why does|why do|why is|why are)\b"),
+            ("count_request", r"\b(how many times|count)\b"),
+            ("quote_request", r"\bquote\b|\bshow\b.*\b(line|lines|sentence|sentences|passage|passages|occurrence|occurrences)\b"),
+            ("extract_request", r"\b(extract|get|show)\b.*\bsection\b"),
+        ],
+    )
+
+    if inquiry_signals.get("count_request"):
+        inquiry_pressure = "count"
+    elif inquiry_signals.get("quote_request"):
+        inquiry_pressure = "quote"
+    elif inquiry_signals.get("extract_request"):
+        inquiry_pressure = "extract"
+    elif inquiry_signals.get("definition_request"):
+        inquiry_pressure = "definition"
+    elif inquiry_signals.get("explanation_request"):
+        inquiry_pressure = "explanation"
+    else:
+        inquiry_pressure = "open"
+
     requires_current_external_material = bool(freshness_signals)
     correction_requested = bool(repair_signals)
 
@@ -458,6 +591,16 @@ def _build_turn_apparatus(
             }
         )
 
+    if inquiry_pressure != "open":
+        boundary_logic.append(
+            {
+                "pressure": "inquiry_pressure",
+                "decision": "enacted",
+                "boundary": "treat the turn as carrying a bounded inquiry pressure without collapsing the field into legacy response families",
+                "because": [f"inquiry_pressure: {inquiry_pressure}"],
+            }
+        )
+
     return TurnApparatus(
         phase=phase,
         context_inputs={
@@ -466,14 +609,20 @@ def _build_turn_apparatus(
             "source_count": len(source_list),
             "prior_field_present": prior_field_present,
             "event_kinds": event_list,
+            "inquiry_pressure": inquiry_pressure,
         },
-        signal_register={"freshness_signals": freshness_signals, "repair_signals": repair_signals},
+        signal_register={
+            "freshness_signals": freshness_signals,
+            "repair_signals": repair_signals,
+            "inquiry_signals": inquiry_signals,
+        },
         boundary_logic=boundary_logic,
         enacted_pressures={
             "timing": "current" if requires_current_external_material else "present",
             "requires_current_external_material": requires_current_external_material,
             "correction_requested": correction_requested,
             "source_count": len(source_list),
+            "inquiry_pressure": inquiry_pressure,
         },
         excluded_alternatives=excluded_alternatives,
     )
@@ -810,17 +959,31 @@ def initialize_field_state(
     live_retrieval: Optional[Dict[str, Any]] = None,
 ) -> FieldState:
     prior_snapshot = _prior_field_snapshot(prior_field)
+    materialize_prior_field = _should_materialize_prior_field(user_text, prior_snapshot)
+    ontology_ground = _build_ontology_ground()
+
     turn_apparatus = _build_turn_apparatus(
         user_text,
-        source_names=[_extract_attachment_name(source) for source in sources if isinstance(source, str) and _is_attachment_source(source)],
-        prior_field_present=bool(prior_snapshot),
+        source_names=[
+            _extract_attachment_name(source)
+            for source in sources
+            if isinstance(source, str) and _is_attachment_source(source)
+        ],
+        prior_field_present=materialize_prior_field,
         phase="initialize",
     )
-    apparatus = ExternalDocumentApparatus(**live_retrieval) if isinstance(live_retrieval, dict) else ExternalDocumentApparatus()
+
+    apparatus = (
+        ExternalDocumentApparatus(**live_retrieval)
+        if isinstance(live_retrieval, dict)
+        else ExternalDocumentApparatus()
+    )
+
     state = FieldState(
         id=field_id or FieldState().id,
         thread_id=thread_id,
-        prior_field_id=prior_snapshot.get("id"),
+        prior_field_id=prior_snapshot.get("id") if materialize_prior_field else None,
+        ontology_ground=ontology_ground,
         updated_at=_now_iso(),
         surface_flags=["plain"],
         sources_citations=list(citations),
@@ -834,14 +997,18 @@ def initialize_field_state(
             "correction_forced_reentry": False,
             "current_retrieval_requested": False,
             "turn_pressure_detection": "apparatus_traced",
+            "prior_field_materialized": materialize_prior_field,
+            "ontology_ground_installed": True,
+            "ontology_kind": ontology_ground.ontology_kind,
         },
     )
+
     state.events = assemble_field_events(
         user_text=user_text,
         canonical_sources=sources,
         citations=citations,
         raw_hits=raw_hits,
-        prior_field=prior_field,
+        prior_field=prior_field if materialize_prior_field else None,
         external_document_apparatus=apparatus,
     )
     return state
@@ -851,7 +1018,12 @@ def field_entry(state: FieldState) -> FieldState:
     state.operator_path.append("field_entry")
     user_event = next((event for event in state.events if event.kind == "user_turn"), None)
     user_text = str(user_event.payload.get("text", "") if user_event else "").strip()
-    attachment_names = [str(event.payload.get("name", "attachment") or "attachment") for event in state.events if event.kind == "attachment"]
+    attachment_names = [
+        str(event.payload.get("name", "attachment") or "attachment")
+        for event in state.events
+        if event.kind == "attachment"
+    ]
+
     state.turn_apparatus = _build_turn_apparatus(
         user_text,
         source_names=attachment_names,
@@ -859,16 +1031,43 @@ def field_entry(state: FieldState) -> FieldState:
         event_kinds=[event.kind for event in state.events],
         phase="field_entry",
     )
+
     pressures = state.turn_apparatus.enacted_pressures
+    ontology = state.ontology_ground
+    ontology_principles = dict(ontology.principles or {})
+    ontology_constraints = list(ontology.articulation_constraints or [])
+
+    material_lineages: List[str] = []
+    if any(event.kind == "attachment" for event in state.events):
+        material_lineages.append("attachment")
+    if any(event.kind == "retrieval" for event in state.events):
+        material_lineages.append("canonical_retrieval")
+    if state.external_document_apparatus.external_documents:
+        material_lineages.append("external_document")
+    if any(event.kind == "prior_field_state" for event in state.events):
+        material_lineages.append("prior_field")
+    if not material_lineages:
+        material_lineages.append("user_turn")
+
+    constraints = [
+        "ontology ground is active before material interpretation",
+        "surface flags are deferred until the cut stabilizes",
+    ]
+    constraints.extend(ontology_constraints[:3])
+    if state.external_document_apparatus.external_documents:
+        constraints.append("only fetched external document bodies may enter the field as live material")
+
+    stakes = [
+        "preserve multiplicity",
+        "trace pattern across entangled difference",
+        "stabilize livable articulation without closure",
+    ]
+
     state.field_signature = {
         "phenomena": user_text,
         "timing": pressures.get("timing", "present"),
-        "constraints": [
-            "canonical runtime corpus is active",
-            "surface flags are deferred until the cut stabilizes",
-            "only fetched external document bodies may enter the field as live material",
-        ],
-        "stakes": ["preserve multiplicity", "stabilize usable articulation", "keep explicit material visible"],
+        "constraints": constraints,
+        "stakes": stakes,
         "attachments": attachment_names,
         "prior_field_id": state.prior_field_id,
         "event_count": len(state.events),
@@ -876,7 +1075,11 @@ def field_entry(state: FieldState) -> FieldState:
         "turn_apparatus_boundary_count": len(state.turn_apparatus.boundary_logic),
         "external_document_apparatus_kind": state.external_document_apparatus.apparatus_kind,
         "live_document_count": len(state.external_document_apparatus.external_documents),
+        "ontology_kind": ontology.ontology_kind,
+        "ontology_principles": ontology_principles,
+        "material_lineages": material_lineages,
     }
+    state.notes["ontology_ground_read_in_field_entry"] = True
     return state
 
 
@@ -1080,36 +1283,152 @@ def situated_relevance_select(state: FieldState) -> FieldState:
     candidate_elements = list(state.diffractive_map.get("candidate_elements", []))
     candidate_elements.sort(key=lambda item: item.get("score", 0.0), reverse=True)
 
+    inquiry_pressure = str(state.turn_apparatus.enacted_pressures.get("inquiry_pressure", "open") or "open")
+    correction_active = bool(state.notes.get("correction_forced_reentry"))
+
+    def _preview_from_text(text: str, max_chars: int = 260) -> str:
+        cleaned = re.sub(r"\s+", " ", str(text or "").strip())
+        if not cleaned:
+            return ""
+        sentences = re.split(r"(?<=[.!?])\s+", cleaned)
+        preview = sentences[0].strip() if sentences and sentences[0].strip() else cleaned
+        return preview[:max_chars].rstrip()
+
+    source_evidence: Dict[str, str] = {}
+    for event in state.events:
+        if event.kind == "user_turn":
+            source_evidence["user:turn"] = _preview_from_text(event.payload.get("text", ""))
+        elif event.kind == "attachment":
+            handle = str(event.payload.get("material_handle", "") or "")
+            if handle:
+                source_evidence[handle] = _preview_from_text(event.payload.get("body", ""))
+        elif event.kind == "retrieval":
+            for doc in event.payload.get("documents", []):
+                handle = str(doc.get("material_handle", "") or "")
+                line_hits = doc.get("line_hits", []) or []
+                evidence = ""
+                if line_hits:
+                    first_hit = line_hits[0]
+                    evidence = _preview_from_text(first_hit.get("text", "") or first_hit.get("snippet", ""))
+                if not evidence:
+                    evidence = _preview_from_text(doc.get("body", ""))
+                if handle and evidence:
+                    source_evidence[handle] = evidence
+        elif event.kind == "external_document":
+            handle = str(event.payload.get("material_handle", "") or "")
+            evidence = _preview_from_text(event.payload.get("body", ""))
+            if handle and evidence:
+                source_evidence[handle] = evidence
+        elif event.kind == "prior_field_state":
+            source_evidence["prior_field:snapshot"] = "prior field remains available as background memory"
+
+    rescored: List[Dict[str, Any]] = []
+    for raw_item in candidate_elements:
+        item = dict(raw_item)
+        label = str(item.get("label", "") or "")
+        if not label:
+            continue
+        stage_source = str(item.get("stage_source", "") or "")
+        score = float(item.get("score", 0.0) or 0.0)
+
+        if "prior_field:snapshot" in label and not correction_active:
+            score -= 4.0
+
+        if inquiry_pressure in {"definition", "explanation"}:
+            if stage_source == "diffractive_material":
+                score += 2.5
+            elif stage_source == "diffractive_cross_read":
+                score -= 0.5
+
+        item["score"] = score
+        rescored.append(item)
+
+    rescored.sort(key=lambda item: item.get("score", 0.0), reverse=True)
+
+    direct_candidates = [
+        item for item in rescored
+        if str(item.get("stage_source", "") or "") == "diffractive_material"
+    ]
+    relational_candidates = [
+        item for item in rescored
+        if str(item.get("stage_source", "") or "") == "diffractive_cross_read"
+    ]
+
+    def _as_selected(item: Dict[str, Any]) -> Dict[str, Any]:
+        label = str(item.get("label", "") or "")
+        stage_source = str(item.get("stage_source", "") or "")
+        rationale = str(item.get("rationale", "") or "")
+        if stage_source == "diffractive_material" and label in source_evidence:
+            rationale = source_evidence[label]
+        return {
+            "label": label,
+            "rationale": rationale,
+            "stage_source": stage_source,
+        }
+
     selected_elements: List[Dict[str, Any]] = []
     foregrounded: List[str] = []
     held_open: List[str] = []
     excluded = list(state.diffractive_map.get("exclusions", []))
     reasons: Dict[str, str] = {}
     consequences: Dict[str, str] = {}
+    used_labels: set[str] = set()
 
-    for item in candidate_elements:
+    if inquiry_pressure in {"definition", "explanation"}:
+        preferred = direct_candidates[:2] + relational_candidates[:1]
+    else:
+        preferred = []
+        if direct_candidates:
+            preferred.append(direct_candidates[0])
+        preferred.extend(relational_candidates[:2])
+        if len(preferred) < 2:
+            preferred.extend(direct_candidates[1:2])
+
+    for item in preferred:
         label = str(item.get("label", "") or "")
-        if not label:
+        if not label or label in used_labels:
             continue
-        if len(selected_elements) < 4 and item.get("stage_source") == "diffractive_cross_read":
-            selected_elements.append({"label": label, "rationale": item.get("rationale", ""), "stage_source": item.get("stage_source", "")})
+        if label == "prior_field:snapshot" and not correction_active:
+            excluded.append("backgrounded:prior_field:snapshot")
+            continue
+        selected = _as_selected(item)
+        selected_elements.append(selected)
+        used_labels.add(label)
+        foregrounded.append(label)
+        if selected["stage_source"] == "diffractive_material":
+            reasons[label] = selected["rationale"] or "selected as direct material for this turn"
+        elif selected["stage_source"] == "diffractive_cross_read":
+            reasons[label] = selected["rationale"] or "selected as a diffractive relation for this turn"
+        else:
+            reasons[label] = selected["rationale"] or "selected from available field matter"
+        consequences[label] = ""
+
+    if not selected_elements:
+        for item in rescored[:2]:
+            label = str(item.get("label", "") or "")
+            if not label or label in used_labels:
+                continue
+            if label == "prior_field:snapshot" and not correction_active:
+                excluded.append("backgrounded:prior_field:snapshot")
+                continue
+            selected = _as_selected(item)
+            selected_elements.append(selected)
+            used_labels.add(label)
             foregrounded.append(label)
-            reasons[label] = str(item.get("rationale", "") or "selected because the cross-reading enables movement now")
-            consequences[label] = "keeps the cut tied to interference across materials rather than source order"
-        elif len(held_open) < 4:
+            reasons[label] = selected["rationale"] or "selected because it remained available"
+            consequences[label] = ""
+
+    for item in rescored:
+        label = str(item.get("label", "") or "")
+        if not label or label in used_labels:
+            continue
+        if label == "prior_field:snapshot" and not correction_active:
+            excluded.append("backgrounded:prior_field:snapshot")
+            continue
+        if len(held_open) < 4:
             held_open.append(label)
             reasons[label] = str(item.get("rationale", "") or "held open as still-relevant material")
             consequences[label] = "remains available without forcing immediate closure"
-
-    if not selected_elements:
-        for item in candidate_elements[:2]:
-            label = str(item.get("label", "") or "")
-            if not label:
-                continue
-            selected_elements.append({"label": label, "rationale": item.get("rationale", ""), "stage_source": item.get("stage_source", "")})
-            foregrounded.append(label)
-            reasons[label] = str(item.get("rationale", "") or "selected because it remained most salient")
-            consequences[label] = "stabilizes the cut from available field matter"
 
     state.cut_ledger = CutLedger(
         foregrounded=list(dict.fromkeys(foregrounded))[:8],
@@ -1119,13 +1438,23 @@ def situated_relevance_select(state: FieldState) -> FieldState:
         consequences=consequences,
     )
     state.selected_elements = selected_elements[:8]
+
+    grouped_selection_bundle = {
+        "inquiry_pressure": inquiry_pressure,
+        "direct_material": [item for item in state.selected_elements if item.get("stage_source") == "diffractive_material"],
+        "relational_bridges": [item for item in state.selected_elements if item.get("stage_source") == "diffractive_cross_read"],
+        "held_open": list(state.cut_ledger.held_open),
+    }
+    state.notes["grouped_selection_bundle"] = grouped_selection_bundle
     state.relevance_gradient = {
         "selected_elements": state.selected_elements,
         "what_to_hold_open": state.cut_ledger.held_open,
-        "what_to_defer": state.cut_ledger.excluded,
+        "excluded": state.cut_ledger.excluded,
         "why": state.cut_ledger.reasons,
         "candidate_count": len(candidate_elements),
         "cross_read_count": len(state.diffractive_map.get("cross_readings", [])),
+        "selection_basis": "grouped_selection_bundle",
+        "grouped_selection_bundle": grouped_selection_bundle,
     }
     return state
 
@@ -1243,37 +1572,73 @@ def _compose_situated_expression(state: FieldState, frame: StabilizationFrame) -
         *(item.get("label", "") for item in state.selected_elements),
         *(item.get("rationale", "") for item in state.selected_elements),
     )
-    segments = [_selection_phrase(state, item) for item in state.selected_elements[:3]]
-    segments = [segment for segment in segments if segment]
+
+    bundle = dict(state.relevance_gradient.get("grouped_selection_bundle", {}) or state.notes.get("grouped_selection_bundle", {}) or {})
+    inquiry_pressure = str(bundle.get("inquiry_pressure") or state.turn_apparatus.enacted_pressures.get("inquiry_pressure", "open") or "open")
+    direct_items = list(bundle.get("direct_material", []))
+    relational_items = list(bundle.get("relational_bridges", []))
     held_open = frame.held_open_threads[:2]
+
+    def _segments_from(items: List[Dict[str, Any]], limit: int = 2) -> List[str]:
+        out: List[str] = []
+        for item in items[:limit]:
+            phrase = _selection_phrase(state, item)
+            if phrase:
+                out.append(phrase)
+        return out
+
+    def _dedupe(items: List[str]) -> List[str]:
+        seen: set[str] = set()
+        out: List[str] = []
+        for item in items:
+            if not item or item in seen:
+                continue
+            seen.add(item)
+            out.append(item)
+        return out
+
+    direct_segments = _segments_from(direct_items)
+    relational_segments = _segments_from(relational_items)
+    fallback_segments = _segments_from(list(state.selected_elements), limit=3)
 
     if frame.mode == "scalar":
         text = scalar or "0"
         return SituatedExpression(form="scalar", text=text, segments=[text], supports=frame.foregrounded_threads, held_open=[], movement_note=frame.movement_vector)
 
-    if not segments and frame.foregrounded_threads:
-        segments = frame.foregrounded_threads[:2]
-    if not segments:
-        segments = [str(state.field_signature.get("phenomena", "") or "").strip()]
+    ordered_segments: List[str] = []
+    if inquiry_pressure in {"definition", "explanation"}:
+        ordered_segments.extend(direct_segments[:2])
+        ordered_segments.extend(relational_segments[:1])
+    else:
+        ordered_segments.extend(direct_segments[:1])
+        ordered_segments.extend(relational_segments[:2])
+        if not ordered_segments:
+            ordered_segments.extend(direct_segments[:2])
+
+    ordered_segments = _dedupe(ordered_segments)
+    if not ordered_segments:
+        ordered_segments = _dedupe(fallback_segments)
+
+    if not ordered_segments and frame.foregrounded_threads:
+        ordered_segments = frame.foregrounded_threads[:2]
+    if not ordered_segments:
+        ordered_segments = [str(state.field_signature.get("phenomena", "") or "").strip()]
 
     if frame.mode == "brief_sentence":
-        text = segments[0]
-        if held_open:
-            text += f". {held_open[0]} stays open."
-        return SituatedExpression(form="sentence", text=text, segments=[text], supports=frame.foregrounded_threads, held_open=held_open, movement_note=frame.movement_vector)
+        chosen = ordered_segments[:2]
+        text = ". ".join(chosen)
+        return SituatedExpression(form="sentence", text=text, segments=chosen, supports=frame.foregrounded_threads, held_open=held_open, movement_note=frame.movement_vector)
 
     if frame.mode == "operative_sentence":
-        text = segments[0]
-        if held_open:
-            text += f". Keep {held_open[0]} visible while you move."
-        elif frame.movement_vector:
-            text += ". Move from the foregrounded cut without forcing full closure."
-        return SituatedExpression(form="operative_sentence", text=text, segments=[text], supports=frame.foregrounded_threads, held_open=held_open, movement_note=frame.movement_vector)
+        chosen = ordered_segments[:2]
+        text = ". ".join(chosen)
+        return SituatedExpression(form="operative_sentence", text=text, segments=chosen, supports=frame.foregrounded_threads, held_open=held_open, movement_note=frame.movement_vector)
 
-    text = ". ".join(segments)
+    chosen = ordered_segments[:3]
+    text = ". ".join(chosen)
     if held_open:
         text += f". Held open: {', '.join(held_open)}."
-    return SituatedExpression(form="paragraph", text=text, segments=segments, supports=frame.foregrounded_threads, held_open=held_open, movement_note=frame.movement_vector)
+    return SituatedExpression(form="paragraph", text=text, segments=chosen, supports=frame.foregrounded_threads, held_open=held_open, movement_note=frame.movement_vector)
 
 
 def articulate(state: FieldState) -> FieldState:
@@ -1420,6 +1785,7 @@ def _state_patch(state: FieldState) -> Dict[str, Any]:
         "events": [_dump_model(event) for event in state.events],
         "operator_path": list(state.operator_path),
         "surface_flags": list(state.surface_flags),
+        "ontology_ground": _dump_model(state.ontology_ground),
         "sources_citations": list(state.sources_citations),
         "turn_apparatus": _dump_model(state.turn_apparatus),
         "external_document_apparatus": _dump_model(state.external_document_apparatus),
@@ -1460,29 +1826,56 @@ def run_cbra(
         except Exception:
             client = None
 
+    runtime_design_scope = _is_runtime_design_scope(user_text)
+
     if sources is None:
-        canonical_sources, citations, raw_hits = compose_grounded_sources(user_text, max_total_sources=5)
+        if runtime_design_scope:
+            canonical_sources, citations, raw_hits = compose_grounded_sources(user_text, max_total_sources=5)
+        else:
+            canonical_sources, citations, raw_hits = [], [], []
     else:
         canonical_sources = list(sources or [])
         citations = []
         raw_hits = []
-        attachment_only = [source for source in canonical_sources if isinstance(source, str) and _is_attachment_source(source)]
-        if attachment_only:
+        attachment_only = [
+            source for source in canonical_sources
+            if isinstance(source, str) and _is_attachment_source(source)
+        ]
+        if attachment_only and runtime_design_scope:
             source_text = "\n".join(attachment_only)
-            supplemental_sources, citations, raw_hits = compose_grounded_sources(user_text + "\n" + source_text, max_total_sources=5)
+            supplemental_sources, citations, raw_hits = compose_grounded_sources(
+                user_text + "\n" + source_text,
+                max_total_sources=5,
+            )
             canonical_sources = list(dict.fromkeys(list(canonical_sources) + supplemental_sources))
+
+    preflight_apparatus = _build_turn_apparatus(
+        user_text,
+        source_names=[
+            _extract_attachment_name(source)
+            for source in canonical_sources
+            if isinstance(source, str) and _is_attachment_source(source)
+        ],
+        phase="run_cbra_preflight",
+    )
+    external_document_apparatus = _build_external_document_apparatus(client, user_text, preflight_apparatus)
+
+    world_material_eligible = (
+        not runtime_design_scope
+        and not canonical_sources
+        and not preflight_apparatus.enacted_pressures.get("requires_current_external_material")
+        and not preflight_apparatus.enacted_pressures.get("correction_requested")
+        and str(preflight_apparatus.enacted_pressures.get("inquiry_pressure", "open") or "open")
+        in {"definition", "explanation"}
+    )
+    world_material = _seed_world_material(client, user_text) if world_material_eligible else ""
+    if world_material:
+        canonical_sources = [f"ATTACHMENT (world_material_seed.txt):\n{world_material}"]
 
     retrieval_labels = []
     for source in canonical_sources:
         first = source.splitlines()[0].strip() if isinstance(source, str) else str(source)
         retrieval_labels.append(first[:180])
-
-    preflight_apparatus = _build_turn_apparatus(
-        user_text,
-        source_names=[_extract_attachment_name(source) for source in canonical_sources if isinstance(source, str) and _is_attachment_source(source)],
-        phase="run_cbra_preflight",
-    )
-    external_document_apparatus = _build_external_document_apparatus(client, user_text, preflight_apparatus)
     retrieval_labels.extend(external_document_apparatus.candidate_urls)
 
     prior_field = get_field(field_id) if field_id and get_field is not None else None
@@ -1498,6 +1891,9 @@ def run_cbra(
     )
     state.notes["articulation_renderer"] = "field_native"
     state.notes["articulation_client_available"] = bool(client is not None)
+    state.notes["ground_enforced_retrieval"] = bool(citations)
+    state.notes["grounding_scope"] = "runtime_design" if runtime_design_scope else "world_or_user_material"
+    state.notes["world_material_seeded"] = bool(world_material)
 
     state, invariants, drift_detected, drift_kind, reintegration_stage = execute_field_pipeline(state)
     state.notes["drift_detected"] = drift_detected
@@ -1536,7 +1932,11 @@ def run_cbra(
             "operator_path": list(state.operator_path),
             "surface_flags": list(state.surface_flags),
             "invariants": invariants,
-            "drift_signal": {"drift_detected": drift_detected, "drift_kind": drift_kind, "reintegration_stage": reintegration_stage},
+            "drift_signal": {
+                "drift_detected": drift_detected,
+                "drift_kind": drift_kind,
+                "reintegration_stage": reintegration_stage,
+            },
             "sources_used": citations,
             "retrieval_hits": _compress_hits_for_debug(raw_hits),
             "retrieval_labels": retrieval_labels,
@@ -1549,3 +1949,4 @@ def run_cbra(
             "situated_expression": _dump_model(state.situated_expression) if state.situated_expression else None,
         }
     return result
+

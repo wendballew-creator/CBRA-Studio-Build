@@ -2,7 +2,9 @@ import unittest
 
 from cbra.engine import (
     OPERATOR_SEQUENCE,
+    _state_patch,
     execute_field_pipeline,
+    field_entry,
     initialize_field_state,
     run_cbra,
 )
@@ -197,6 +199,229 @@ class FieldPipelineTests(unittest.TestCase):
         self.assertIn("number_only", state.surface_flags)
         self.assertEqual(state.selected_elements, state.relevance_gradient["selected_elements"])
         self.assertEqual(state.operator_path, OPERATOR_SEQUENCE)
+    def test_run_cbra_does_not_auto_ground_general_source_less_turns(self):
+        result = run_cbra("What is diffraction?", mode="debug")
+        self.assertEqual(result["debug"]["sources_used"], [])
+        self.assertEqual(result["debug"]["retrieval_hits"], [])
+        self.assertFalse(any(event.get("kind") == "retrieval" for event in result["debug"]["events"]))
+        self.assertEqual(result["loopcycle"]["notes"]["grounding_scope"], "world_or_user_material")
+
+    def test_run_cbra_runtime_design_turn_still_grounds_canon(self):
+        result = run_cbra("In CBRA runtime design, what does the glossary say about diffraction?", mode="debug")
+        self.assertTrue(result["debug"]["sources_used"])
+        self.assertTrue(result["debug"]["retrieval_hits"])
+        self.assertTrue(any(event.get("kind") == "retrieval" for event in result["debug"]["events"]))
+        self.assertEqual(result["loopcycle"]["notes"]["grounding_scope"], "runtime_design")
+
+    def test_run_cbra_does_not_auto_supplement_attachment_with_canon_without_runtime_scope(self):
+        result = run_cbra(
+            "What is diffraction in the attached document?",
+            mode="debug",
+            sources=["ATTACHMENT (notes.txt):\\nDiffraction is a physics term about wave interference."],
+        )
+        self.assertEqual(result["debug"]["sources_used"], [])
+        self.assertEqual(result["debug"]["retrieval_hits"], [])
+        self.assertFalse(any(event.get("kind") == "retrieval" for event in result["debug"]["events"]))
+        self.assertEqual(result["loopcycle"]["notes"]["grounding_scope"], "world_or_user_material")
+
+    def test_non_repair_turn_does_not_materialize_prior_field_state(self):
+        prior_field = {
+            "id": "prior-world-1",
+            "selected_elements": [{"label": "older cut", "rationale": "old", "stage_source": "prior"}],
+            "field_signature": {"phenomena": "older"},
+            "cut_ledger": {"foregrounded": ["older cut"]},
+            "notes": {},
+        }
+        state = initialize_field_state(
+            thread_id="thread-world-1",
+            field_id="field-world-1",
+            user_text="What is diffraction?",
+            sources=[],
+            citations=[],
+            raw_hits=[],
+            prior_field=prior_field,
+            live_retrieval=None,
+        )
+        self.assertFalse(any(event.kind == "prior_field_state" for event in state.events))
+        self.assertFalse(state.notes["prior_field_materialized"])
+        self.assertIsNone(state.prior_field_id)
+
+    def test_correction_turn_still_materializes_prior_field_state(self):
+        prior_field = {
+            "id": "prior-world-2",
+            "selected_elements": [{"label": "older cut", "rationale": "old", "stage_source": "prior"}],
+            "field_signature": {"phenomena": "older"},
+            "cut_ledger": {"foregrounded": ["older cut"]},
+            "notes": {},
+        }
+        state = initialize_field_state(
+            thread_id="thread-world-2",
+            field_id="field-world-2",
+            user_text="You misunderstood my last response. Rewrite it.",
+            sources=[],
+            citations=[],
+            raw_hits=[],
+            prior_field=prior_field,
+            live_retrieval=None,
+        )
+        self.assertTrue(any(event.kind == "prior_field_state" for event in state.events))
+        self.assertTrue(state.notes["prior_field_materialized"])
+        self.assertEqual(state.prior_field_id, "prior-world-2")
+    def test_definition_turn_traces_inquiry_pressure_in_turn_apparatus(self):
+        state = initialize_field_state(
+            thread_id="thread-inquiry-1",
+            field_id="field-inquiry-1",
+            user_text="What is diffraction?",
+            sources=[],
+            citations=[],
+            raw_hits=[],
+            prior_field=None,
+            live_retrieval=None,
+        )
+        self.assertEqual(state.turn_apparatus.enacted_pressures["inquiry_pressure"], "definition")
+        self.assertEqual(state.turn_apparatus.context_inputs["inquiry_pressure"], "definition")
+        self.assertTrue(state.turn_apparatus.signal_register["inquiry_signals"]["definition_request"])
+        self.assertTrue(
+            any(
+                item.get("pressure") == "inquiry_pressure"
+                for item in state.turn_apparatus.boundary_logic
+            )
+        )
+    def test_definition_questions_prefer_direct_material_over_prior_field_bridge(self):
+        prior_field = {
+            "id": "prior-6",
+            "selected_elements": [
+                {
+                    "label": "bridge:canonical:CBRA_Loops_Core.md<->prior_field:snapshot",
+                    "rationale": "older bridge",
+                    "stage_source": "diffractive_cross_read",
+                }
+            ],
+            "field_signature": {"phenomena": "older"},
+            "cut_ledger": {"foregrounded": ["bridge:canonical:CBRA_Loops_Core.md<->prior_field:snapshot"]},
+            "notes": {},
+        }
+        raw_hits = [
+            {
+                "file": "CBRA_Glossary_v3.md",
+                "line": 40,
+                "role": "operator_anchor",
+                "snippet": "Diffraction traces patterns across difference.",
+                "text": "Diffraction traces patterns across difference. It reveals interference and relational complexity while preserving multiplicity.",
+                "score": 120,
+            },
+            {
+                "file": "CBRA_Loops_Core.md",
+                "line": 48,
+                "role": "ground_anchor",
+                "snippet": "Trace pattern formation through difference and interference.",
+                "text": "Trace pattern formation through difference and interference across available material. Preserve multiplicity.",
+                "score": 90,
+            },
+        ]
+        state = initialize_field_state(
+            thread_id="thread-7",
+            field_id="field-7",
+            user_text="What is diffraction?",
+            sources=[],
+            citations=["[CBRA_Glossary_v3.md L40+]", "[CBRA_Loops_Core.md L48+]"],
+            raw_hits=raw_hits,
+            prior_field=prior_field,
+            live_retrieval=None,
+        )
+
+        state, invariants, _, _, _ = execute_field_pipeline(state)
+        self.assertTrue(invariants["ok"])
+
+        bundle = state.relevance_gradient.get("grouped_selection_bundle", {})
+        self.assertEqual(state.turn_apparatus.enacted_pressures["inquiry_pressure"], "definition")
+        self.assertTrue(bundle.get("direct_material"))
+        self.assertFalse(
+            any("prior_field:snapshot" in item.get("label", "") for item in state.selected_elements)
+        )
+    def test_movement_language_stays_out_of_answer_text_by_default(self):
+        attachment_body = "This attached document emphasizes directness and field repair through repeated detail."
+        sources = [f"ATTACHMENT (draft.txt):\n{attachment_body}"]
+        raw_hits = [
+            {
+                "file": "CBRA_Loops_Core.md",
+                "line": 12,
+                "role": "ground_anchor",
+                "snippet": "Field repair and directness remain visible during articulation.",
+                "text": "Field repair and directness remain visible during articulation.",
+                "score": 99,
+            }
+        ]
+        state = initialize_field_state(
+            thread_id="thread-8",
+            field_id="field-8",
+            user_text="Explain the attachment with the canon.",
+            sources=sources,
+            citations=["[CBRA_Loops_Core.md L12+]"],
+            raw_hits=raw_hits,
+            prior_field=None,
+            live_retrieval=None,
+        )
+
+        state, invariants, _, _, _ = execute_field_pipeline(state)
+        self.assertTrue(invariants["ok"])
+        self.assertEqual(state.stabilization_frame.mode, "operative_sentence")
+        self.assertTrue(state.situated_expression.movement_note)
+        self.assertNotIn("Keep ", state.articulation_output)
+        self.assertNotIn("Move from the foregrounded cut without forcing full closure.", state.articulation_output)
+    def test_ontology_ground_is_installed_and_persisted_in_state_patch(self):
+        state = initialize_field_state(
+            thread_id="thread-ontology-1",
+            field_id="field-ontology-1",
+            user_text="What is diffraction?",
+            sources=[],
+            citations=[],
+            raw_hits=[],
+            prior_field=None,
+            live_retrieval=None,
+        )
+
+        self.assertTrue(state.notes["ontology_ground_installed"])
+        self.assertEqual(state.notes["ontology_kind"], state.ontology_ground.ontology_kind)
+        self.assertTrue(state.ontology_ground.principles["entanglement_primary"])
+        self.assertTrue(state.ontology_ground.principles["diffraction_pattern_mapping"])
+
+        patch = _state_patch(state)
+        self.assertIn("ontology_ground", patch)
+        self.assertEqual(patch["ontology_ground"]["ontology_kind"], state.ontology_ground.ontology_kind)
+        self.assertTrue(patch["ontology_ground"]["principles"]["entanglement_primary"])
+        self.assertTrue(patch["ontology_ground"]["principles"]["diffraction_pattern_mapping"])
+    def test_field_entry_reads_ontology_ground_into_field_signature(self):
+        state = initialize_field_state(
+            thread_id="thread-field-entry-1",
+            field_id="field-field-entry-1",
+            user_text="What is diffraction?",
+            sources=[],
+            citations=[],
+            raw_hits=[],
+            prior_field=None,
+            live_retrieval=None,
+        )
+
+        state = field_entry(state)
+
+        self.assertTrue(state.notes["ontology_ground_read_in_field_entry"])
+        self.assertEqual(
+            state.field_signature["ontology_kind"],
+            state.ontology_ground.ontology_kind,
+        )
+        self.assertTrue(
+            state.field_signature["ontology_principles"]["entanglement_primary"]
+        )
+        self.assertTrue(
+            state.field_signature["ontology_principles"]["diffraction_pattern_mapping"]
+        )
+        self.assertEqual(state.field_signature["material_lineages"], ["user_turn"])
+        self.assertIn(
+            "ontology ground is active before material interpretation",
+            state.field_signature["constraints"],
+        )
+
 
     def test_run_cbra_debug_reports_operator_path_not_response_family(self):
         result = run_cbra(

@@ -101,6 +101,40 @@ class StabilizationFrame(BaseModel):
     language_constraints: List[str] = Field(default_factory=list)
     basis: Dict[str, Any] = Field(default_factory=dict)
 
+class OntologyGround(BaseModel):
+    ontology_kind: str = "creative_becoming_runtime_ground"
+    runtime_weight: str = "high"
+    principles: Dict[str, Any] = Field(
+        default_factory=lambda: {
+            "creative_becoming": True,
+            "entanglement_primary": True,
+            "intra_action_emergent_identity": True,
+            "agential_cuts_operative": True,
+            "diffraction_pattern_mapping": True,
+            "posthuman_care_constrains_articulation": True,
+            "field_as_primary_context": True,
+        }
+    )
+    operator_functions: Dict[str, str] = Field(
+        default_factory=lambda: {
+            "creative_becoming": "reality as ongoing relational emergence",
+            "entanglement": "matter, meaning, and relation are inseparable",
+            "intra_action": "entities emerge through relational engagement",
+            "agential_cut": "distinction is enacted within an entangled field",
+            "diffraction": "pattern mapping across difference while preserving multiplicity",
+            "posthuman_care": "articulation is constrained toward livable futures",
+            "field": "primary context container for each loop cycle",
+        }
+    )
+    articulation_constraints: List[str] = Field(
+        default_factory=lambda: [
+            "descriptive rather than corrective",
+            "additive rather than contrastive",
+            "openness maintained",
+            "no isolated-agent default",
+            "no humanist baseline assumption",
+        ]
+    )
 
 class SituatedExpression(BaseModel):
     form: str = "paragraph"
@@ -116,6 +150,7 @@ class FieldState(BaseModel):
     thread_id: Optional[str] = None
     prior_field_id: Optional[str] = None
     diffractive_ground: str = "CBRA"
+    ontology_ground: OntologyGround = Field(default_factory=OntologyGround)
     created_at: str = Field(default_factory=_now_iso)
     updated_at: str = Field(default_factory=_now_iso)
 
@@ -146,6 +181,7 @@ class FieldArtifact(BaseModel):
     thread_id: str
     prior_field_id: Optional[str] = None
     diffractive_ground: str = "CBRA"
+    ontology_ground: OntologyGround = Field(default_factory=OntologyGround)
     created_at: str = Field(default_factory=_now_iso)
     updated_at: str = Field(default_factory=_now_iso)
 
