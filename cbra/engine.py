@@ -1400,8 +1400,34 @@ def situated_relevance_select(state: FieldState) -> FieldState:
     candidate_elements = list(state.diffractive_map.get("candidate_elements", []))
     candidate_elements.sort(key=lambda item: item.get("score", 0.0), reverse=True)
 
-    inquiry_pressure = str(state.turn_apparatus.enacted_pressures.get("inquiry_pressure", "open") or "open")
+    inquiry_pressure = str(
+        state.turn_apparatus.enacted_pressures.get("inquiry_pressure", "open") or "open"
+    )
     correction_active = bool(state.notes.get("correction_forced_reentry"))
+
+    ontology = state.ontology_ground
+    ontology_principles = dict(ontology.principles or {})
+    preserve_multiplicity = bool(
+        ontology_principles.get("diffraction_pattern_mapping", False)
+    )
+    entanglement_primary = bool(
+        ontology_principles.get("entanglement_primary", False)
+    )
+    posthuman_care = bool(
+        ontology_principles.get("posthuman_care_constrains_articulation", False)
+    )
+
+    material_lineages = list(
+        state.relational_map.get("material_lineages", [])
+        or state.field_signature.get("material_lineages", [])
+        or []
+    )
+    consequence_visibility = dict(
+        state.relational_map.get("consequence_visibility", {}) or {}
+    )
+    distributed_consequence = bool(
+        consequence_visibility.get("distributed_consequence", False)
+    )
 
     def _preview_from_text(text: str, max_chars: int = 260) -> str:
         cleaned = re.sub(r"\s+", " ", str(text or "").strip())
@@ -1440,22 +1466,44 @@ def situated_relevance_select(state: FieldState) -> FieldState:
             source_evidence["prior_field:snapshot"] = "prior field remains available as background memory"
 
     rescored: List[Dict[str, Any]] = []
+    non_user_lineages = [lineage for lineage in material_lineages if lineage != "user_turn"]
+    multiple_materials_present = bool(non_user_lineages)
+
     for raw_item in candidate_elements:
         item = dict(raw_item)
         label = str(item.get("label", "") or "")
         if not label:
             continue
+
         stage_source = str(item.get("stage_source", "") or "")
         score = float(item.get("score", 0.0) or 0.0)
 
-        if "prior_field:snapshot" in label and not correction_active:
+        if label == "prior_field:snapshot" and not correction_active:
             score -= 4.0
+
+        if label == "user:turn" and multiple_materials_present:
+            score -= 1.5
 
         if inquiry_pressure in {"definition", "explanation"}:
             if stage_source == "diffractive_material":
                 score += 2.5
             elif stage_source == "diffractive_cross_read":
-                score -= 0.5
+                score += 0.25 if preserve_multiplicity else -0.5
+
+        if inquiry_pressure in {"count", "quote", "extract"}:
+            if stage_source == "diffractive_material":
+                score += 3.0
+            elif stage_source == "diffractive_cross_read":
+                score -= 1.0
+
+        if entanglement_primary and stage_source == "diffractive_cross_read":
+            score += 0.75
+
+        if preserve_multiplicity and stage_source == "diffractive_material":
+            score += 0.25
+
+        if distributed_consequence and label == "user:turn":
+            score -= 0.5
 
         item["score"] = score
         rescored.append(item)
@@ -1513,13 +1561,19 @@ def situated_relevance_select(state: FieldState) -> FieldState:
         used_labels.add(label)
         foregrounded.append(label)
         if selected["stage_source"] == "diffractive_material":
-            reasons[label] = selected["rationale"] or "selected as direct material for this turn"
+            reasons[label] = selected["rationale"] or "selected as direct field matter"
+            consequences[label] = (
+                "grounds movement in available material"
+                if not posthuman_care
+                else "grounds movement in available material while keeping articulation livable"
+            )
         elif selected["stage_source"] == "diffractive_cross_read":
-            reasons[label] = selected["rationale"] or "selected as a diffractive relation for this turn"
-        else:
-            reasons[label] = selected["rationale"] or "selected from available field matter"
-        consequences[label] = ""
-
+            reasons[label] = selected["rationale"] or "selected as diffractive relation"
+            consequences[label] = (
+                "keeps pattern across difference visible"
+                if preserve_multiplicity
+                else "supports movement without collapsing the field"
+            )
     if not selected_elements:
         for item in rescored[:2]:
             label = str(item.get("label", "") or "")
@@ -1534,6 +1588,9 @@ def situated_relevance_select(state: FieldState) -> FieldState:
             foregrounded.append(label)
             reasons[label] = selected["rationale"] or "selected because it remained available"
             consequences[label] = ""
+    held_open_limit = 5 if preserve_multiplicity else 3
+    if distributed_consequence:
+        held_open_limit = max(held_open_limit, 4)
 
     for item in rescored:
         label = str(item.get("label", "") or "")
@@ -1542,7 +1599,7 @@ def situated_relevance_select(state: FieldState) -> FieldState:
         if label == "prior_field:snapshot" and not correction_active:
             excluded.append("backgrounded:prior_field:snapshot")
             continue
-        if len(held_open) < 4:
+        if len(held_open) < held_open_limit:
             held_open.append(label)
             reasons[label] = str(item.get("rationale", "") or "held open as still-relevant material")
             consequences[label] = "remains available without forcing immediate closure"
@@ -1558,11 +1615,24 @@ def situated_relevance_select(state: FieldState) -> FieldState:
 
     grouped_selection_bundle = {
         "inquiry_pressure": inquiry_pressure,
-        "direct_material": [item for item in state.selected_elements if item.get("stage_source") == "diffractive_material"],
-        "relational_bridges": [item for item in state.selected_elements if item.get("stage_source") == "diffractive_cross_read"],
+        "direct_material": [
+            item
+            for item in state.selected_elements
+            if item.get("stage_source") == "diffractive_material"
+        ],
+        "relational_bridges": [
+            item
+            for item in state.selected_elements
+            if item.get("stage_source") == "diffractive_cross_read"
+        ],
         "held_open": list(state.cut_ledger.held_open),
+        "ontology_kind": ontology.ontology_kind,
+        "movement_priority": "movement_and_multiplicity" if preserve_multiplicity else "movement",
+        "distributed_consequence": distributed_consequence,
+        "multiplicity_preserved": preserve_multiplicity,
     }
     state.notes["grouped_selection_bundle"] = grouped_selection_bundle
+    state.notes["ontology_ground_read_in_situated_relevance_select"] = True
     state.relevance_gradient = {
         "selected_elements": state.selected_elements,
         "what_to_hold_open": state.cut_ledger.held_open,
@@ -1572,7 +1642,9 @@ def situated_relevance_select(state: FieldState) -> FieldState:
         "cross_read_count": len(state.diffractive_map.get("cross_readings", [])),
         "selection_basis": "grouped_selection_bundle",
         "grouped_selection_bundle": grouped_selection_bundle,
-    }
+        "ontology_kind": ontology.ontology_kind,
+        "ontology_principles": ontology_principles,    
+}
     return state
 
 
