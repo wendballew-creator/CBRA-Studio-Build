@@ -104,26 +104,70 @@ class StabilizationFrame(BaseModel):
 class OntologyGround(BaseModel):
     ontology_kind: str = "creative_becoming_runtime_ground"
     runtime_weight: str = "high"
+    primary_operators: Dict[str, Dict[str, Any]] = Field(
+        default_factory=lambda: {
+            "intra_action": {
+                "active": True,
+                "role": "mutual constitution within relation",
+                "operator_type": "method_pillar",
+            },
+            "play": {
+                "active": True,
+                "role": "generative in-between enabling exploratory emergence",
+                "operator_type": "method_pillar",
+            },
+            "diffraction": {
+                "active": True,
+                "role": "pattern mapping across difference while preserving multiplicity",
+                "operator_type": "method_pillar",
+            },
+            "creative_becoming": {
+                "active": True,
+                "role": "ongoing emergence through entangled transformation",
+                "operator_type": "method_pillar",
+            },
+        }
+    ) 
+    play_conditions: Dict[str, bool] = Field(
+        default_factory=lambda: {
+            "low_consequence_experimentation": True,
+            "repetition_as_generative": True,
+            "surprise_as_signal": True,
+            "embodied_responsiveness": True,
+            "environmental_responsiveness": True,
+            "multiplicity_tolerance": True,
+        }
+    ) 
+    ethical_constraints: Dict[str, Any] = Field(
+        default_factory=lambda: {
+            "posthuman_care": True,
+            "livability": True,
+            "non_closure": True,
+        }
+    )  
     principles: Dict[str, Any] = Field(
         default_factory=lambda: {
-            "creative_becoming": True,
+            "creative_becoming_primary": True,
+            "intra_action_primary": True,
+            "play_primary": True,
+            "diffraction_primary": True,
             "entanglement_primary": True,
             "intra_action_emergent_identity": True,
             "agential_cuts_operative": True,
             "diffraction_pattern_mapping": True,
+            "play_generative": True,
             "posthuman_care_constrains_articulation": True,
             "field_as_primary_context": True,
         }
     )
     operator_functions: Dict[str, str] = Field(
         default_factory=lambda: {
-            "creative_becoming": "reality as ongoing relational emergence",
-            "entanglement": "matter, meaning, and relation are inseparable",
             "intra_action": "entities emerge through relational engagement",
-            "agential_cut": "distinction is enacted within an entangled field",
-            "diffraction": "pattern mapping across difference while preserving multiplicity",
-            "posthuman_care": "articulation is constrained toward livable futures",
-            "field": "primary context container for each loop cycle",
+            "play": "opens exploratory movement through repetition, surprise, and embodied responsiveness",
+            "diffraction": "maps patterns across difference while preserving multiplicity",
+            "creative_becoming": "sustains emergence without collapsing becoming into fixed identity",
+            "posthuman_care": "constrains articulation toward livable futures",
+            "field": "holds the current entangled conditions of the loop cycle",
         }
     )
     articulation_constraints: List[str] = Field(
@@ -133,6 +177,7 @@ class OntologyGround(BaseModel):
             "openness maintained",
             "no isolated-agent default",
             "no humanist baseline assumption",
+            "play remains generative rather than decorative",
         ]
     )
 
