@@ -600,7 +600,8 @@ class FieldPipelineTests(unittest.TestCase):
         self.assertEqual(bundle["ontology_kind"], state.ontology_ground.ontology_kind)
         self.assertTrue(bundle["multiplicity_preserved"])
         self.assertIn(bundle["movement_priority"], ["movement", "movement_and_multiplicity"])
-        self.assertEqual(state.selected_elements, state.relevance_gradient["selected_elements"])
+        self.assertEqual(state.selected_elements, state.relevance_gradient["selected_elements"]
+        )
     def test_articulate_reads_ontology_ground_and_keeps_held_open_language(self):
         state = initialize_field_state(
             thread_id="thread-articulate-1",
@@ -635,6 +636,118 @@ class FieldPipelineTests(unittest.TestCase):
         self.assertNotIn(
             "Move from the foregrounded cut without forcing full closure.",
             state.articulation_output,
+        )
+    def test_field_entry_reads_play_centered_ontology_structure(self):
+        state = initialize_field_state(
+            thread_id="thread-field-play-1",
+            field_id="field-field-play-1",
+            user_text="What is diffraction?",
+            sources=[],
+            citations=[],
+            raw_hits=[],
+            prior_field=None,
+            live_retrieval=None,
+        )
+
+        state = field_entry(state)
+
+        self.assertEqual(
+            state.field_signature["primary_operators"]["play"]["operator_type"],
+            "method_pillar",
+        )
+        self.assertTrue(
+            state.field_signature["play_conditions"]["low_consequence_experimentation"]
+        )
+        self.assertTrue(
+            state.field_signature["ethical_constraints"]["posthuman_care"]
+        )
+        self.assertIn(
+            "low-consequence experimentation remains available in the field",
+            state.field_signature["constraints"],
+        )
+        self.assertIn(
+            "articulation must remain livable across affected systems",
+            state.field_signature["constraints"],
+        )
+        self.assertIn(
+            "keep exploratory movement available",
+            state.field_signature["stakes"],
+        )
+
+    def test_notice_reads_play_conditions_and_ethical_constraints(self):
+        state = initialize_field_state(
+            thread_id="thread-notice-play-1",
+            field_id="field-notice-play-1",
+            user_text="What is diffraction?",
+            sources=[],
+            citations=[],
+            raw_hits=[],
+            prior_field=None,
+            live_retrieval=None,
+        )
+
+        state = field_entry(state)
+        state = notice(state)
+
+        self.assertEqual(
+            state.noticing_register["primary_operators"]["play"]["operator_type"],
+            "method_pillar",
+        )
+        self.assertTrue(
+            state.noticing_register["play_conditions"]["repetition_as_generative"]
+        )
+        self.assertTrue(
+            state.noticing_register["ethical_constraints"]["livability"]
+        )
+        self.assertIn(
+            "low-consequence experimentation is available in the field",
+            state.noticing_register["signals"],
+        )
+        self.assertIn(
+            "repetition may function generatively rather than redundantly",
+            state.noticing_register["signals"],
+        )
+        self.assertIn(
+            "livability constrains articulation from the outset",
+            state.noticing_register["signals"],
+        )
+
+    def test_relational_frame_reads_play_centered_ontology_structure(self):
+        state = initialize_field_state(
+            thread_id="thread-relational-play-1",
+            field_id="field-relational-play-1",
+            user_text="What is diffraction?",
+            sources=[],
+            citations=[],
+            raw_hits=[],
+            prior_field=None,
+            live_retrieval=None,
+        )
+
+        state = field_entry(state)
+        state = notice(state)
+        state = relational_frame(state)
+
+        self.assertEqual(
+            state.relational_map["primary_operators"]["play"]["operator_type"],
+            "method_pillar",
+        )
+        self.assertTrue(
+            state.relational_map["play_conditions"]["low_consequence_experimentation"]
+        )
+        self.assertTrue(
+            state.relational_map["ethical_constraints"]["non_closure"]
+        )
+        self.assertIn("play_field", state.relational_map["agency"])
+        self.assertIn(
+            "exploratory movement remains available through low-consequence experimentation",
+            state.relational_map["constraints"],
+        )
+        self.assertTrue(
+            state.relational_map["capacity"]["exploratory_movement_available"]
+        )
+        self.assertTrue(
+            state.relational_map["consequence_visibility"]["surprise_visibility"]
         )
 
     def test_run_cbra_debug_reports_operator_path_not_response_family(self):
