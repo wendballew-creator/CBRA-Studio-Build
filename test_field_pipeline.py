@@ -599,7 +599,10 @@ class FieldPipelineTests(unittest.TestCase):
         bundle = state.relevance_gradient["grouped_selection_bundle"]
         self.assertEqual(bundle["ontology_kind"], state.ontology_ground.ontology_kind)
         self.assertTrue(bundle["multiplicity_preserved"])
-        self.assertIn(bundle["movement_priority"], ["movement", "movement_and_multiplicity"])
+        self.assertIn(
+            bundle["movement_priority"],
+            ["movement", "movement_and_multiplicity", "movement_play_multiplicity"],
+        )
         self.assertEqual(state.selected_elements, state.relevance_gradient["selected_elements"]
         )
     def test_articulate_reads_ontology_ground_and_keeps_held_open_language(self):
@@ -748,6 +751,141 @@ class FieldPipelineTests(unittest.TestCase):
         )
         self.assertTrue(
             state.relational_map["consequence_visibility"]["surprise_visibility"]
+        )
+    def test_diffractive_read_reads_play_centered_ontology_structure(self):
+        state = initialize_field_state(
+            thread_id="thread-diffraction-play-1",
+            field_id="field-diffraction-play-1",
+            user_text="What is diffraction?",
+            sources=[
+                "ATTACHMENT (notes.txt):\nDiffraction traces patterns across difference."
+            ],
+            citations=[],
+            raw_hits=[],
+            prior_field=None,
+            live_retrieval=None,
+        )
+
+        state = field_entry(state)
+        state = notice(state)
+        state = relational_frame(state)
+        state = diffractive_read(state)
+
+        self.assertEqual(
+            state.diffractive_map["primary_operators"]["play"]["operator_type"],
+            "method_pillar",
+        )
+        self.assertTrue(
+            state.diffractive_map["play_conditions"]["low_consequence_experimentation"]
+        )
+        self.assertTrue(
+            state.diffractive_map["ethical_constraints"]["posthuman_care"]
+        )
+        self.assertTrue(
+            any(
+                "exploratory movement remains available" in item["rationale"]
+                for item in state.diffractive_map["candidate_elements"]
+                if item["stage_source"] == "diffractive_material"
+            )
+        )
+    def test_diffractive_read_reads_play_centered_ontology_structure(self):
+        state = initialize_field_state(
+            thread_id="thread-diffraction-play-1",
+            field_id="field-diffraction-play-1",
+            user_text="What is diffraction?",
+            sources=[
+                "ATTACHMENT (notes.txt):\nDiffraction traces patterns across difference."
+            ],
+            citations=[],
+            raw_hits=[],
+            prior_field=None,
+            live_retrieval=None,
+        )
+
+        state = field_entry(state)
+        state = notice(state)
+        state = relational_frame(state)
+        state = diffractive_read(state)
+
+        self.assertEqual(
+            state.diffractive_map["primary_operators"]["play"]["operator_type"],
+            "method_pillar",
+        )
+        self.assertTrue(
+            state.diffractive_map["play_conditions"]["low_consequence_experimentation"]
+        )
+        self.assertTrue(
+            state.diffractive_map["ethical_constraints"]["posthuman_care"]
+        )
+        self.assertTrue(
+            any(
+                "exploratory movement remains available" in item["rationale"]
+                for item in state.diffractive_map["candidate_elements"]
+                if item["stage_source"] == "diffractive_material"
+            )
+        )
+    def test_situated_relevance_select_reads_play_centered_ontology_structure(self):
+        state = initialize_field_state(
+            thread_id="thread-selection-play-1",
+            field_id="field-selection-play-1",
+            user_text="What is diffraction?",
+            sources=[
+                "ATTACHMENT (notes.txt):\nDiffraction traces patterns across difference."
+            ],
+            citations=[],
+            raw_hits=[],
+            prior_field=None,
+            live_retrieval=None,
+        )
+
+        state = field_entry(state)
+        state = notice(state)
+        state = relational_frame(state)
+        state = diffractive_read(state)
+        state = situated_relevance_select(state)
+
+        bundle = state.relevance_gradient["grouped_selection_bundle"]
+
+        self.assertEqual(
+            bundle["primary_operators"]["play"]["operator_type"],
+            "method_pillar",
+        )
+        self.assertTrue(bundle["play_conditions"]["multiplicity_tolerance"])
+        self.assertTrue(bundle["ethical_constraints"]["non_closure"])
+        self.assertIn(
+            bundle["movement_priority"],
+            ["movement", "movement_and_multiplicity", "movement_play_multiplicity"],
+        )
+        self.assertTrue(bundle["multiplicity_preserved"])
+    def test_articulate_reads_play_centered_ontology_structure(self):
+        state = initialize_field_state(
+            thread_id="thread-articulate-play-1",
+            field_id="field-articulate-play-1",
+            user_text="What is diffraction?",
+            sources=[
+                "ATTACHMENT (notes.txt):\nDiffraction traces patterns across difference."
+            ],
+            citations=[],
+            raw_hits=[],
+            prior_field=None,
+            live_retrieval=None,
+        )
+
+        state = field_entry(state)
+        state = notice(state)
+        state = relational_frame(state)
+        state = diffractive_read(state)
+        state = situated_relevance_select(state)
+        state = articulate(state)
+
+        self.assertTrue(state.notes["ontology_ground_read_in_articulate"])
+        self.assertIn(
+            "keep exploratory movement available without forcing closure",
+            state.stabilization_frame.language_constraints,
+        )
+        self.assertIn(
+            "allow repetition to intensify emergence rather than flatten it",
+            state.stabilization_frame.language_constraints,
         )
 
     def test_run_cbra_debug_reports_operator_path_not_response_family(self):

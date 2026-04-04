@@ -1409,7 +1409,15 @@ def diffractive_read(state: FieldState) -> FieldState:
 
     ontology = state.ontology_ground
     ontology_principles = dict(ontology.principles or {})
+    primary_operators = dict(ontology.primary_operators or {})
+    play_conditions = dict(ontology.play_conditions or {})
+    ethical_constraints = dict(ontology.ethical_constraints or {})
     correction_active = bool(state.notes.get("correction_forced_reentry"))
+
+    play_active = bool(primary_operators.get("play", {}).get("active"))
+    preserve_multiplicity = bool(
+        ontology_principles.get("diffraction_pattern_mapping", False)
+    )
 
     cross_readings: List[Dict[str, Any]] = []
     resonance: List[str] = []
@@ -1429,10 +1437,16 @@ def diffractive_read(state: FieldState) -> FieldState:
             if left["kind"] != right["kind"]:
                 score += 1.0
 
-            if ontology_principles.get("diffraction_pattern_mapping") and shared:
+            if preserve_multiplicity and shared:
                 score += 0.5
             if ontology_principles.get("entanglement_primary") and left["kind"] != right["kind"]:
                 score += 0.5
+            if play_active and left["kind"] != right["kind"]:
+                score += 0.5
+            if play_active and play_conditions.get("surprise_as_signal") and not shared:
+                score += 0.25
+            if play_active and play_conditions.get("low_consequence_experimentation"):
+                score += 0.25
             if "prior_field" in pair_kinds and not correction_active:
                 score -= 2.0
 
@@ -1442,6 +1456,10 @@ def diffractive_read(state: FieldState) -> FieldState:
                 rationale_parts.append(f"pattern resonance through {', '.join(shared[:4])}")
             if left["kind"] != right["kind"]:
                 rationale_parts.append(f"interference across {left['kind']} and {right['kind']}")
+            if play_active and play_conditions.get("surprise_as_signal") and not shared:
+                rationale_parts.append("surprising relation remains generative even without lexical overlap")
+            if play_active and play_conditions.get("repetition_as_generative") and shared:
+                rationale_parts.append("repetition intensifies rather than flattens emergence")
             if not rationale_parts:
                 rationale_parts.append(f"cross-reading {left['kind']} with {right['kind']}")
 
@@ -1485,6 +1503,8 @@ def diffractive_read(state: FieldState) -> FieldState:
             if ontology_principles.get("entanglement_primary")
             else f"material remained available with salience {score:.1f}"
         )
+        if play_active and play_conditions.get("low_consequence_experimentation"):
+            rationale += "; exploratory movement remains available"
 
         candidate_elements.append(
             {
@@ -1520,6 +1540,9 @@ def diffractive_read(state: FieldState) -> FieldState:
         "candidate_elements": sorted(candidate_elements, key=lambda item: item["score"], reverse=True),
         "ontology_kind": ontology.ontology_kind,
         "ontology_principles": ontology_principles,
+        "primary_operators": primary_operators,
+        "play_conditions": play_conditions,
+        "ethical_constraints": ethical_constraints,
     }
     state.notes["ontology_ground_read_in_diffractive_read"] = True
     return state
@@ -1537,6 +1560,10 @@ def situated_relevance_select(state: FieldState) -> FieldState:
 
     ontology = state.ontology_ground
     ontology_principles = dict(ontology.principles or {})
+    primary_operators = dict(ontology.primary_operators or {})
+    play_conditions = dict(ontology.play_conditions or {})
+    ethical_constraints = dict(ontology.ethical_constraints or {})
+
     preserve_multiplicity = bool(
         ontology_principles.get("diffraction_pattern_mapping", False)
     )
@@ -1544,8 +1571,10 @@ def situated_relevance_select(state: FieldState) -> FieldState:
         ontology_principles.get("entanglement_primary", False)
     )
     posthuman_care = bool(
-        ontology_principles.get("posthuman_care_constrains_articulation", False)
+        ethical_constraints.get("posthuman_care", False)
+        or ontology_principles.get("posthuman_care_constrains_articulation", False)
     )
+    play_active = bool(primary_operators.get("play", {}).get("active"))
 
     material_lineages = list(
         state.relational_map.get("material_lineages", [])
@@ -1632,6 +1661,21 @@ def situated_relevance_select(state: FieldState) -> FieldState:
         if preserve_multiplicity and stage_source == "diffractive_material":
             score += 0.25
 
+        if play_active and play_conditions.get("low_consequence_experimentation"):
+            if stage_source == "diffractive_material":
+                score += 0.5
+
+        if play_active and play_conditions.get("surprise_as_signal"):
+            if stage_source == "diffractive_cross_read":
+                score += 0.5
+
+        if play_active and play_conditions.get("repetition_as_generative"):
+            if stage_source == "diffractive_cross_read":
+                score += 0.25
+
+        if ethical_constraints.get("non_closure") and stage_source == "diffractive_cross_read":
+            score += 0.25
+
         if distributed_consequence and label == "user:turn":
             score -= 0.5
 
@@ -1692,18 +1736,26 @@ def situated_relevance_select(state: FieldState) -> FieldState:
         foregrounded.append(label)
         if selected["stage_source"] == "diffractive_material":
             reasons[label] = selected["rationale"] or "selected as direct field matter"
-            consequences[label] = (
-                "grounds movement in available material"
-                if not posthuman_care
-                else "grounds movement in available material while keeping articulation livable"
-            )
+            if play_active and play_conditions.get("low_consequence_experimentation"):
+                consequences[label] = (
+                    "grounds movement in available material while keeping exploratory movement available"
+                )
+            elif posthuman_care:
+                consequences[label] = (
+                    "grounds movement in available material while keeping articulation livable"
+                )
+            else:
+                consequences[label] = "grounds movement in available material"
         elif selected["stage_source"] == "diffractive_cross_read":
             reasons[label] = selected["rationale"] or "selected as diffractive relation"
-            consequences[label] = (
-                "keeps pattern across difference visible"
-                if preserve_multiplicity
-                else "supports movement without collapsing the field"
-            )
+            if play_active and play_conditions.get("surprise_as_signal"):
+                consequences[label] = (
+                    "keeps surprising pattern across difference visible without forcing closure"
+                )
+            elif preserve_multiplicity:
+                consequences[label] = "keeps pattern across difference visible"
+            else:
+                consequences[label] = "supports movement without collapsing the field"
     if not selected_elements:
         for item in rescored[:2]:
             label = str(item.get("label", "") or "")
@@ -1721,6 +1773,8 @@ def situated_relevance_select(state: FieldState) -> FieldState:
     held_open_limit = 5 if preserve_multiplicity else 3
     if distributed_consequence:
         held_open_limit = max(held_open_limit, 4)
+    if play_active and play_conditions.get("multiplicity_tolerance"):
+        held_open_limit = max(held_open_limit, 5)
 
     for item in rescored:
         label = str(item.get("label", "") or "")
@@ -1757,7 +1811,16 @@ def situated_relevance_select(state: FieldState) -> FieldState:
         ],
         "held_open": list(state.cut_ledger.held_open),
         "ontology_kind": ontology.ontology_kind,
-        "movement_priority": "movement_and_multiplicity" if preserve_multiplicity else "movement",
+        "primary_operators": primary_operators,
+        "play_conditions": play_conditions,
+        "ethical_constraints": ethical_constraints,
+        "movement_priority": (
+            "movement_play_multiplicity"
+            if play_active and preserve_multiplicity
+            else "movement_and_multiplicity"
+            if preserve_multiplicity
+            else "movement"
+        ),
         "distributed_consequence": distributed_consequence,
         "multiplicity_preserved": preserve_multiplicity,
     }
@@ -1773,7 +1836,10 @@ def situated_relevance_select(state: FieldState) -> FieldState:
         "selection_basis": "grouped_selection_bundle",
         "grouped_selection_bundle": grouped_selection_bundle,
         "ontology_kind": ontology.ontology_kind,
-        "ontology_principles": ontology_principles,    
+        "ontology_principles": ontology_principles,
+        "primary_operators": primary_operators,
+        "play_conditions": play_conditions,
+        "ethical_constraints": ethical_constraints,
 }
     return state
 
@@ -2000,22 +2066,40 @@ def articulate(state: FieldState) -> FieldState:
 
     ontology = state.ontology_ground
     ontology_principles = dict(ontology.principles or {})
+    primary_operators = dict(ontology.primary_operators or {})
+    play_conditions = dict(ontology.play_conditions or {})
+    ethical_constraints = dict(ontology.ethical_constraints or {})
+
+    play_active = bool(primary_operators.get("play", {}).get("active"))
     posthuman_care = bool(
-        ontology_principles.get("posthuman_care_constrains_articulation", False)
+        ethical_constraints.get("posthuman_care", False)
+        or ontology_principles.get("posthuman_care_constrains_articulation", False)
     )
     preserve_multiplicity = bool(
         ontology_principles.get("diffraction_pattern_mapping", False)
     )
 
     frame = _build_stabilization_frame(state)
+
     if posthuman_care:
         livable_constraint = "keep articulation livable across affected systems"
         if livable_constraint not in frame.language_constraints:
             frame.language_constraints.append(livable_constraint)
+
     if preserve_multiplicity:
         multiplicity_constraint = "do not collapse held-open multiplicity into one closure"
         if multiplicity_constraint not in frame.language_constraints:
             frame.language_constraints.append(multiplicity_constraint)
+
+    if play_active and play_conditions.get("low_consequence_experimentation"):
+        exploratory_constraint = "keep exploratory movement available without forcing closure"
+        if exploratory_constraint not in frame.language_constraints:
+            frame.language_constraints.append(exploratory_constraint)
+
+    if play_active and play_conditions.get("repetition_as_generative"):
+        repetition_constraint = "allow repetition to intensify emergence rather than flatten it"
+        if repetition_constraint not in frame.language_constraints:
+            frame.language_constraints.append(repetition_constraint)
 
     state.stabilization_frame = frame
     state.surface_flags = _derive_stabilization_constraints(state, frame)
@@ -2041,6 +2125,12 @@ def articulate(state: FieldState) -> FieldState:
             "Held-open material remains available without forced closure.",
         )
 
+    if play_active and play_conditions.get("low_consequence_experimentation"):
+        state.articulation_output = (state.articulation_output or "").replace(
+            "Held-open material remains available without forced closure.",
+            "Held-open material remains available for exploratory movement without forced closure.",
+        )
+
     if preserve_multiplicity and state.situated_expression and state.situated_expression.held_open:
         if (
             state.situated_expression.form in {"sentence", "operative_sentence"}
@@ -2049,6 +2139,13 @@ def articulate(state: FieldState) -> FieldState:
             held = ", ".join(state.situated_expression.held_open[:2])
             if held:
                 state.articulation_output = f"{state.articulation_output}. Held open: {held}."
+
+    if play_active and play_conditions.get("surprise_as_signal"):
+        if state.situated_expression and state.situated_expression.form == "paragraph":
+            if state.articulation_output and "exploratory movement" not in state.articulation_output:
+                state.articulation_output = (
+                    f"{state.articulation_output}. Exploratory movement remains available."
+                )
 
     state.notes["ontology_ground_read_in_articulate"] = True
 
