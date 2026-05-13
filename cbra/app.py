@@ -1,40 +1,51 @@
 from __future__ import annotations
 
-from dotenv import load_dotenv, find_dotenv
-import os
-import io
+from pathlib import Path
+from typing import Any, Dict, Literal, Optional
 from uuid import uuid4
-from typing import Optional, Literal, Any, List, Dict
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, File, Form, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
-from docx import Document
-from pypdf import PdfReader
 
 from cbra.engine import run_cbra
-
-from cbra.models import Message, LoopCycle, DriftEvent
-
+from cbra.models import DriftEvent, LoopCycle, Message
 from cbra.store import (
-    create_thread,
-    get_thread,
-    append_message,
-    append_loopcycle,
     append_drift_event,
+    append_loopcycle,
+    append_message,
+    clear_active_attachment,
+    export_thread_markdown,
     get_field,
-    create_field,
+    get_thread,
+    set_active_attachment,
 )
 
-# Load .env from current working directory (reliable under uvicorn reload)
-dotenv_path = find_dotenv(usecwd=True)
-load_dotenv(dotenv_path, override=True)
+APP_TITLE = "CBRA Writing Support"
+APP_VERSION = "0.1.0"
 
-app = FastAPI(title="CBRA Writing Support")
-app.mount("/ui", StaticFiles(directory="ui", html=True), name="static")
+BASE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BASE_DIR.parent
+UI_INDEX = PROJECT_ROOT / "ui" / "index.html"
+if not UI_INDEX.exists():
+    fallback_ui = BASE_DIR / "ui" / "index.html"
+    if fallback_ui.exists():
+        UI_INDEX = fallback_ui
 
 
-def ok(*, request_id: str, thread_id: Optional[str], text: Optional[str] = None, debug: Any = None, data: Any = None):
+class GenerateRequest(BaseModel):
+    user_text: str = Field(..., min_length=1)
+    mode: Literal["production", "debug"] = "production"
+
+
+def ok(
+    *,
+    request_id: str,
+    thread_id: Optional[str],
+    text: Optional[str],
+    debug: Optional[Dict[str, Any]],
+    data: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
     return {
         "request_id": request_id,
         "thread_id": thread_id,
@@ -44,127 +55,65 @@ def ok(*, request_id: str, thread_id: Optional[str], text: Optional[str] = None,
     }
 
 
-def err(*, request_id: str, code: str, message: str):
+def err(*, request_id: str, code: str, message: str) -> Dict[str, Any]:
     return {
+        "request_id": request_id,
         "error": {
             "code": code,
             "message": message,
-            "request_id": request_id,
-        }
+        },
     }
 
 
-class GenerateRequest(BaseModel):
-    user_text: str = Field(..., min_length=1)
-    mode: Literal["production", "debug"] = "production"
+app = FastAPI(title=APP_TITLE, version=APP_VERSION)
 
 
-def _get_active_attachments(thread) -> List[Dict[str, Any]]:
-    attachments = getattr(thread, "active_attachments", None) or []
-    normalized: List[Dict[str, Any]] = []
-    for item in attachments:
-        if isinstance(item, dict):
-            text = str(item.get("text", "") or "")
-            name = str(item.get("name", "attachment") or "attachment")
-            media_type = item.get("media_type")
-            if text:
-                normalized.append({
-                    "name": name,
-                    "text": text,
-                    "media_type": media_type,
-                    "chars": len(text),
-                })
-    if not normalized:
-        legacy_name = getattr(thread, "active_attachment_name", None)
-        legacy_text = getattr(thread, "active_attachment_text", None)
-        if legacy_text:
-            normalized.append({
-                "name": legacy_name or "attachment",
-                "text": legacy_text,
-                "media_type": None,
-                "chars": len(legacy_text),
-            })
-    return normalized
+def _coerce_loopcycle(result: Dict[str, Any]) -> LoopCycle:
+    loopcycle_payload = dict(result.get("loopcycle") or {})
+    return LoopCycle.model_validate(loopcycle_payload)
 
 
-def _set_active_attachments(thread, attachments: List[Dict[str, Any]]) -> None:
-    thread.active_attachments = attachments
-    if attachments:
-        thread.active_attachment_name = attachments[0]["name"]
-        thread.active_attachment_text = attachments[0]["text"]
-    else:
-        thread.active_attachment_name = None
-        thread.active_attachment_text = None
-
-
-def _clear_active_attachments(thread) -> None:
-    thread.active_attachments = []
-    thread.active_attachment_name = None
-    thread.active_attachment_text = None
-
-
-def _active_attachment_names(thread) -> List[str]:
-    return [item["name"] for item in _get_active_attachments(thread)]
-
-
-def _active_attachment_sources(thread) -> Optional[list[str]]:
-    attachments = _get_active_attachments(thread)
-    if not attachments:
+def _coerce_debug_drift(result: Dict[str, Any]) -> Optional[DriftEvent]:
+    debug = result.get("debug") or {}
+    if not debug or not debug.get("drift_detected"):
         return None
-    return [f"ATTACHMENT ({item['name']}):\n{item['text']}" for item in attachments]
+    return DriftEvent(
+        kind=str(debug.get("drift_kind") or "unknown_drift"),
+        severity="low",
+        detected_at_stage=str(debug.get("drift_kind") or "unknown"),
+        reintegration_stage=debug.get("reintegration_stage"),
+    )
 
 
-def _combined_attachment_block(thread) -> str:
-    sources = _active_attachment_sources(thread) or []
-    return "\n\n".join(sources)
+def _attachment_sources_from_thread(thread: Any) -> list[str]:
+    sources: list[str] = []
+    active_name = getattr(thread, "active_attachment_name", None)
+    active_text = getattr(thread, "active_attachment_text", None)
+    if active_name and active_text:
+        sources.append(f"ATTACHMENT ({active_name}):\n{active_text}")
+    for item in getattr(thread, "active_attachments", []) or []:
+        name = str(item.get("name", "")).strip()
+        text = str(item.get("text", "") or "")
+        if name and text:
+            source = f"ATTACHMENT ({name}):\n{text}"
+            if source not in sources:
+                sources.append(source)
+    return sources
 
 
-def _inject_attachment_metadata(result: Dict[str, Any], thread) -> None:
-    names = _active_attachment_names(thread)
-    payload = {
-        "active_attachment_count": len(names),
-        "active_attachment_names": names,
-        "active_attachment_present": bool(names),
-    }
-    if isinstance(result.get("debug"), dict):
-        result["debug"]["attachments"] = payload
-    if isinstance(result.get("loopcycle"), dict):
-        notes = result["loopcycle"].setdefault("notes", {})
-        if isinstance(notes, dict):
-            notes["active_attachment_count"] = len(names)
-            notes["active_attachment_names"] = names
-
-
-def _extract_text_from_upload(upload: UploadFile) -> str:
-    name = (upload.filename or "").lower()
-    data = upload.file.read()
-
-    if name.endswith(".txt") or name.endswith(".md"):
-        return data.decode("utf-8", errors="replace")
-
-    if name.endswith(".docx"):
-        doc = Document(io.BytesIO(data))
-        parts = []
-        for p in doc.paragraphs:
-            t = (p.text or "").strip()
-            if t:
-                parts.append(t)
-        return "\n".join(parts)
-
-    if name.endswith(".pdf"):
-        parts = []
-        reader = PdfReader(io.BytesIO(data))
-        for page in reader.pages:
-            text = (page.extract_text() or "").strip()
-            if text:
-                parts.append(text)
-        return "\n\n".join(parts)
-
-    raise HTTPException(status_code=400, detail="Unsupported file type. Use .pdf, .docx, .txt, or .md")
+@app.get("/", response_class=HTMLResponse)
+@app.get("/ui", response_class=HTMLResponse)
+def ui() -> HTMLResponse:
+    if not UI_INDEX.exists():
+        return HTMLResponse(
+            "<html><body><h1>UI not found</h1><p>ui/index.html is missing.</p></body></html>",
+            status_code=404,
+        )
+    return HTMLResponse(UI_INDEX.read_text(encoding="utf-8", errors="replace"))
 
 
 @app.post("/generate")
-async def generate(req: GenerateRequest):
+async def generate(req: GenerateRequest) -> Dict[str, Any]:
     request_id = str(uuid4())
     try:
         result = run_cbra(req.user_text, mode=req.mode)
@@ -173,217 +122,152 @@ async def generate(req: GenerateRequest):
             thread_id=None,
             text=result.get("text"),
             debug=result.get("debug"),
-            data=None,
+            data={"loopcycle": result.get("loopcycle")},
         )
-    except Exception as e:
-        return err(request_id=request_id, code="INTERNAL_ERROR", message=str(e))
+    except Exception as exc:
+        return err(request_id=request_id, code="INTERNAL_ERROR", message=str(exc))
 
 
 @app.post("/chat/{thread_id}")
-def chat(thread_id: str, request: GenerateRequest):
+async def chat(thread_id: str, req: GenerateRequest) -> Dict[str, Any]:
+    request_id = str(uuid4())
+    try:
+        thread = get_thread(thread_id)
+        sources = _attachment_sources_from_thread(thread) if thread is not None else []
+
+        append_message(thread_id, Message(role="user", content=req.user_text))
+        current_field_id = getattr(thread, "current_field_id", None) if thread is not None else None
+
+        result = run_cbra(
+            req.user_text,
+            mode=req.mode,
+            thread_id=thread_id,
+            field_id=current_field_id,
+            sources=sources,
+        )
+
+        append_message(thread_id, Message(role="assistant", content=str(result.get("text") or "")))
+
+        loopcycle = _coerce_loopcycle(result)
+        append_loopcycle(thread_id, loopcycle)
+
+        drift = _coerce_debug_drift(result)
+        if drift is not None:
+            append_drift_event(thread_id, drift)
+
+        return ok(
+            request_id=request_id,
+            thread_id=thread_id,
+            text=result.get("text"),
+            debug=result.get("debug"),
+            data={"loopcycle": result.get("loopcycle")},
+        )
+    except Exception as exc:
+        return err(request_id=request_id, code="INTERNAL_ERROR", message=str(exc))
+
+
+@app.get("/thread/{thread_id}")
+def get_thread_route(thread_id: str) -> Dict[str, Any]:
     request_id = str(uuid4())
     try:
         thread = get_thread(thread_id)
         if thread is None:
-            thread = create_thread(thread_id)
-
-        append_message(
-            thread_id,
-            Message(role="user", content=request.user_text),
-        )
-
-        effective_user_text = request.user_text
-
-        result = run_cbra(
-            effective_user_text,
-            mode=request.mode,
+            return err(request_id=request_id, code="NOT_FOUND", message="Thread not found")
+        return ok(
+            request_id=request_id,
             thread_id=thread_id,
-            field_id=thread.current_field_id,
-            sources=_active_attachment_sources(thread),
+            text=None,
+            debug=None,
+            data={"thread": thread.model_dump()},
         )
-
-        if "loopcycle" in result and isinstance(result["loopcycle"], dict):
-            append_loopcycle(thread_id, LoopCycle(**result["loopcycle"]))
-
-        lc = result.get("loopcycle") if isinstance(result.get("loopcycle"), dict) else None
-        if lc and lc.get("drift_detected"):
-            drift_notes = lc.get("notes") if isinstance(lc.get("notes"), dict) else {}
-            reintegration_target = drift_notes.get("reintegration_target") or lc.get("reintegration_stage") or "Field Entry"
-            detected_at_stage = drift_notes.get("detected_at_stage") or "Articulation"
-            reintegration_stage = drift_notes.get("reintegration_stage") or lc.get("reintegration_stage")
-
-            last_event = thread.drift_events[-1] if getattr(thread, "drift_events", None) else None
-            is_duplicate = (
-                last_event is not None
-                and last_event.kind == "DRIFT_DETECTED"
-                and last_event.reintegration_target == reintegration_target
-                and last_event.detected_at_stage == detected_at_stage
-                and last_event.reintegration_stage == reintegration_stage
-            )
-
-            if not is_duplicate:
-                append_drift_event(
-                    thread_id,
-                    DriftEvent(
-                        kind="DRIFT_DETECTED",
-                        severity="low",
-                        reintegration_target=reintegration_target,
-                        detected_at_stage=detected_at_stage,
-                        reintegration_stage=reintegration_stage,
-                        notes=f"Drift detected during {detected_at_stage} stage.",
-                    ),
-                )
-
-        append_message(
-            thread_id,
-            Message(role="assistant", content=result["text"]),
-        )
-
-        _inject_attachment_metadata(result, thread)
-        return result
-    except Exception as e:
-        return err(request_id=request_id, code="INTERNAL_ERROR", message=str(e))
-
-
-@app.get("/thread/{thread_id}")
-def get_thread_route(thread_id: str):
-    request_id = str(uuid4())
-
-    thread = get_thread(thread_id)
-    if thread is None:
-        thread = create_thread(thread_id)
-
-    return ok(
-        request_id=request_id,
-        thread_id=thread.id,
-        text=None,
-        debug=None,
-        data=thread.model_dump(),
-    )
+    except Exception as exc:
+        return err(request_id=request_id, code="INTERNAL_ERROR", message=str(exc))
 
 
 @app.get("/thread/{thread_id}/export")
 def export_thread(thread_id: str):
-    request_id = str(uuid4())
-    thread = get_thread(thread_id)
-    if thread is None:
-        thread = create_thread(thread_id)
-
-    return ok(
-        request_id=request_id,
-        thread_id=thread_id,
-        text=None,
-        debug=None,
-        data=thread.model_dump(),
+    export_path = export_thread_markdown(thread_id)
+    return FileResponse(
+        path=str(export_path),
+        media_type="text/markdown",
+        filename=Path(export_path).name,
     )
 
 
 @app.get("/field/{field_id}")
-def read_field(field_id: str):
+def read_field(field_id: str) -> Dict[str, Any]:
     request_id = str(uuid4())
-    field = get_field(field_id)
-    if field is None:
-        return err(request_id=request_id, code="FIELD_NOT_FOUND", message="Field not found")
-    return ok(
-        request_id=request_id,
-        thread_id=field.thread_id,
-        text=None,
-        debug=None,
-        data=field.dict() if hasattr(field, "dict") else field.model_dump(),
-    )
+    try:
+        field = get_field(field_id)
+        if field is None:
+            return err(request_id=request_id, code="NOT_FOUND", message="Field not found")
+        payload = field.model_dump() if hasattr(field, "model_dump") else dict(field)
+        return ok(
+            request_id=request_id,
+            thread_id=payload.get("thread_id"),
+            text=None,
+            debug=None,
+            data={"field": payload},
+        )
+    except Exception as exc:
+        return err(request_id=request_id, code="INTERNAL_ERROR", message=str(exc))
 
 
 @app.post("/chat/{thread_id}/file")
-def chat_with_file(
+async def chat_with_file(
     thread_id: str,
     user_text: str = Form(""),
     mode: Literal["production", "debug"] = Form("production"),
     upload: Optional[UploadFile] = File(None),
-    uploads: Optional[List[UploadFile]] = File(None),
-):
-    thread = get_thread(thread_id) or create_thread(thread_id)
+    uploads: Optional[list[UploadFile]] = File(None),
+) -> Dict[str, Any]:
+    request_id = str(uuid4())
+    try:
+        saved_attachments = []
 
-    incoming_uploads: List[UploadFile] = []
-    if upload is not None and getattr(upload, "filename", None):
-        incoming_uploads.append(upload)
-    for item in uploads or []:
-        if item is not None and getattr(item, "filename", None):
-            incoming_uploads.append(item)
+        all_uploads: list[UploadFile] = []
+        if upload is not None:
+            all_uploads.append(upload)
+        if uploads:
+            all_uploads.extend(uploads)
 
-    if not incoming_uploads:
-        raise HTTPException(status_code=400, detail="No file uploaded")
+        for item in all_uploads:
+            raw = await item.read()
+            text = raw.decode("utf-8", errors="replace")
+            set_active_attachment(thread_id, item.filename or "attachment.txt", text)
+            saved_attachments.append(
+                {
+                    "name": item.filename or "attachment.txt",
+                    "chars": len(text),
+                }
+            )
 
-    attachments: List[Dict[str, Any]] = []
-    MAX_CHARS = 25000
-    for item in incoming_uploads:
-        doc_text = _extract_text_from_upload(item)
-        if len(doc_text) > MAX_CHARS:
-            doc_text = doc_text[:MAX_CHARS] + "\n\n[TRUNCATED]"
-        attachments.append({
-            "name": item.filename or "attachment",
-            "text": doc_text,
-            "media_type": getattr(item, "content_type", None),
-            "chars": len(doc_text),
-        })
+        if not user_text.strip():
+            return ok(
+                request_id=request_id,
+                thread_id=thread_id,
+                text=None,
+                debug=None,
+                data={"attachments": saved_attachments},
+            )
 
-    _set_active_attachments(thread, attachments)
-
-    combined = (user_text or "").strip()
-
-    attached_names = ", ".join(_active_attachment_names(thread))
-    append_message(thread_id, Message(
-        role="user",
-        content=f"{user_text}\n\n[Attached: {attached_names}]",
-    ))
-
-    result = run_cbra(
-        user_text=combined or "Use the attached document(s).",
-        mode=mode,
-        thread_id=thread_id,
-        field_id=thread.current_field_id,
-        sources=_active_attachment_sources(thread),
-    )
-
-    append_message(thread_id, Message(
-        role="assistant",
-        content=result.get("text", ""),
-    ))
-
-    if "loopcycle" in result and isinstance(result["loopcycle"], dict):
-        append_loopcycle(thread_id, LoopCycle(**result["loopcycle"]))
-
-    _inject_attachment_metadata(result, thread)
-    return {
-        "request_id": str(uuid4()),
-        "thread_id": thread_id,
-        "text": result.get("text", ""),
-        "debug": result.get("debug"),
-        "loopcycle": result.get("loopcycle"),
-        "data": None,
-    }
+        req = GenerateRequest(user_text=user_text, mode=mode)
+        return await chat(thread_id, req)
+    except Exception as exc:
+        return err(request_id=request_id, code="INTERNAL_ERROR", message=str(exc))
 
 
 @app.post("/thread/{thread_id}/attachments/clear")
-def clear_active_attachment(thread_id: str):
+def clear_active_attachment_route(thread_id: str) -> Dict[str, Any]:
     request_id = str(uuid4())
-    thread = get_thread(thread_id)
-    if thread is None:
-        thread = create_thread(thread_id)
-
-    cleared_names = _active_attachment_names(thread)
-    _clear_active_attachments(thread)
-
-    return ok(
-        request_id=request_id,
-        thread_id=thread_id,
-        text=None,
-        debug=None,
-        data={
-            "cleared": bool(cleared_names),
-            "cleared_attachment_name": cleared_names[0] if cleared_names else None,
-            "cleared_attachment_names": cleared_names,
-            "active_attachment_name": None,
-            "active_attachment_names": [],
-            "active_attachment_count": 0,
-        },
-    )
+    try:
+        clear_active_attachment(thread_id)
+        return ok(
+            request_id=request_id,
+            thread_id=thread_id,
+            text=None,
+            debug=None,
+            data={"cleared": True},
+        )
+    except Exception as exc:
+        return err(request_id=request_id, code="INTERNAL_ERROR", message=str(exc))
