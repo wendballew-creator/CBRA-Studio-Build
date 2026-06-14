@@ -1,49 +1,58 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse
-from cbra.engine import initialize_field_state, step_field
-from cbra.models import FieldState
+from cbra.engine import initialize_field_state, step_field, articulate
+from cbra.models import Stream
 import uvicorn
 
 app = FastAPI()
-
-# Global state for the UI demo - Initializing the Field
-current_field = initialize_field_state("UI Monitor Active: Exploring Posthumanist Logic")
+state = initialize_field_state("The Creative Becoming of the Human")
 
 @app.get("/ui/", response_class=HTMLResponse)
 async def get_ui():
+    history_html = ""
+    for s in state.streams:
+        # User messages are subtle, AI responses are bold and grounded
+        bg = "#f0f7ff" if s.kind == "user_input" else "#f9f0ff" if s.kind == "live_world" else "#ffffff"
+        border = "1px solid #d0e0f0" if s.kind == "user_input" else "2px solid #2c3e50"
+        label = "YOU" if s.kind == "user_input" else "WORLD MATERIAL" if s.kind == "live_world" else "CBRA"
+        
+        history_html += f"""
+        <div style="background:{bg}; border:{border}; padding:15px; margin-bottom:15px; border-radius:8px;">
+            <strong style="font-size:0.7em; color:#666; text-transform:uppercase;">{label}</strong><br>
+            <div style="margin-top:5px; line-height:1.5;">{s.payload.get('text')}</div>
+        </div>"""
+
     return f"""
     <html>
-        <head><title>CBRA v11 Monitor</title></head>
-        <body style="font-family: sans-serif; padding: 40px; background-color: #f4f4f9;">
-            <h1 style="color: #2c3e50;">CBRA v11 Field Monitor</h1>
-            <div style="border: 2px solid #2c3e50; padding: 20px; background: white; border-radius: 8px; max-width: 600px;">
-                <p><strong>Field ID:</strong> <code style="background: #eee; padding: 2px 4px;">{current_field.id}</code></p>
-                <p><strong>Phenomena:</strong> {current_field.field_signature['phenomena']}</p>
-                <hr>
-                <p><strong>Care Tension:</strong> <span style="color: {'#e74c3c' if current_field.field_values.care_tension > 0.6 else '#27ae60'};">{current_field.field_values.care_tension:.2f}</span></p>
-                <p><strong>Field Coherence:</strong> {current_field.field_values.coherence:.2f}</p>
-                <p><strong>Timestep:</strong> {current_field.timestep}</p>
+        <body style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 750px; margin: auto; padding: 50px; background: #fafafa; color: #1a1a1a;">
+            <header style="margin-bottom:30px; border-bottom:1px solid #eee; padding-bottom:20px;">
+                <h1 style="margin:0; font-weight:300;">CBRA v11</h1>
+                <p style="color:#888; font-size:0.9em;">Substrate Status: {state.field_values.care_tension:.2f} Tension | {state.field_values.coherence:.2f} Coherence</p>
+            </header>
+            
+            <div style="height: 500px; overflow-y: auto; padding-right: 10px;">
+                {history_html or "<p style='color:#bbb;'>Awaiting your proposition...</p>"}
             </div>
-            <form action="/ui/step" method="post">
-                <button type="submit" style="margin-top: 20px; padding: 12px 24px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
-                    Perform Intra-active Step
+
+            <form action="/ui/talk" method="post" style="margin-top: 30px; display: flex; gap: 10px;">
+                <input type="text" name="message" placeholder="Type a thought..." autofocus required 
+                       style="flex-grow: 1; padding: 15px; border: 1px solid #ccc; border-radius: 5px; outline: none; font-size:16px;">
+                <button type="submit" style="padding: 15px 30px; background: #2c3e50; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 600;">
+                    INTRA-ACT
                 </button>
             </form>
-            <p style="font-size: 0.8em; color: #7f8c8d; margin-top: 20px;">Substrate Status: Stable (Python 3.9.6 compatible)</p>
         </body>
     </html>
     """
 
-@app.post("/ui/step")
-async def take_step():
-    global current_field
-    # This calls the stable Intra-action operator we just tested
-    step_field(current_field, "UI Manual Step")
-    return {
-        "status": "Field Stepped", 
-        "new_tension": round(current_field.field_values.care_tension, 2),
-        "new_coherence": round(current_field.field_values.coherence, 2)
-    }
+@app.post("/ui/talk")
+async def talk(message: str = Form(...)):
+    global state
+    state.streams.append(Stream(stream_id="user", kind="user_input", payload={"text": message}))
+    step_field(state, message)
+    response = articulate(state)
+    state.streams.append(Stream(stream_id="cbra", kind="articulation", payload={"text": response}))
+    return HTMLResponse("<script>window.location.href='/ui/'</script>")
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
