@@ -4,6 +4,7 @@ from collections import defaultdict
 from itertools import combinations
 from math import sqrt
 from typing import Any, Dict, List, Tuple
+from pathlib import Path
 
 from .models import FieldState, Stream
 
@@ -46,6 +47,102 @@ def _focus_affinity(stream: Stream, focus_terms: List[str]) -> float:
 def _stream_weight(stream: Stream) -> float:
     return _clamp01((stream.participation * 0.7) + (stream.persistence * 0.3))
 
+VAULT_DIR = Path(__file__).resolve().parent.parent / "research_vault"
+VAULT_EXTENSIONS = {".txt", ".md"}
+
+
+def _vault_files() -> List[Path]:
+    if not VAULT_DIR.exists():
+        return []
+    return sorted(
+        [
+            path
+            for path in VAULT_DIR.iterdir()
+            if path.is_file() and path.suffix.lower() in VAULT_EXTENSIONS
+        ]
+    )
+
+
+def _paragraph_chunks(text: str, *, min_chars: int = 80) -> List[str]:
+    import re
+
+    raw_parts = re.split(r"\n\s*\n+", text or "")
+    chunks: List[str] = []
+    for part in raw_parts:
+        cleaned = re.sub(r"\s+", " ", part).strip()
+        if len(cleaned) >= min_chars:
+            chunks.append(cleaned)
+    return chunks
+
+
+def _fragment_score(focus: str, fragment_text: str, source_name: str) -> float:
+    focus_terms = list(dict.fromkeys(_tokenize(focus or "")))
+    fragment_terms = list(dict.fromkeys(_tokenize(fragment_text or "")))
+    overlap = len(set(focus_terms) & set(fragment_terms))
+    jaccard = _jaccard(focus_terms, fragment_terms)
+
+    source_bonus = 0.0
+    lowered_name = source_name.lower()
+    if "posthuman" in lowered_name:
+        source_bonus += 0.25
+    if "theory" in lowered_name:
+        source_bonus += 0.20
+    if "rules" in lowered_name or "cut" in lowered_name:
+        source_bonus += 0.20
+
+    density_bonus = min(len(fragment_terms) / 120.0, 0.25)
+    return (overlap * 1.5) + (jaccard * 2.0) + source_bonus + density_bonus
+
+
+def _select_vault_fragments(focus: str, *, limit: int = 2) -> List[Dict[str, Any]]:
+    candidates: List[Dict[str, Any]] = []
+
+    for file_path in _vault_files():
+        try:
+            text = file_path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+
+        chunks = _paragraph_chunks(text)
+        if not chunks:
+            cleaned = " ".join((text or "").split()).strip()
+            if cleaned:
+                chunks = [cleaned[:1200]]
+
+        for idx, chunk in enumerate(chunks, start=1):
+            score = _fragment_score(focus, chunk, file_path.name)
+            candidates.append(
+                {
+                    "source": file_path.name,
+                    "chunk_index": idx,
+                    "text": chunk,
+                    "score": score,
+                }
+            )
+
+    if not candidates:
+        return []
+
+    candidates.sort(key=lambda item: item["score"], reverse=True)
+
+    selected: List[Dict[str, Any]] = []
+    seen_sources = set()
+
+    for item in candidates:
+        selected.append(item)
+        seen_sources.add(item["source"])
+        if len(selected) >= limit:
+            break
+
+    # If the top few all come from the same file and there are other sources available,
+    # try to diversify the field slightly.
+    if len(selected) == 1:
+        for item in candidates:
+            if item["source"] not in seen_sources:
+                selected.append(item)
+                break
+
+    return selected[:limit]
 
 def _pairwise_relations(state: FieldState, focus: str) -> List[Dict[str, Any]]:
     focus_terms = list(dict.fromkeys(_tokenize(focus or "")))
@@ -219,23 +316,45 @@ def _needs_live_world(state: FieldState, focus: str) -> bool:
 
 def live_world_operator(state: FieldState, focus: str) -> None:
     """
-    Simulates intake of live-world material into the field.
-    In production, replace this with actual retrieval / vault access.
+    Ingests actual research_vault fragments into the field as live-world streams.
     """
-    new_material = "Live-world trace for '{0}' detected at timestep {1}".format(focus, state.timestep)
+    fragments = _select_vault_fragments(focus, limit=2)
 
-    incoming_stream = Stream(
-        stream_id="live_{0}".format(state.timestep),
-        kind="live_world",
-        payload={"text": new_material},
-        participation=0.78,
-        persistence=0.72,
-    )
+    if not fragments:
+        state.notes["last_live_event"] = state.timestep
+        state.notes["vault_ingestion_status"] = "no_fragments_found"
+        state.notes["last_vault_sources"] = []
+        return
 
-    state.streams.append(incoming_stream)
+    ingested_sources: List[str] = []
+
+    for idx, fragment in enumerate(fragments, start=1):
+        source_name = str(fragment.get("source", "unknown"))
+        fragment_text = str(fragment.get("text", "")).strip()
+        fragment_score = float(fragment.get("score", 0.0))
+
+        incoming_stream = Stream(
+            stream_id="live_{0}_{1}".format(state.timestep, idx),
+            kind="live_world",
+            payload={
+                "text": fragment_text,
+                "source": source_name,
+                "chunk_index": int(fragment.get("chunk_index", idx)),
+                "focus": focus,
+                "ingestion_score": round(fragment_score, 4),
+            },
+            participation=_clamp01(0.62 + min(fragment_score * 0.04, 0.22)),
+            persistence=0.72,
+        )
+
+        state.streams.append(incoming_stream)
+        ingested_sources.append(source_name)
+
     state.field_values.openness = _clamp01(max(state.field_values.openness, 0.82))
     state.field_values.cut_permeability = _clamp01(max(state.field_values.cut_permeability, 0.80))
     state.notes["last_live_event"] = state.timestep
+    state.notes["vault_ingestion_status"] = "ingested"
+    state.notes["last_vault_sources"] = ingested_sources
 
 
 def _detect_interpretive_compression(state: FieldState) -> bool:
