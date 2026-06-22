@@ -45,7 +45,7 @@ class RuntimeFieldDynamicsTests(unittest.TestCase):
         second = articulate(state)
 
         self.assertNotEqual(first, second)
-        self.assertIn("Live-world material is participating", second)
+        self.assertIn("A primary live strand", second)
 
     def test_reintegration_redistributes_rather_than_resetting(self):
         state = initialize_field_state("rigid cut")
@@ -133,6 +133,21 @@ class RuntimeFieldDynamicsTests(unittest.TestCase):
             round(divergent.field_values.difference_activity, 4),
         )
 
+    def test_real_vault_ingestion_records_source_and_non_simulated_text(self):
+        state = initialize_field_state("creative becoming under pressure")
+        step_field(state, "creative becoming under pressure")
+
+        live_streams = [s for s in state.streams if s.kind == "live_world"]
+        self.assertGreater(len(live_streams), 0)
+        self.assertEqual(state.notes.get("vault_ingestion_status"), "ingested")
+
+        ingested_streams = [s for s in live_streams if s.payload.get("source")]
+        self.assertGreater(len(ingested_streams), 0)
+
+        for stream in ingested_streams:
+            self.assertTrue(stream.payload.get("source"))
+            self.assertTrue(stream.payload.get("text"))
+            self.assertNotIn("Live-world trace for", stream.payload.get("text", ""))
 
 if __name__ == "__main__":
     unittest.main()

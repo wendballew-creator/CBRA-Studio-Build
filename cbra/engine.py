@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import uuid
@@ -111,6 +112,43 @@ def _dominant_streams(state: FieldState) -> List[Stream]:
     )
 
 
+def _stream_detail(stream: Stream) -> Dict[str, Any]:
+    return {
+        "stream_id": stream.stream_id,
+        "kind": stream.kind,
+        "text": _stream_text(stream),
+        "source": stream.payload.get("source"),
+        "participation": round(stream.participation, 4),
+        "persistence": round(stream.persistence, 4),
+    }
+
+
+def _details_by_ids(state: FieldState, stream_ids: List[str]) -> List[Dict[str, Any]]:
+    lookup = {
+        stream.stream_id: _stream_detail(stream)
+        for stream in state.streams
+        if stream.active
+    }
+    details: List[Dict[str, Any]] = []
+    for stream_id in stream_ids:
+        item = lookup.get(stream_id)
+        if item is not None:
+            details.append(item)
+    return details
+
+
+def _shorten(text: str, limit: int = 220) -> str:
+    cleaned = " ".join((text or "").split()).strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 3].rstrip() + "..."
+
+
+def _source_label(item: Dict[str, Any]) -> str:
+    source = str(item.get("source") or "").strip()
+    return source if source else "the vault"
+
+
 def _fallback_articulation_basis(state: FieldState) -> Dict[str, Any]:
     """
     Build a minimal articulation basis if operators.py has not provided one.
@@ -126,16 +164,14 @@ def _fallback_articulation_basis(state: FieldState) -> Dict[str, Any]:
     )
 
     dominant_payload: List[Dict[str, Any]] = []
-    for stream in dominant[:3]:
-        dominant_payload.append(
-            {
-                "stream_id": stream.stream_id,
-                "kind": stream.kind,
-                "text": _stream_text(stream),
-                "participation": round(stream.participation, 4),
-                "persistence": round(stream.persistence, 4),
-            }
-        )
+    for stream in dominant[:4]:
+        dominant_payload.append(_stream_detail(stream))
+
+    held_open_ids = [
+        stream.stream_id
+        for stream in dominant
+        if 0.35 <= stream.participation <= 0.75 and stream.persistence >= 0.45
+    ][:4]
 
     basis = {
         "focus": focus,
@@ -149,7 +185,8 @@ def _fallback_articulation_basis(state: FieldState) -> Dict[str, Any]:
             "care_tension": round(state.field_values.care_tension, 4),
         },
         "dominant_streams": dominant_payload,
-        "held_open_streams": [],
+        "held_open_streams": held_open_ids,
+        "held_open_details": _details_by_ids(state, held_open_ids),
         "salient_edges": [],
         "movement_vector": str(
             state.notes.get("movement_vector", "hold relation while the field continues to shift")
@@ -169,7 +206,7 @@ def _describe_topology(topology: Dict[str, Any]) -> str:
     if dominant:
         parts.append(
             "Dominant participation is currently carried by {0}.".format(
-                ", ".join(dominant[:3])
+                ", ".join(dominant[:4])
             )
         )
 
@@ -198,6 +235,47 @@ def _describe_topology(topology: Dict[str, Any]) -> str:
     return " ".join(parts).strip()
 
 
+def _weave_live_material(
+    dominant_live: List[Dict[str, Any]],
+    held_open_details: List[Dict[str, Any]],
+) -> str:
+    if not dominant_live and not held_open_details:
+        return "The inquiry is present, and the field is waiting for stronger cross-material participation."
+
+    sentences: List[str] = []
+
+    if dominant_live:
+        primary = dominant_live[0]
+        sentences.append(
+            "A primary live strand from {0} enters through '{1}'.".format(
+                _source_label(primary),
+                _shorten(str(primary.get("text", "") or "")),
+            )
+        )
+
+    if len(dominant_live) > 1:
+        secondary = dominant_live[1]
+        sentences.append(
+            "A second strand from {0} complicates that cut through '{1}'.".format(
+                _source_label(secondary),
+                _shorten(str(secondary.get("text", "") or "")),
+            )
+        )
+
+    if held_open_details:
+        held = held_open_details[0]
+        held_id = str(held.get("stream_id", "a held-open strand"))
+        if not any(item.get("stream_id") == held_id for item in dominant_live):
+            sentences.append(
+                "The field keeps another strand from {0} held open rather than resolved: '{1}'.".format(
+                    _source_label(held),
+                    _shorten(str(held.get("text", "") or "")),
+                )
+            )
+
+    return " ".join(sentences).strip()
+
+
 def _compose_field_articulation(
     state: FieldState,
     basis: Dict[str, Any],
@@ -205,17 +283,6 @@ def _compose_field_articulation(
 ) -> str:
     """
     Generate articulation from actual field values and topology.
-
-    This is still stylized prose, but it is no longer a fixed two-branch script.
-    It changes with:
-    - openness
-    - coherence
-    - difference activity
-    - emergence
-    - care tension
-    - dominant streams
-    - salient edges
-    - movement vector
     """
     focus = str(
         basis.get("focus")
@@ -239,14 +306,18 @@ def _compose_field_articulation(
     )
 
     dominant_streams = basis.get("dominant_streams", []) or []
+    if not dominant_streams:
+        dominant_streams = _details_by_ids(state, topology.get("dominant_streams", []) or [])
+
+    held_open_details = basis.get("held_open_details", []) or []
+    if not held_open_details:
+        held_open_details = _details_by_ids(state, basis.get("held_open_streams", []) or topology.get("held_open_streams", []) or [])
+
     user_stream = next(
         (item for item in dominant_streams if item.get("kind") == "user_input"),
         None,
     )
-    live_stream = next(
-        (item for item in dominant_streams if item.get("kind") == "live_world"),
-        None,
-    )
+    dominant_live = [item for item in dominant_streams if item.get("kind") == "live_world"]
 
     intro = (
         "The field around '{0}' is currently holding {1} openness, {2} coherence, "
@@ -282,26 +353,14 @@ def _compose_field_articulation(
             "A gentle articulation is available without forcing final closure."
         )
 
-    stream_sentence_parts: List[str] = []
-
     if user_stream:
-        stream_sentence_parts.append(
-            "Your current proposition is entering through '{0}'.".format(
-                str(user_stream.get("text", "") or focus)
-            )
+        user_sentence = "Your current proposition is entering through '{0}'.".format(
+            str(user_stream.get("text", "") or focus)
         )
+    else:
+        user_sentence = "The inquiry remains the current orienting pressure."
 
-    if live_stream:
-        stream_sentence_parts.append(
-            "Live-world material is participating through '{0}'.".format(
-                str(live_stream.get("text", "") or "the current trace")
-            )
-        )
-
-    if not stream_sentence_parts:
-        stream_sentence_parts.append(
-            "The inquiry is present, and the field is waiting for stronger cross-material participation."
-        )
+    live_sentence = _weave_live_material(dominant_live, held_open_details)
 
     movement_sentence = "The field presently leans toward this movement: {0}.".format(
         movement_vector
@@ -312,7 +371,8 @@ def _compose_field_articulation(
             intro,
             topology_text,
             cut_sentence,
-            " ".join(stream_sentence_parts).strip(),
+            user_sentence,
+            live_sentence,
             movement_sentence,
         ]
     ).strip()
@@ -321,13 +381,6 @@ def _compose_field_articulation(
 def articulate(state: FieldState) -> str:
     """
     Render articulation from field state rather than from a fixed branch script.
-
-    Primary source:
-    - state.notes['articulation_basis']
-    - state.notes['field_topology']
-
-    Fallback:
-    - derive a minimal basis from current streams and field values
     """
     basis = dict(state.notes.get("articulation_basis") or {})
     if not basis:
@@ -348,3 +401,4 @@ def articulate(state: FieldState) -> str:
     text = _compose_field_articulation(state, basis, topology)
     state.notes["last_articulation"] = text
     return text
+
