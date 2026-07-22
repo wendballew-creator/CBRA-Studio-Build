@@ -6,12 +6,18 @@ from copy import deepcopy
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 from uuid import uuid4
 
-from .articulation import articulate, form_provisional_cut, reinsert_articulation
+from .articulation import (
+    articulate,
+    form_provisional_cut,
+    ready_for_provisional_cut,
+    reinsert_articulation,
+)
 from .emergence import emerge_phenomena
 from .hypotheses import RuntimeHypotheses
 from .models import (
     Apparatus,
     Articulation,
+    CyclePhase,
     CycleResult,
     DriftKind,
     DriftSignal,
@@ -20,12 +26,24 @@ from .models import (
     FieldValues,
     HistoryEntry,
     OperatorDelta,
+    PhaseSnapshot,
+    ReentryTarget,
     ReintegrationTrace,
     StepTrace,
     Stream,
     clamp01,
 )
 from .operators import OPERATOR_ORDER, propose_coactive_updates
+
+
+DRIFT_REENTRY_TARGETS = {
+    DriftKind.ONTOLOGICAL_DRIFT: ReentryTarget.FIELD_ENTRY,
+    DriftKind.COMPRESSION: ReentryTarget.NOTICING,
+    DriftKind.CAPACITY_COLLAPSE: ReentryTarget.RELATIONAL_FRAMING,
+    DriftKind.NARRATIVE_DOMINANCE: ReentryTarget.DIFFRACTIVE_MAPPING,
+    DriftKind.MORALIZATION: ReentryTarget.ARTICULATION,
+    DriftKind.PROCEDURAL_BYPASS: ReentryTarget.FIELD_ENTRY,
+}
 
 
 def _apparatus_streams(
@@ -118,36 +136,47 @@ def initialize_field(
 
 
 def snapshot_field(state: FieldState) -> FieldSnapshot:
+    """Copy every runtime formation except recursive history."""
     return FieldSnapshot(
+        field_id=state.field_id,
         timestep=state.timestep,
-        stream_participation={
-            item.stream_id: item.participation for item in state.streams
-        },
-        relation_values={
-            item.relation_id: (
-                item.co_presence,
-                item.resonance,
-                item.difference,
-                item.interference,
-                item.lineage,
-                item.mutuality,
-                item.apparatus_effect,
-            )
-            for item in state.relations
-        },
+        apparatus=deepcopy(state.apparatus),
+        streams=tuple(deepcopy(state.streams)),
+        relations=tuple(deepcopy(state.relations)),
+        patterns=tuple(deepcopy(state.patterns)),
+        phenomena=tuple(deepcopy(state.phenomena)),
+        cuts=tuple(deepcopy(state.cuts)),
+        articulations=tuple(deepcopy(state.articulations)),
         field_values=state.field_values.as_dict(),
-        phenomenon_ids=list(state.current_phenomenon_ids),
-        cut_id=state.latest_cut().cut_id if state.latest_cut() else None,
-        articulation_ids=[
-            item.articulation_id for item in state.articulations
-        ],
+        current_pattern_ids=tuple(state.current_pattern_ids),
+        current_phenomenon_ids=tuple(state.current_phenomenon_ids),
+        current_cut_id=state.current_cut_id,
+        current_articulation_id=state.current_articulation_id,
+        articulation_eligible=state.articulation_eligible,
+        active_drifts=tuple(deepcopy(state.active_drifts)),
+        pending_drifts=tuple(deepcopy(state.pending_drifts)),
+        pending_reentry_targets=tuple(state.pending_reentry_targets),
     )
 
 
 def _integrate_coactive_deltas(
     state: FieldState,
     deltas: Sequence[OperatorDelta],
-) -> None:
+) -> List[ReentryTarget]:
+    reentry_targets_applied = list(
+        dict.fromkeys(state.pending_reentry_targets)
+    )
+    state.pending_reentry_targets = []
+
+    # A new field update makes prior formations historical.  Their records
+    # remain in the append-only collections, while current identities are
+    # cleared before new patterns and phenomena can emerge.
+    state.current_pattern_ids = []
+    state.current_phenomenon_ids = []
+    state.current_cut_id = None
+    state.current_articulation_id = None
+    state.articulation_eligible = False
+
     stream_changes: Dict[str, float] = {}
     field_changes: Dict[str, float] = {}
     proposed_streams: Dict[str, Stream] = {}
@@ -203,6 +232,7 @@ def _integrate_coactive_deltas(
     state.current_phenomenon_ids = []
     state.timestep += 1
     state.clamp()
+    return reentry_targets_applied
 
 
 def _runtime_drift_signals(
@@ -307,16 +337,16 @@ def _merge_drift_signals(signals: Iterable[DriftSignal]) -> List[DriftSignal]:
     return [merged[kind] for kind in DriftKind if kind in merged]
 
 
-def update_field(
+def _update_field_with_phase_snapshots(
     state: FieldState,
-    hypotheses: Optional[RuntimeHypotheses] = None,
-) -> StepTrace:
-    hypotheses = hypotheses or RuntimeHypotheses()
+    hypotheses: RuntimeHypotheses,
+) -> Tuple[StepTrace, FieldSnapshot, FieldSnapshot]:
     basis_timestep = state.timestep
     # Operator functions are pure proposals over this same pre-update state.
     deltas, care_constraints = propose_coactive_updates(state, hypotheses)
-    _integrate_coactive_deltas(state, deltas)
+    reentry_targets_applied = _integrate_coactive_deltas(state, deltas)
     emerge_phenomena(state, hypotheses)
+    after_update_and_emergence = snapshot_field(state)
     operator_names = [item.operator_name for item in deltas]
     drift_signals = _merge_drift_signals(
         list(
@@ -338,9 +368,14 @@ def update_field(
                 * sum(item.intensity for item in drift_signals)
             )
         )
+    state.articulation_eligible = ready_for_provisional_cut(
+        state,
+        hypotheses,
+    )
     state.clamp()
     assert_native_invariants(state)
-    return StepTrace(
+    after_drift_detection = snapshot_field(state)
+    trace = StepTrace(
         timestep_before=basis_timestep,
         timestep_after=state.timestep,
         calculation_basis_timestep=basis_timestep,
@@ -349,7 +384,18 @@ def update_field(
         care_constraints=care_constraints,
         drift_signals=deepcopy(drift_signals),
         hypotheses=hypotheses.as_dict(),
+        reentry_targets_applied=reentry_targets_applied,
     )
+    return trace, after_update_and_emergence, after_drift_detection
+
+
+def update_field(
+    state: FieldState,
+    hypotheses: Optional[RuntimeHypotheses] = None,
+) -> StepTrace:
+    hypotheses = hypotheses or RuntimeHypotheses()
+    trace, _, _ = _update_field_with_phase_snapshots(state, hypotheses)
+    return trace
 
 
 def _apply_field_changes(
@@ -369,6 +415,9 @@ def _reintegrate_one(
     signal: DriftSignal,
     hypotheses: RuntimeHypotheses,
 ) -> ReintegrationTrace:
+    signal = deepcopy(signal)
+    signal.clamp()
+    reentry_target = DRIFT_REENTRY_TARGETS[signal.kind]
     strength = hypotheses.reintegration_strength * max(
         hypotheses.reintegration_min_signal_influence,
         signal.intensity,
@@ -388,6 +437,10 @@ def _reintegrate_one(
             ),
         }
         trace = "Compression reopened the cut and loosened forced coherence."
+        target_enactment = (
+            "Noticing is reopened by increasing openness and permeability "
+            "while loosening pressure and forced coherence."
+        )
 
     elif signal.kind == DriftKind.NARRATIVE_DOMINANCE:
         material = [
@@ -425,6 +478,10 @@ def _reintegrate_one(
             ),
         }
         trace = "Narrative dominance redistributed participation across all material streams without choosing a replacement narrative."
+        target_enactment = (
+            "Diffractive Mapping is reopened by redistributing participation "
+            "and restoring difference without installing a replacement story."
+        )
 
     elif signal.kind == DriftKind.MORALIZATION:
         requested_fields = {
@@ -447,6 +504,10 @@ def _reintegrate_one(
             ),
         }
         trace = "Moralization softened closure and restored descriptive, revisable orientation."
+        target_enactment = (
+            "Articulation is reopened by softening evaluative closure and "
+            "restoring descriptive, revisable expression."
+        )
 
     elif signal.kind == DriftKind.CAPACITY_COLLAPSE:
         for item in state.streams:
@@ -477,6 +538,10 @@ def _reintegrate_one(
             ),
         }
         trace = "Capacity collapse dampened field intensity while restoring room for care."
+        target_enactment = (
+            "Relational Framing is reopened by reducing intensity and making "
+            "capacity and care constraints visible again."
+        )
 
     elif signal.kind == DriftKind.ONTOLOGICAL_DRIFT:
         for relation in state.relations:
@@ -505,6 +570,10 @@ def _reintegrate_one(
             ),
         }
         trace = "Ontological drift strengthened enacted relations rather than treating streams as pre-existing isolated units."
+        target_enactment = (
+            "Field Entry is reopened by strengthening enacted relation, "
+            "multiplicity, and situated openness."
+        )
 
     else:  # procedural bypass
         requested_fields = {
@@ -522,16 +591,45 @@ def _reintegrate_one(
             ),
         }
         trace = "Procedural bypass kept the field open for a complete co-active update on the next cycle."
+        target_enactment = (
+            "Field Entry is reopened by restoring permeability and openness "
+            "before the next complete co-active update."
+        )
 
     field_changes = _apply_field_changes(state, requested_fields)
     state.clamp()
     return ReintegrationTrace(
         drift_kind=signal.kind,
+        reentry_target=reentry_target,
+        signal_intensity=signal.intensity,
+        signal_evidence=list(signal.evidence),
+        signal_source=signal.source,
+        signal_detected_at=signal.detected_at,
         field_value_changes=field_changes,
         stream_participation_changes=stream_changes,
         relation_changes=relation_changes,
+        invalidated_pattern_ids=[],
+        invalidated_phenomenon_ids=[],
+        invalidated_cut_id=None,
+        invalidated_articulation_id=None,
+        target_enactment=target_enactment,
         trace=trace,
     )
+
+
+def _invalidate_current_formations(
+    state: FieldState,
+) -> Tuple[List[str], List[str], Optional[str], Optional[str]]:
+    pattern_ids = list(state.current_pattern_ids)
+    phenomenon_ids = list(state.current_phenomenon_ids)
+    cut_id = state.current_cut_id
+    articulation_id = state.current_articulation_id
+    state.current_pattern_ids = []
+    state.current_phenomenon_ids = []
+    state.current_cut_id = None
+    state.current_articulation_id = None
+    state.articulation_eligible = False
+    return pattern_ids, phenomenon_ids, cut_id, articulation_id
 
 
 def reintegrate_field(
@@ -541,10 +639,25 @@ def reintegrate_field(
 ) -> List[ReintegrationTrace]:
     hypotheses = hypotheses or RuntimeHypotheses()
     signals = list(signals if signals is not None else state.active_drifts)
+    if not signals:
+        return []
     traces = [
         _reintegrate_one(state, signal, hypotheses)
         for signal in signals
     ]
+    invalidated = _invalidate_current_formations(state)
+    for trace in traces:
+        trace.invalidated_pattern_ids = list(invalidated[0])
+        trace.invalidated_phenomenon_ids = list(invalidated[1])
+        trace.invalidated_cut_id = invalidated[2]
+        trace.invalidated_articulation_id = invalidated[3]
+
+    state.pending_reentry_targets = list(
+        dict.fromkeys(
+            state.pending_reentry_targets
+            + [item.reentry_target for item in traces]
+        )
+    )
     state.field_values.drift_load = clamp01(
         state.field_values.drift_load
         - (hypotheses.reintegration_strength * max(1, len(traces)))
@@ -561,7 +674,11 @@ def run_cycle(
 ) -> CycleResult:
     hypotheses = hypotheses or RuntimeHypotheses()
     before = snapshot_field(state)
-    trace = update_field(state, hypotheses)
+    (
+        trace,
+        after_update_and_emergence,
+        after_drift_detection,
+    ) = _update_field_with_phase_snapshots(state, hypotheses)
     reintegrations: List[ReintegrationTrace] = []
     cut = None
     articulation: Optional[Articulation] = None
@@ -585,21 +702,33 @@ def run_cycle(
             )
 
     after = snapshot_field(state)
-    state.history.append(
-        HistoryEntry(
-            cycle=len(state.history) + 1,
-            before=before,
-            step_trace=deepcopy(trace),
-            reintegrations=deepcopy(reintegrations),
-            cut_id=cut.cut_id if cut is not None else None,
-            articulation_id=(
-                articulation.articulation_id
-                if articulation is not None
-                else None
+    history_entry = HistoryEntry(
+        cycle=len(state.history) + 1,
+        phases=(
+            PhaseSnapshot(CyclePhase.BEFORE_UPDATE, before),
+            PhaseSnapshot(
+                CyclePhase.AFTER_UPDATE_AND_EMERGENCE,
+                after_update_and_emergence,
             ),
-            after=after,
-        )
+            PhaseSnapshot(
+                CyclePhase.AFTER_DRIFT_DETECTION,
+                after_drift_detection,
+            ),
+            PhaseSnapshot(
+                CyclePhase.AFTER_REINTEGRATION_OR_ARTICULATION,
+                after,
+            ),
+        ),
+        step_trace=deepcopy(trace),
+        reintegrations=tuple(deepcopy(reintegrations)),
+        cut_id=cut.cut_id if cut is not None else None,
+        articulation_id=(
+            articulation.articulation_id
+            if articulation is not None
+            else None
+        ),
     )
+    state.history = state.history + (history_entry,)
     assert_native_invariants(state)
     return CycleResult(
         trace=trace,
@@ -650,8 +779,40 @@ def assert_native_invariants(state: FieldState) -> None:
     if not set(state.current_phenomenon_ids).issubset(phenomenon_ids):
         raise AssertionError("current phenomena must exist in field history")
 
-    cut = state.latest_cut()
-    if cut is not None:
+    pattern_ids = {item.pattern_id for item in state.patterns}
+    if not set(state.current_pattern_ids).issubset(pattern_ids):
+        raise AssertionError("current patterns must exist in field history")
+
+    cut_ids = {item.cut_id for item in state.cuts}
+    if (
+        state.current_cut_id is not None
+        and state.current_cut_id not in cut_ids
+    ):
+        raise AssertionError("current cut must exist in field history")
+
+    articulation_ids = {
+        item.articulation_id for item in state.articulations
+    }
+    if (
+        state.current_articulation_id is not None
+        and state.current_articulation_id not in articulation_ids
+    ):
+        raise AssertionError(
+            "current articulation must exist in field history"
+        )
+    if (
+        state.current_articulation_id is not None
+        and state.current_cut_id is None
+    ):
+        raise AssertionError("a current articulation requires a current cut")
+    if state.active_drifts and state.articulation_eligible:
+        raise AssertionError("drift suspends articulation eligibility")
+    if state.articulation_eligible and not state.current_phenomenon_ids:
+        raise AssertionError(
+            "articulation eligibility requires current phenomena"
+        )
+
+    for cut in state.cuts:
         included = set(cut.included_stream_ids)
         held_open = set(cut.held_open_stream_ids)
         if included & held_open:

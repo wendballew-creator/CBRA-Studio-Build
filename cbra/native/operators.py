@@ -515,9 +515,9 @@ def constrain_with_care(
     constrained = deepcopy(list(deltas))
     records: List[CareConstraint] = []
     protected_ids: Set[str] = set()
-    latest_cut = state.latest_cut()
-    if latest_cut is not None:
-        protected_ids.update(latest_cut.held_open_stream_ids)
+    current_cut = state.current_cut()
+    if current_cut is not None:
+        protected_ids.update(current_cut.held_open_stream_ids)
 
     protected_floors = {
         "openness": hypotheses.care_min_openness,

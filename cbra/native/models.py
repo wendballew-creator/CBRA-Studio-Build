@@ -20,6 +20,23 @@ class DriftKind(str, Enum):
     PROCEDURAL_BYPASS = "procedural_bypass"
 
 
+class ReentryTarget(str, Enum):
+    FIELD_ENTRY = "Field Entry"
+    NOTICING = "Noticing"
+    RELATIONAL_FRAMING = "Relational Framing"
+    DIFFRACTIVE_MAPPING = "Diffractive Mapping"
+    ARTICULATION = "Articulation"
+
+
+class CyclePhase(str, Enum):
+    BEFORE_UPDATE = "before_update"
+    AFTER_UPDATE_AND_EMERGENCE = "after_update_and_emergence"
+    AFTER_DRIFT_DETECTION = "after_drift_detection"
+    AFTER_REINTEGRATION_OR_ARTICULATION = (
+        "after_reintegration_or_articulation"
+    )
+
+
 @dataclass
 class Stream:
     stream_id: str
@@ -169,20 +186,6 @@ class OperatorDelta:
 
 
 @dataclass
-class FieldSnapshot:
-    timestep: int
-    stream_participation: Dict[str, float]
-    relation_values: Dict[
-        str,
-        Tuple[float, float, float, float, float, float, float],
-    ]
-    field_values: Dict[str, float]
-    phenomenon_ids: List[str]
-    cut_id: Optional[str]
-    articulation_ids: List[str]
-
-
-@dataclass
 class StepTrace:
     timestep_before: int
     timestep_after: int
@@ -192,15 +195,26 @@ class StepTrace:
     care_constraints: List[CareConstraint]
     drift_signals: List[DriftSignal]
     hypotheses: Dict[str, float]
+    reentry_targets_applied: List[ReentryTarget] = field(default_factory=list)
     coactive: bool = True
 
 
 @dataclass
 class ReintegrationTrace:
     drift_kind: DriftKind
+    reentry_target: ReentryTarget
+    signal_intensity: float
+    signal_evidence: List[str]
+    signal_source: str
+    signal_detected_at: int
     field_value_changes: Dict[str, float]
     stream_participation_changes: Dict[str, float]
     relation_changes: Dict[str, float]
+    invalidated_pattern_ids: List[str]
+    invalidated_phenomenon_ids: List[str]
+    invalidated_cut_id: Optional[str]
+    invalidated_articulation_id: Optional[str]
+    target_enactment: str
     trace: str
 
 
@@ -217,15 +231,103 @@ class Articulation:
     provisional: bool = True
 
 
-@dataclass
+@dataclass(frozen=True)
+class FieldSnapshot:
+    """A complete nonrecursive copy of the field at one lifecycle phase."""
+
+    field_id: str
+    timestep: int
+    apparatus: Apparatus
+    streams: Tuple[Stream, ...]
+    relations: Tuple[Relation, ...]
+    patterns: Tuple[DiffractivePattern, ...]
+    phenomena: Tuple[EmergentPhenomenon, ...]
+    cuts: Tuple[ProvisionalCut, ...]
+    articulations: Tuple[Articulation, ...]
+    field_values: Dict[str, float]
+    current_pattern_ids: Tuple[str, ...]
+    current_phenomenon_ids: Tuple[str, ...]
+    current_cut_id: Optional[str]
+    current_articulation_id: Optional[str]
+    articulation_eligible: bool
+    active_drifts: Tuple[DriftSignal, ...]
+    pending_drifts: Tuple[DriftSignal, ...]
+    pending_reentry_targets: Tuple[ReentryTarget, ...]
+
+    @property
+    def stream_participation(self) -> Dict[str, float]:
+        return {
+            item.stream_id: item.participation for item in self.streams
+        }
+
+    @property
+    def relation_values(
+        self,
+    ) -> Dict[str, Tuple[float, float, float, float, float, float, float]]:
+        return {
+            item.relation_id: (
+                item.co_presence,
+                item.resonance,
+                item.difference,
+                item.interference,
+                item.lineage,
+                item.mutuality,
+                item.apparatus_effect,
+            )
+            for item in self.relations
+        }
+
+    @property
+    def phenomenon_ids(self) -> List[str]:
+        return list(self.current_phenomenon_ids)
+
+    @property
+    def cut_id(self) -> Optional[str]:
+        return self.current_cut_id
+
+    @property
+    def articulation_ids(self) -> List[str]:
+        return [item.articulation_id for item in self.articulations]
+
+
+@dataclass(frozen=True)
+class PhaseSnapshot:
+    phase: CyclePhase
+    field: FieldSnapshot
+
+
+@dataclass(frozen=True)
 class HistoryEntry:
     cycle: int
-    before: FieldSnapshot
+    phases: Tuple[PhaseSnapshot, ...]
     step_trace: StepTrace
-    reintegrations: List[ReintegrationTrace]
+    reintegrations: Tuple[ReintegrationTrace, ...]
     cut_id: Optional[str]
     articulation_id: Optional[str]
-    after: FieldSnapshot
+
+    def snapshot_at(self, phase: CyclePhase) -> FieldSnapshot:
+        for item in self.phases:
+            if item.phase == phase:
+                return item.field
+        raise KeyError("Cycle phase was not recorded: {0}".format(phase.value))
+
+    @property
+    def before(self) -> FieldSnapshot:
+        return self.snapshot_at(CyclePhase.BEFORE_UPDATE)
+
+    @property
+    def after_update_and_emergence(self) -> FieldSnapshot:
+        return self.snapshot_at(CyclePhase.AFTER_UPDATE_AND_EMERGENCE)
+
+    @property
+    def after_drift_detection(self) -> FieldSnapshot:
+        return self.snapshot_at(CyclePhase.AFTER_DRIFT_DETECTION)
+
+    @property
+    def after(self) -> FieldSnapshot:
+        return self.snapshot_at(
+            CyclePhase.AFTER_REINTEGRATION_OR_ARTICULATION
+        )
 
 
 @dataclass
@@ -241,9 +343,13 @@ class FieldState:
     current_phenomenon_ids: List[str] = field(default_factory=list)
     cuts: List[ProvisionalCut] = field(default_factory=list)
     articulations: List[Articulation] = field(default_factory=list)
+    current_cut_id: Optional[str] = None
+    current_articulation_id: Optional[str] = None
+    articulation_eligible: bool = False
     active_drifts: List[DriftSignal] = field(default_factory=list)
     pending_drifts: List[DriftSignal] = field(default_factory=list)
-    history: List[HistoryEntry] = field(default_factory=list)
+    pending_reentry_targets: List[ReentryTarget] = field(default_factory=list)
+    history: Tuple[HistoryEntry, ...] = field(default_factory=tuple)
     timestep: int = 0
 
     def stream(self, stream_id: str) -> Optional[Stream]:
@@ -260,6 +366,30 @@ class FieldState:
 
     def latest_cut(self) -> Optional[ProvisionalCut]:
         return self.cuts[-1] if self.cuts else None
+
+    def current_cut(self) -> Optional[ProvisionalCut]:
+        if self.current_cut_id is None:
+            return None
+        return next(
+            (
+                item
+                for item in self.cuts
+                if item.cut_id == self.current_cut_id
+            ),
+            None,
+        )
+
+    def current_articulation(self) -> Optional[Articulation]:
+        if self.current_articulation_id is None:
+            return None
+        return next(
+            (
+                item
+                for item in self.articulations
+                if item.articulation_id == self.current_articulation_id
+            ),
+            None,
+        )
 
     def clamp(self) -> None:
         self.field_values.clamp()

@@ -85,6 +85,9 @@ def form_provisional_cut(
     )
     if state.latest_cut() is None or state.latest_cut().cut_id != cut.cut_id:
         state.cuts.append(cut)
+    state.current_cut_id = cut.cut_id
+    state.current_articulation_id = None
+    state.articulation_eligible = True
     return cut
 
 
@@ -142,8 +145,10 @@ def articulate(
     state: FieldState,
     cut: Optional[ProvisionalCut] = None,
 ) -> Optional[Articulation]:
-    cut = cut or state.latest_cut()
+    cut = cut or state.current_cut()
     if cut is None:
+        return None
+    if state.current_cut_id != cut.cut_id:
         return None
 
     included = [
@@ -220,6 +225,7 @@ def articulate(
         for item in state.articulations
     ):
         state.articulations.append(articulation)
+    state.current_articulation_id = articulation.articulation_id
     return articulation
 
 
