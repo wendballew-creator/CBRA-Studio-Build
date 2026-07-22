@@ -18,26 +18,49 @@ def _connected_relational_components(
     state: FieldState,
     hypotheses: RuntimeHypotheses,
 ) -> List[Tuple[List[str], List[Relation]]]:
-    active_ids = {
-        item.stream_id for item in state.streams if item.active
+    by_id = {
+        item.stream_id: item for item in state.streams if item.active
+    }
+    # Apparatus and prior articulations participate in formations but do not
+    # act as universal bridges.  Each can attach to more than one distinct
+    # constellation without merging those constellations into one component.
+    mediator_kinds = {"apparatus", "articulation"}
+    anchor_ids = {
+        stream_id
+        for stream_id, stream in by_id.items()
+        if stream.kind not in mediator_kinds
     }
     adjacency: Dict[str, Set[str]] = {
-        stream_id: set() for stream_id in active_ids
+        stream_id: set() for stream_id in anchor_ids
     }
     relations_by_id: Dict[str, Relation] = {}
+    participating_anchor_ids: Set[str] = set()
     for relation in state.relations:
         if not relation.active:
             continue
         if relation.mutuality < hypotheses.emergence_relation_floor:
             continue
-        if relation.left_id not in active_ids or relation.right_id not in active_ids:
+        if relation.left_id not in by_id or relation.right_id not in by_id:
             continue
-        adjacency[relation.left_id].add(relation.right_id)
-        adjacency[relation.right_id].add(relation.left_id)
+
+        left_is_mediator = by_id[relation.left_id].kind in mediator_kinds
+        right_is_mediator = by_id[relation.right_id].kind in mediator_kinds
+        if left_is_mediator and right_is_mediator:
+            continue
+        if not left_is_mediator and not right_is_mediator:
+            adjacency[relation.left_id].add(relation.right_id)
+            adjacency[relation.right_id].add(relation.left_id)
+            participating_anchor_ids.update(
+                [relation.left_id, relation.right_id]
+            )
+        else:
+            participating_anchor_ids.add(
+                relation.right_id if left_is_mediator else relation.left_id
+            )
         relations_by_id[relation.relation_id] = relation
 
     components: List[Tuple[List[str], List[Relation]]] = []
-    unseen = set(active_ids)
+    unseen = set(participating_anchor_ids)
     while unseen:
         seed = min(unseen)
         stack = [seed]
@@ -50,15 +73,34 @@ def _connected_relational_components(
             unseen.discard(current)
             stack.extend(sorted(adjacency[current] - members, reverse=True))
 
-        if len(members) < 2:
-            continue
         component_relations = [
             relation
             for relation in relations_by_id.values()
-            if relation.left_id in members and relation.right_id in members
+            if (
+                relation.left_id in members
+                and (
+                    relation.right_id in members
+                    or by_id[relation.right_id].kind in mediator_kinds
+                )
+            )
+            or (
+                relation.right_id in members
+                and by_id[relation.left_id].kind in mediator_kinds
+            )
         ]
         if component_relations:
-            components.append((sorted(members), component_relations))
+            attached_mediator_ids = {
+                endpoint
+                for relation in component_relations
+                for endpoint in (relation.left_id, relation.right_id)
+                if by_id[endpoint].kind in mediator_kinds
+            }
+            components.append(
+                (
+                    sorted(members | attached_mediator_ids),
+                    component_relations,
+                )
+            )
     return components
 
 
@@ -76,6 +118,12 @@ def emerge_phenomena(
         strength = sum(item.mutuality for item in relations) / len(relations)
         resonance = sum(item.resonance for item in relations) / len(relations)
         difference = sum(item.difference for item in relations) / len(relations)
+        co_presence = sum(item.co_presence for item in relations) / len(relations)
+        interference = sum(item.interference for item in relations) / len(relations)
+        apparatus_effect = (
+            sum(item.apparatus_effect for item in relations) / len(relations)
+        )
+        lineage = sum(item.lineage for item in relations) / len(relations)
         kinds = sorted({by_id[item_id].kind for item_id in stream_ids})
         phenomenon_id = _stable_id(
             "phenomenon",
@@ -90,8 +138,12 @@ def emerge_phenomena(
                 relation_ids=sorted(item.relation_id for item in relations),
                 qualities={
                     "relational_strength": strength,
+                    "co_presence": co_presence,
                     "resonance": resonance,
                     "difference": difference,
+                    "interference": interference,
+                    "apparatus_effect": apparatus_effect,
+                    "lineage": lineage,
                 },
                 timestep=state.timestep,
                 description="Relational constellation across {0}.".format(

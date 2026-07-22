@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from itertools import combinations
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 from uuid import uuid4
 
@@ -126,9 +125,13 @@ def snapshot_field(state: FieldState) -> FieldSnapshot:
         },
         relation_values={
             item.relation_id: (
+                item.co_presence,
                 item.resonance,
                 item.difference,
+                item.interference,
+                item.lineage,
                 item.mutuality,
+                item.apparatus_effect,
             )
             for item in state.relations
         },
@@ -180,16 +183,12 @@ def _integrate_coactive_deltas(
             state.streams.append(proposed_streams[stream_id])
             existing_stream_ids.add(stream_id)
 
-    existing_relations = {
-        item.relation_id: index for index, item in enumerate(state.relations)
-    }
-    for relation_id in sorted(relation_updates):
-        relation = relation_updates[relation_id]
-        index = existing_relations.get(relation_id)
-        if index is None:
-            state.relations.append(relation)
-        else:
-            state.relations[index] = relation
+    # Relations are current enactments, not an accumulating complete graph.
+    # Prior configurations remain available through FieldSnapshot history.
+    state.relations = [
+        relation_updates[relation_id]
+        for relation_id in sorted(relation_updates)
+    ]
 
     current_patterns = []
     known_pattern_ids = {item.pattern_id for item in state.patterns}
@@ -204,29 +203,6 @@ def _integrate_coactive_deltas(
     state.current_phenomenon_ids = []
     state.timestep += 1
     state.clamp()
-
-
-def _relation_density(
-    state: FieldState,
-    eligible_ids: Optional[Sequence[str]] = None,
-) -> float:
-    active_ids = list(
-        eligible_ids
-        if eligible_ids is not None
-        else [item.stream_id for item in state.streams if item.active]
-    )
-    active_id_set = set(active_ids)
-    possible = len(list(combinations(active_ids, 2)))
-    if possible == 0:
-        return 1.0
-    active = sum(
-        1
-        for item in state.relations
-        if item.active
-        and item.left_id in active_id_set
-        and item.right_id in active_id_set
-    )
-    return min(1.0, active / possible)
 
 
 def _runtime_drift_signals(
@@ -291,21 +267,11 @@ def _runtime_drift_signals(
             )
         )
 
-    relation_density = _relation_density(
-        state,
-        [item.stream_id for item in material],
-    )
-    if len(material) >= 2 and relation_density < hypotheses.ontological_relation_density_floor:
-        signals.append(
-            DriftSignal(
-                kind=DriftKind.ONTOLOGICAL_DRIFT,
-                intensity=1.0 - relation_density,
-                evidence=[
-                    "material appears as isolated units rather than through relation"
-                ],
-                detected_at=state.timestep,
-            )
-        )
+    # Sparse enacted topology is compatible with active held-open material.
+    # It is therefore not sufficient evidence of ontological drift.  Until a
+    # detector can observe isolated-agent or fixed-identity reasoning, this
+    # drift form enters through explicit pending signals rather than graph
+    # density, which would force the field back toward universal connection.
 
     missing = set(OPERATOR_ORDER) - set(operator_names)
     if missing:
@@ -671,6 +637,10 @@ def assert_native_invariants(state: FieldState) -> None:
     if len(relation_ids) != len(set(relation_ids)):
         raise AssertionError("native field contains duplicate relation IDs")
     for relation in state.relations:
+        if not relation.active:
+            raise AssertionError(
+                "native field stores enacted relations only"
+            )
         if relation.left_id not in stream_id_set:
             raise AssertionError("relation left endpoint is absent")
         if relation.right_id not in stream_id_set:

@@ -40,16 +40,22 @@ class Relation:
     relation_id: str
     left_id: str
     right_id: str
+    co_presence: float = 0.0
     resonance: float = 0.0
     difference: float = 0.0
+    interference: float = 0.0
+    lineage: float = 0.0
     mutuality: float = 0.0
     apparatus_effect: float = 0.0
     active: bool = True
     traces: List[str] = field(default_factory=list)
 
     def clamp(self) -> None:
+        self.co_presence = clamp01(self.co_presence)
         self.resonance = clamp01(self.resonance)
         self.difference = clamp01(self.difference)
+        self.interference = clamp01(self.interference)
+        self.lineage = clamp01(self.lineage)
         self.mutuality = clamp01(self.mutuality)
         self.apparatus_effect = clamp01(self.apparatus_effect)
 
@@ -166,7 +172,10 @@ class OperatorDelta:
 class FieldSnapshot:
     timestep: int
     stream_participation: Dict[str, float]
-    relation_values: Dict[str, Tuple[float, float, float]]
+    relation_values: Dict[
+        str,
+        Tuple[float, float, float, float, float, float, float],
+    ]
     field_values: Dict[str, float]
     phenomenon_ids: List[str]
     cut_id: Optional[str]

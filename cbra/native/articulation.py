@@ -241,6 +241,9 @@ def reinsert_articulation(
                 "text": articulation.text,
                 "cut_id": articulation.cut_id,
                 "phenomenon_ids": list(articulation.phenomenon_ids),
+                "included_stream_ids": list(
+                    articulation.included_stream_ids
+                ),
                 "held_open_stream_ids": list(
                     articulation.held_open_stream_ids
                 ),

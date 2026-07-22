@@ -32,13 +32,15 @@ class RuntimeHypotheses:
     no_text_cross_kind_difference: float = 0.55
     no_text_same_kind_difference: float = 0.25
     apparatus_relation_effect: float = 0.15
-    relation_mutuality_base: float = 0.42
-    relation_resonance_weight: float = 0.22
-    relation_difference_weight: float = 0.26
+    relation_resonance_weight: float = 0.55
+    relation_interference_weight: float = 0.80
+    relation_lineage_weight: float = 0.85
 
     relation_presence_floor: float = 0.18
-    emergence_relation_floor: float = 0.24
+    emergence_relation_floor: float = 0.18
     play_difference_floor: float = 0.45
+    play_coherence_floor: float = 0.15
+    play_care_capacity_floor: float = 0.55
     diffraction_difference_floor: float = 0.30
 
     intra_participation_base: float = 0.01
@@ -95,7 +97,6 @@ class RuntimeHypotheses:
     narrative_dominance_floor: float = 0.86
     capacity_collapse_floor: float = 0.22
     capacity_tension_ceiling: float = 0.84
-    ontological_relation_density_floor: float = 0.18
     drift_load_signal_weight: float = 0.10
 
     reintegration_strength: float = 0.18

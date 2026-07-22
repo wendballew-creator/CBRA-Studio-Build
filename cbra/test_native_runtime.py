@@ -16,7 +16,11 @@ from cbra.native import (
     update_field,
 )
 from cbra.native.models import ProvisionalCut
-from cbra.native.operators import propose_coactive_updates
+from cbra.native.operators import (
+    propose_coactive_updates,
+    propose_play,
+    relation_for_pair,
+)
 
 
 class NativeRuntimeArchitectureTests(unittest.TestCase):
@@ -93,8 +97,15 @@ class NativeRuntimeArchitectureTests(unittest.TestCase):
             {0},
         )
         self.assertEqual(state.timestep, 1)
-        self.assertTrue(any(delta.proposed_streams for delta in trace.deltas))
         self.assertTrue(any(delta.patterns for delta in trace.deltas))
+        play_delta = next(
+            item for item in trace.deltas if item.operator_name == "play"
+        )
+        self.assertFalse(play_delta.proposed_streams)
+        self.assertIn(
+            "regulatory coherence",
+            play_delta.traces[0],
+        )
         self.assertTrue(state.current_phenomenon_ids)
         self.assertTrue(
             all(
@@ -104,7 +115,7 @@ class NativeRuntimeArchitectureTests(unittest.TestCase):
         )
         self.assertIn("care_max_stream_shift", trace.hypotheses)
 
-    def test_apparatus_is_materialized_and_participates_in_relations(self):
+    def test_apparatus_is_materialized_and_modulates_relations(self):
         state = self.make_field()
         apparatus_ids = {
             item.stream_id
@@ -114,14 +125,11 @@ class NativeRuntimeArchitectureTests(unittest.TestCase):
         self.assertGreaterEqual(len(apparatus_ids), 4)
 
         update_field(state)
-        apparatus_relations = [
-            item
-            for item in state.relations
-            if item.left_id in apparatus_ids or item.right_id in apparatus_ids
-        ]
-        self.assertTrue(apparatus_relations)
         self.assertTrue(
-            any(item.apparatus_effect > 0.0 for item in apparatus_relations)
+            any(item.apparatus_effect > 0.0 for item in state.relations)
+        )
+        self.assertTrue(
+            all(item.co_presence > 0.0 for item in state.relations)
         )
 
     def test_care_changes_the_field_and_constrains_other_operators(self):
@@ -158,7 +166,7 @@ class NativeRuntimeArchitectureTests(unittest.TestCase):
                 stream_id="quiet:1",
                 kind="other",
                 payload={"text": "A quiet strand remains available."},
-                participation=0.0,
+                participation=0.44,
                 persistence=0.90,
             )
         )
@@ -308,6 +316,207 @@ class NativeRuntimeArchitectureTests(unittest.TestCase):
         self.assertFalse(
             any(cycle.trace.drift_signals for cycle in cycles)
         )
+
+    def test_difference_and_co_presence_do_not_manufacture_a_relation(self):
+        hypotheses = RuntimeHypotheses()
+        left = Stream(
+            stream_id="cedar:1",
+            kind="memory",
+            payload={"text": "cedar roots"},
+            participation=0.72,
+            persistence=0.80,
+        )
+        right = Stream(
+            stream_id="river:1",
+            kind="environment",
+            payload={"text": "river current"},
+            participation=0.75,
+            persistence=0.80,
+        )
+
+        evidence = relation_for_pair(left, right, hypotheses)
+
+        self.assertGreater(evidence.co_presence, 0.0)
+        self.assertEqual(evidence.difference, 1.0)
+        self.assertEqual(evidence.interference, 0.0)
+        self.assertEqual(evidence.mutuality, 0.0)
+        self.assertGreater(evidence.apparatus_effect, 0.0)
+
+        state = initialize_field([left, right], field_id="field:sparse")
+        update_field(state, hypotheses)
+        self.assertFalse(state.relations)
+        self.assertFalse(state.current_phenomenon_ids)
+        self.assertTrue(all(item.active for item in state.streams))
+
+    def test_apparatus_can_attach_without_collapsing_constellations(self):
+        state, hypotheses = self.make_two_constellation_field(
+            framing="cedar river"
+        )
+
+        update_field(state, hypotheses)
+        phenomena = [
+            state.phenomenon(item_id)
+            for item_id in state.current_phenomenon_ids
+        ]
+
+        self.assertEqual(len(phenomena), 2)
+        self.assertEqual(
+            {
+                frozenset(
+                    item_id
+                    for item_id in phenomenon.stream_ids
+                    if not item_id.startswith("apparatus:topology")
+                )
+                for phenomenon in phenomena
+            },
+            {
+                frozenset({"a:1", "a:2"}),
+                frozenset({"b:1", "b:2"}),
+            },
+        )
+        self.assertTrue(
+            all(
+                "apparatus:topology:framing" in phenomenon.stream_ids
+                for phenomenon in phenomena
+            )
+        )
+
+    def test_play_waits_for_capacity_and_varies_only_enacted_patterns(self):
+        state, hypotheses = self.make_two_constellation_field()
+
+        initial = propose_play(state, hypotheses)
+        self.assertFalse(initial.proposed_streams)
+
+        state.field_values.coherence = hypotheses.play_coherence_floor
+        ready = propose_play(state, hypotheses)
+        source_pairs = {
+            frozenset(item.payload["source_stream_ids"])
+            for item in ready.proposed_streams
+        }
+        self.assertEqual(
+            source_pairs,
+            {
+                frozenset({"a:1", "a:2"}),
+                frozenset({"b:1", "b:2"}),
+            },
+        )
+        self.assertTrue(
+            all("quiet:1" not in pair for pair in source_pairs)
+        )
+
+        state.field_values.care_capacity = (
+            hypotheses.play_care_capacity_floor - 0.01
+        )
+        constrained = propose_play(state, hypotheses)
+        self.assertFalse(constrained.proposed_streams)
+
+    def test_composite_cut_preserves_distinct_forms_and_active_held_open_material(self):
+        state, hypotheses = self.make_two_constellation_field()
+
+        update_field(state, hypotheses)
+        cut = form_provisional_cut(state, hypotheses)
+
+        self.assertIsNotNone(cut)
+        self.assertEqual(len(cut.phenomenon_ids), 2)
+        self.assertEqual(
+            set(cut.included_stream_ids),
+            {"a:1", "a:2", "b:1", "b:2"},
+        )
+        self.assertIn("quiet:1", cut.held_open_stream_ids)
+        self.assertGreater(state.stream("quiet:1").participation, 0.0)
+        self.assertEqual(cut.excluded_stream_ids, [])
+
+    def test_relation_growth_follows_enactment_not_a_complete_graph(self):
+        state, hypotheses = self.make_two_constellation_field()
+
+        update_field(state, hypotheses)
+        first_relation_ids = {item.relation_id for item in state.relations}
+        update_field(state, hypotheses)
+
+        stream_count = len([item for item in state.streams if item.active])
+        complete_graph_size = stream_count * (stream_count - 1) // 2
+        self.assertEqual(len(first_relation_ids), 2)
+        self.assertEqual(
+            {item.relation_id for item in state.relations},
+            first_relation_ids,
+        )
+        self.assertLess(len(state.relations), complete_graph_size)
+        self.assertTrue(all(item.active for item in state.relations))
+
+    def test_reinserted_articulation_participates_without_collapsing_forms(self):
+        state, hypotheses = self.make_two_constellation_field()
+        update_field(state, hypotheses)
+        cut = form_provisional_cut(state, hypotheses)
+        result = articulate(state, cut)
+        inserted_id = reinsert_articulation(state, result, hypotheses)
+
+        update_field(state, hypotheses)
+        phenomena = [
+            state.phenomenon(item_id)
+            for item_id in state.current_phenomenon_ids
+        ]
+
+        self.assertEqual(len(phenomena), 2)
+        self.assertTrue(
+            all(inserted_id in item.stream_ids for item in phenomena)
+        )
+        self.assertTrue(
+            all("quiet:1" not in item.stream_ids for item in phenomena)
+        )
+
+    def make_two_constellation_field(self, framing="shared inquiry"):
+        hypotheses = RuntimeHypotheses(
+            articulation_emergence_floor=0.05,
+            articulation_coherence_floor=0.05,
+        )
+        state = initialize_field(
+            [
+                Stream(
+                    stream_id="a:1",
+                    kind="memory",
+                    payload={"text": "cedar roots shelter soil"},
+                    participation=0.72,
+                    persistence=0.80,
+                ),
+                Stream(
+                    stream_id="a:2",
+                    kind="user_input",
+                    payload={"text": "cedar soil holds moisture"},
+                    participation=0.74,
+                    persistence=0.80,
+                ),
+                Stream(
+                    stream_id="b:1",
+                    kind="environment",
+                    payload={"text": "river currents shape stone"},
+                    participation=0.70,
+                    persistence=0.80,
+                ),
+                Stream(
+                    stream_id="b:2",
+                    kind="document",
+                    payload={"text": "river stone carries silt"},
+                    participation=0.75,
+                    persistence=0.80,
+                ),
+                Stream(
+                    stream_id="quiet:1",
+                    kind="other",
+                    payload={"text": "lantern ember waits"},
+                    participation=0.61,
+                    persistence=0.80,
+                ),
+            ],
+            apparatus=Apparatus(
+                apparatus_id="apparatus:topology",
+                framing=framing,
+                medium="text chat",
+                institutions=["ChatGPT"],
+            ),
+            field_id="field:topology",
+            hypotheses=hypotheses,
+        )
+        return state, hypotheses
 
 
 if __name__ == "__main__":

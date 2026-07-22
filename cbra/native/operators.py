@@ -12,7 +12,7 @@ from hashlib import sha1
 from itertools import combinations
 from math import sqrt
 import re
-from typing import Dict, Iterable, List, Set, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from .hypotheses import RuntimeHypotheses
 from .models import (
@@ -54,8 +54,12 @@ def _stream_text(stream: Stream) -> str:
     if explicit:
         return explicit
     values: List[str] = []
-    for key in sorted(stream.payload):
-        value = stream.payload[key]
+    # Structural identifiers and numerical metadata describe lineage and
+    # runtime state; treating them as language would fabricate resonance
+    # among generated streams.  Those relations are enacted explicitly by
+    # _declared_source_ids instead.
+    for key in ("label", "title", "summary", "description"):
+        value = stream.payload.get(key)
         if isinstance(value, (str, int, float, bool)):
             values.append(str(value))
         elif isinstance(value, list):
@@ -67,12 +71,21 @@ def _tokens(stream: Stream) -> Set[str]:
     return set(re.findall(r"[a-z0-9]+", _stream_text(stream).lower()))
 
 
+def _declared_source_ids(stream: Stream) -> Set[str]:
+    source_ids: Set[str] = set()
+    for key in ("source_stream_ids", "included_stream_ids"):
+        values = stream.payload.get(key, [])
+        if isinstance(values, (list, tuple, set)):
+            source_ids.update(str(item) for item in values)
+    return source_ids
+
+
 def relation_for_pair(
     left: Stream,
     right: Stream,
     hypotheses: RuntimeHypotheses,
 ) -> Relation:
-    """Describe relational presence without producing a relevance score."""
+    """Describe distinct relational evidence without ranking either stream."""
     if right.stream_id < left.stream_id:
         left, right = right, left
 
@@ -91,31 +104,37 @@ def relation_for_pair(
             else hypotheses.no_text_same_kind_difference
         )
 
-    if left.kind == right.kind:
+    # A shared kind can deepen existing resonance, but a category cannot
+    # manufacture a relation where the streams share no other evidence.
+    if left.kind == right.kind and resonance > 0.0:
         resonance = clamp01(
             resonance + hypotheses.same_kind_resonance_increment
         )
-    else:
+    elif left.kind != right.kind:
         difference = clamp01(
             difference + hypotheses.cross_kind_difference_increment
         )
 
-    apparatus_effect = (
-        hypotheses.apparatus_relation_effect
-        if "apparatus" in {left.kind, right.kind}
-        else 0.0
-    )
-    participation = sqrt(
+    co_presence = sqrt(
         max(0.0, left.participation) * max(0.0, right.participation)
     )
+    interference = clamp01(4.0 * resonance * difference)
+    lineage = float(
+        right.stream_id in _declared_source_ids(left)
+        or left.stream_id in _declared_source_ids(right)
+    )
+
+    # The apparatus participates in every relation as a visible modulation.
+    # It multiplies evidence already present; it cannot create a connection
+    # between streams whose only condition is co-presence or difference.
+    apparatus_effect = hypotheses.apparatus_relation_effect
+    enacted_evidence = clamp01(
+        (hypotheses.relation_resonance_weight * resonance)
+        + (hypotheses.relation_interference_weight * interference)
+        + (hypotheses.relation_lineage_weight * lineage)
+    )
     mutuality = clamp01(
-        participation
-        * (
-            hypotheses.relation_mutuality_base
-            + (hypotheses.relation_resonance_weight * resonance)
-            + (hypotheses.relation_difference_weight * difference)
-            + apparatus_effect
-        )
+        co_presence * enacted_evidence * (1.0 + apparatus_effect)
     )
 
     relation_id = _stable_id("relation", left.stream_id, right.stream_id)
@@ -123,42 +142,86 @@ def relation_for_pair(
         relation_id=relation_id,
         left_id=left.stream_id,
         right_id=right.stream_id,
+        co_presence=co_presence,
         resonance=resonance,
         difference=difference,
+        interference=interference,
+        lineage=lineage,
         mutuality=mutuality,
         apparatus_effect=apparatus_effect,
         traces=[
-            "relation enacted between {0} and {1}".format(
+            "Relational evidence between {0} and {1}: co-presence {2:.3f}, resonance {3:.3f}, difference {4:.3f}, interference {5:.3f}, lineage {6:.3f}, apparatus modulation {7:.3f}.".format(
                 left.stream_id,
                 right.stream_id,
+                co_presence,
+                resonance,
+                difference,
+                interference,
+                lineage,
+                apparatus_effect,
             )
         ],
     )
 
 
-def _all_relations(
+def _candidate_relations(
     state: FieldState,
     hypotheses: RuntimeHypotheses,
 ) -> List[Relation]:
     streams = _active_streams(state)
+    by_id = {item.stream_id: item for item in streams}
+    token_members: Dict[str, Set[str]] = {}
+    candidate_pairs: Set[Tuple[str, str]] = set()
+
+    for stream in streams:
+        for token in _tokens(stream):
+            token_members.setdefault(token, set()).add(stream.stream_id)
+    for members in token_members.values():
+        for left_id, right_id in combinations(sorted(members), 2):
+            candidate_pairs.add((left_id, right_id))
+
+    for stream in streams:
+        for source_id in _declared_source_ids(stream):
+            if source_id not in by_id or source_id == stream.stream_id:
+                continue
+            candidate_pairs.add(tuple(sorted([stream.stream_id, source_id])))
+
     return [
-        relation_for_pair(left, right, hypotheses)
-        for left, right in combinations(streams, 2)
+        relation_for_pair(by_id[left_id], by_id[right_id], hypotheses)
+        for left_id, right_id in sorted(candidate_pairs)
     ]
+
+
+def _enacted_relations(
+    state: FieldState,
+    hypotheses: RuntimeHypotheses,
+) -> List[Relation]:
+    enacted: List[Relation] = []
+    for relation in _candidate_relations(state, hypotheses):
+        relation.active = (
+            relation.mutuality >= hypotheses.relation_presence_floor
+        )
+        if relation.active:
+            enacted.append(relation)
+    return enacted
 
 
 def propose_intra_action(
     state: FieldState,
     hypotheses: RuntimeHypotheses,
+    enacted_relations: Optional[Sequence[Relation]] = None,
 ) -> OperatorDelta:
     delta = OperatorDelta("intra_action", basis_timestep=state.timestep)
-    relations = _all_relations(state, hypotheses)
+    relations = list(
+        enacted_relations
+        if enacted_relations is not None
+        else _enacted_relations(state, hypotheses)
+    )
     incident: Dict[str, List[float]] = {
         item.stream_id: [] for item in _active_streams(state)
     }
 
     for relation in relations:
-        relation.active = relation.mutuality >= hypotheses.relation_presence_floor
         delta.relation_updates[relation.relation_id] = relation
         incident[relation.left_id].append(relation.mutuality)
         incident[relation.right_id].append(relation.mutuality)
@@ -175,10 +238,9 @@ def propose_intra_action(
             )
         )
 
-    active_relations = [item for item in relations if item.active]
     mean_mutuality = (
-        sum(item.mutuality for item in active_relations) / len(active_relations)
-        if active_relations
+        sum(item.mutuality for item in relations) / len(relations)
+        if relations
         else 0.0
     )
     delta.field_value_changes["relational_intensity"] = (
@@ -188,7 +250,7 @@ def propose_intra_action(
         hypotheses.intra_emergence_weight * mean_mutuality
     )
     delta.traces.append(
-        "Mutual formation proposed across every active stream pair; no lead stream was chosen."
+        "Field co-presence remained available across active streams; only relations with enacted resonance, interference, or lineage were materialized."
     )
     return delta
 
@@ -196,11 +258,30 @@ def propose_intra_action(
 def propose_play(
     state: FieldState,
     hypotheses: RuntimeHypotheses,
+    enacted_relations: Optional[Sequence[Relation]] = None,
 ) -> OperatorDelta:
     delta = OperatorDelta("play", basis_timestep=state.timestep)
     existing_ids = {item.stream_id for item in state.streams}
 
-    for left, right in combinations(_active_streams(state), 2):
+    if (
+        state.field_values.coherence < hypotheses.play_coherence_floor
+        or state.field_values.care_capacity
+        < hypotheses.play_care_capacity_floor
+    ):
+        delta.traces.append(
+            "Play remained available without activating because regulatory coherence or care capacity was not yet sufficient for low-consequence variation."
+        )
+        return delta
+
+    by_id = {item.stream_id: item for item in _active_streams(state)}
+    relations = list(
+        enacted_relations
+        if enacted_relations is not None
+        else _enacted_relations(state, hypotheses)
+    )
+    for relation in relations:
+        left = by_id[relation.left_id]
+        right = by_id[relation.right_id]
         if left.kind in {"play_variation", "diffractive_trace"}:
             continue
         if right.kind in {"play_variation", "diffractive_trace"}:
@@ -210,7 +291,6 @@ def propose_play(
         # amplify the interface description instead of widening the inquiry.
         if left.kind == "apparatus" and right.kind == "apparatus":
             continue
-        relation = relation_for_pair(left, right, hypotheses)
         if relation.difference < hypotheses.play_difference_floor:
             continue
 
@@ -235,25 +315,35 @@ def propose_play(
             )
         )
 
-    delta.field_value_changes.update(
-        {
-            "openness": hypotheses.play_openness_change,
-            "multiplicity": hypotheses.play_multiplicity_change,
-            "cut_permeability": hypotheses.play_permeability_change,
-        }
-    )
-    delta.traces.append(
-        "Generative variations preserve both source streams and add relational possibility without resolving either."
-    )
+    if delta.proposed_streams:
+        delta.field_value_changes.update(
+            {
+                "openness": hypotheses.play_openness_change,
+                "multiplicity": hypotheses.play_multiplicity_change,
+                "cut_permeability": hypotheses.play_permeability_change,
+            }
+        )
+        delta.traces.append(
+            "Play varied enacted relational patterns while preserving their source streams and without resolving either."
+        )
+    else:
+        delta.traces.append(
+            "Play found no enacted pattern ready for generative variation and introduced no stream."
+        )
     return delta
 
 
 def propose_diffraction(
     state: FieldState,
     hypotheses: RuntimeHypotheses,
+    enacted_relations: Optional[Sequence[Relation]] = None,
 ) -> OperatorDelta:
     delta = OperatorDelta("diffraction", basis_timestep=state.timestep)
-    relations = _all_relations(state, hypotheses)
+    relations = list(
+        enacted_relations
+        if enacted_relations is not None
+        else _enacted_relations(state, hypotheses)
+    )
     active_differences: List[float] = []
     active_resonances: List[float] = []
 
@@ -322,11 +412,16 @@ def propose_diffraction(
 def propose_creative_becoming(
     state: FieldState,
     hypotheses: RuntimeHypotheses,
+    enacted_relations: Optional[Sequence[Relation]] = None,
 ) -> OperatorDelta:
     delta = OperatorDelta("creative_becoming", basis_timestep=state.timestep)
     relations = [
         item
-        for item in _all_relations(state, hypotheses)
+        for item in (
+            enacted_relations
+            if enacted_relations is not None
+            else _enacted_relations(state, hypotheses)
+        )
         if item.mutuality >= hypotheses.emergence_relation_floor
     ]
 
@@ -491,11 +586,12 @@ def propose_coactive_updates(
     state: FieldState,
     hypotheses: RuntimeHypotheses,
 ) -> Tuple[List[OperatorDelta], List[CareConstraint]]:
+    enacted_relations = _enacted_relations(state, hypotheses)
     proposals = [
-        propose_intra_action(state, hypotheses),
-        propose_play(state, hypotheses),
-        propose_diffraction(state, hypotheses),
-        propose_creative_becoming(state, hypotheses),
+        propose_intra_action(state, hypotheses, enacted_relations),
+        propose_play(state, hypotheses, enacted_relations),
+        propose_diffraction(state, hypotheses, enacted_relations),
+        propose_creative_becoming(state, hypotheses, enacted_relations),
     ]
     constrained, constraints = constrain_with_care(
         state,
