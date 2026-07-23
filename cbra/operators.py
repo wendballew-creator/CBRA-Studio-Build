@@ -476,12 +476,18 @@ def apply_intra_action(state: FieldState, focus: str) -> None:
     """
     Advances the field through relational update rather than simple thresholding.
     """
+    # Field-entry conditions must remain perceptible long enough to shape the
+    # movement they call for.  Computing this after the relational update made
+    # an explicitly high-tension, low-coherence field appear regulated before
+    # the LiveWorld operator could respond to it.
+    live_world_needed = _needs_live_world(state, focus)
+
     state.timestep += 1
 
     _update_stream_dynamics(state, focus)
     _compute_field_values(state, focus)
 
-    if _needs_live_world(state, focus):
+    if live_world_needed:
         live_world_operator(state, focus)
         _update_stream_dynamics(state, focus)
         _compute_field_values(state, focus)
