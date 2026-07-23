@@ -6,12 +6,25 @@ emergence, provisional cuts, articulation, and reinsertion before interface
 concerns are allowed to shape the core.
 """
 
-from .articulation import articulate, form_provisional_cut, reinsert_articulation
+from .articulation import (
+    accept_articulation,
+    articulate,
+    build_articulation_basis,
+    evaluate_articulation_candidate,
+    form_articulation_candidate,
+    form_provisional_cut,
+    reinsert_articulation,
+)
 from .emergence import emerge_phenomena
 from .hypotheses import RuntimeHypotheses
 from .models import (
     Apparatus,
     Articulation,
+    ArticulationBasis,
+    ArticulationCandidate,
+    ArticulationEvaluation,
+    ArticulationFormation,
+    ArticulationMaterial,
     CyclePhase,
     CycleResult,
     DiffractivePattern,
@@ -42,6 +55,11 @@ from .runtime import (
 __all__ = [
     "Apparatus",
     "Articulation",
+    "ArticulationBasis",
+    "ArticulationCandidate",
+    "ArticulationEvaluation",
+    "ArticulationFormation",
+    "ArticulationMaterial",
     "CyclePhase",
     "CycleResult",
     "DRIFT_REENTRY_TARGETS",
@@ -60,11 +78,15 @@ __all__ = [
     "Relation",
     "RuntimeHypotheses",
     "Stream",
+    "accept_articulation",
     "articulate",
+    "build_articulation_basis",
     "emerge_phenomena",
     "form_provisional_cut",
+    "form_articulation_candidate",
     "initialize_field",
     "reinsert_articulation",
+    "evaluate_articulation_candidate",
     "reintegrate_field",
     "run_cycle",
     "run_until_articulation",

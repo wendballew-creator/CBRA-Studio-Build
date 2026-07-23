@@ -32,6 +32,7 @@ class CyclePhase(str, Enum):
     BEFORE_UPDATE = "before_update"
     AFTER_UPDATE_AND_EMERGENCE = "after_update_and_emergence"
     AFTER_DRIFT_DETECTION = "after_drift_detection"
+    AFTER_ARTICULATION_EVALUATION = "after_articulation_evaluation"
     AFTER_REINTEGRATION_OR_ARTICULATION = (
         "after_reintegration_or_articulation"
     )
@@ -213,20 +214,80 @@ class ReintegrationTrace:
     invalidated_pattern_ids: List[str]
     invalidated_phenomenon_ids: List[str]
     invalidated_cut_id: Optional[str]
+    invalidated_candidate_id: Optional[str]
+    invalidated_evaluation_id: Optional[str]
     invalidated_articulation_id: Optional[str]
     target_enactment: str
     trace: str
 
 
 @dataclass
+class ArticulationMaterial:
+    """One stream's non-ranked place in an articulation basis."""
+
+    stream_id: str
+    kind: str
+    text: str
+    source_stream_ids: List[str]
+    provenance: Dict[str, Any]
+
+
+@dataclass
+class ArticulationFormation:
+    """One current phenomenon preserved as a distinct expressive formation."""
+
+    phenomenon_id: str
+    materials: List[ArticulationMaterial]
+    relation_ids: List[str]
+    qualities: Dict[str, float]
+    apparatus_stream_ids: List[str]
+    prior_articulation_ids: List[str]
+    play_variation_ids: List[str]
+
+
+@dataclass
+class ArticulationBasis:
+    """Structured field material from which a candidate is rendered."""
+
+    cut_id: str
+    apparatus_id: str
+    formations: List[ArticulationFormation]
+    held_open_materials: List[ArticulationMaterial]
+    included_stream_ids: List[str]
+    held_open_stream_ids: List[str]
+    relation_ids: List[str]
+
+
+@dataclass
+class ArticulationCandidate:
+    candidate_id: str
+    text: str
+    basis: ArticulationBasis
+    timestep: int
+
+
+@dataclass
+class ArticulationEvaluation:
+    evaluation_id: str
+    candidate_id: str
+    accepted: bool
+    drift_signals: List[DriftSignal]
+    evidence: List[str]
+    timestep: int
+
+
+@dataclass
 class Articulation:
     articulation_id: str
+    candidate_id: str
+    evaluation_id: str
     text: str
     cut_id: str
     phenomenon_ids: List[str]
     included_stream_ids: List[str]
     held_open_stream_ids: List[str]
     relation_ids: List[str]
+    lineage_stream_ids: List[str]
     timestep: int
     provisional: bool = True
 
@@ -243,11 +304,15 @@ class FieldSnapshot:
     patterns: Tuple[DiffractivePattern, ...]
     phenomena: Tuple[EmergentPhenomenon, ...]
     cuts: Tuple[ProvisionalCut, ...]
+    articulation_candidates: Tuple[ArticulationCandidate, ...]
+    articulation_evaluations: Tuple[ArticulationEvaluation, ...]
     articulations: Tuple[Articulation, ...]
     field_values: Dict[str, float]
     current_pattern_ids: Tuple[str, ...]
     current_phenomenon_ids: Tuple[str, ...]
     current_cut_id: Optional[str]
+    current_candidate_id: Optional[str]
+    current_evaluation_id: Optional[str]
     current_articulation_id: Optional[str]
     articulation_eligible: bool
     active_drifts: Tuple[DriftSignal, ...]
@@ -303,6 +368,8 @@ class HistoryEntry:
     step_trace: StepTrace
     reintegrations: Tuple[ReintegrationTrace, ...]
     cut_id: Optional[str]
+    candidate_id: Optional[str]
+    evaluation_id: Optional[str]
     articulation_id: Optional[str]
 
     def snapshot_at(self, phase: CyclePhase) -> FieldSnapshot:
@@ -324,6 +391,10 @@ class HistoryEntry:
         return self.snapshot_at(CyclePhase.AFTER_DRIFT_DETECTION)
 
     @property
+    def after_articulation_evaluation(self) -> FieldSnapshot:
+        return self.snapshot_at(CyclePhase.AFTER_ARTICULATION_EVALUATION)
+
+    @property
     def after(self) -> FieldSnapshot:
         return self.snapshot_at(
             CyclePhase.AFTER_REINTEGRATION_OR_ARTICULATION
@@ -342,8 +413,16 @@ class FieldState:
     current_pattern_ids: List[str] = field(default_factory=list)
     current_phenomenon_ids: List[str] = field(default_factory=list)
     cuts: List[ProvisionalCut] = field(default_factory=list)
+    articulation_candidates: List[ArticulationCandidate] = field(
+        default_factory=list
+    )
+    articulation_evaluations: List[ArticulationEvaluation] = field(
+        default_factory=list
+    )
     articulations: List[Articulation] = field(default_factory=list)
     current_cut_id: Optional[str] = None
+    current_candidate_id: Optional[str] = None
+    current_evaluation_id: Optional[str] = None
     current_articulation_id: Optional[str] = None
     articulation_eligible: bool = False
     active_drifts: List[DriftSignal] = field(default_factory=list)
@@ -391,6 +470,30 @@ class FieldState:
             None,
         )
 
+    def current_candidate(self) -> Optional[ArticulationCandidate]:
+        if self.current_candidate_id is None:
+            return None
+        return next(
+            (
+                item
+                for item in self.articulation_candidates
+                if item.candidate_id == self.current_candidate_id
+            ),
+            None,
+        )
+
+    def current_evaluation(self) -> Optional[ArticulationEvaluation]:
+        if self.current_evaluation_id is None:
+            return None
+        return next(
+            (
+                item
+                for item in self.articulation_evaluations
+                if item.evaluation_id == self.current_evaluation_id
+            ),
+            None,
+        )
+
     def clamp(self) -> None:
         self.field_values.clamp()
         for item in self.streams:
@@ -406,5 +509,7 @@ class CycleResult:
     trace: StepTrace
     reintegrations: List[ReintegrationTrace]
     cut: Optional[ProvisionalCut]
+    articulation_candidate: Optional[ArticulationCandidate]
+    articulation_evaluation: Optional[ArticulationEvaluation]
     articulation: Optional[Articulation]
     reinserted_stream_id: Optional[str]

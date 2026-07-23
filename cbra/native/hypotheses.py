@@ -83,6 +83,13 @@ class RuntimeHypotheses:
     articulation_emergence_floor: float = 0.28
     articulation_coherence_floor: float = 0.20
     articulation_permeability_floor: float = 0.35
+    articulation_quality_signal_floor: float = 0.20
+
+    post_articulation_drift_threshold: float = 0.50
+    post_articulation_moralization_intensity: float = 0.82
+    post_articulation_narrative_intensity: float = 0.78
+    post_articulation_procedural_intensity: float = 0.90
+    post_articulation_evidence_increment: float = 0.05
 
     care_max_stream_shift: float = 0.14
     care_max_field_shift: float = 0.16

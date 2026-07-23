@@ -7,7 +7,9 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 from uuid import uuid4
 
 from .articulation import (
-    articulate,
+    accept_articulation,
+    evaluate_articulation_candidate,
+    form_articulation_candidate,
     form_provisional_cut,
     ready_for_provisional_cut,
     reinsert_articulation,
@@ -17,6 +19,8 @@ from .hypotheses import RuntimeHypotheses
 from .models import (
     Apparatus,
     Articulation,
+    ArticulationCandidate,
+    ArticulationEvaluation,
     CyclePhase,
     CycleResult,
     DriftKind,
@@ -146,11 +150,19 @@ def snapshot_field(state: FieldState) -> FieldSnapshot:
         patterns=tuple(deepcopy(state.patterns)),
         phenomena=tuple(deepcopy(state.phenomena)),
         cuts=tuple(deepcopy(state.cuts)),
+        articulation_candidates=tuple(
+            deepcopy(state.articulation_candidates)
+        ),
+        articulation_evaluations=tuple(
+            deepcopy(state.articulation_evaluations)
+        ),
         articulations=tuple(deepcopy(state.articulations)),
         field_values=state.field_values.as_dict(),
         current_pattern_ids=tuple(state.current_pattern_ids),
         current_phenomenon_ids=tuple(state.current_phenomenon_ids),
         current_cut_id=state.current_cut_id,
+        current_candidate_id=state.current_candidate_id,
+        current_evaluation_id=state.current_evaluation_id,
         current_articulation_id=state.current_articulation_id,
         articulation_eligible=state.articulation_eligible,
         active_drifts=tuple(deepcopy(state.active_drifts)),
@@ -174,6 +186,8 @@ def _integrate_coactive_deltas(
     state.current_pattern_ids = []
     state.current_phenomenon_ids = []
     state.current_cut_id = None
+    state.current_candidate_id = None
+    state.current_evaluation_id = None
     state.current_articulation_id = None
     state.articulation_eligible = False
 
@@ -611,6 +625,8 @@ def _reintegrate_one(
         invalidated_pattern_ids=[],
         invalidated_phenomenon_ids=[],
         invalidated_cut_id=None,
+        invalidated_candidate_id=None,
+        invalidated_evaluation_id=None,
         invalidated_articulation_id=None,
         target_enactment=target_enactment,
         trace=trace,
@@ -619,17 +635,35 @@ def _reintegrate_one(
 
 def _invalidate_current_formations(
     state: FieldState,
-) -> Tuple[List[str], List[str], Optional[str], Optional[str]]:
+) -> Tuple[
+    List[str],
+    List[str],
+    Optional[str],
+    Optional[str],
+    Optional[str],
+    Optional[str],
+]:
     pattern_ids = list(state.current_pattern_ids)
     phenomenon_ids = list(state.current_phenomenon_ids)
     cut_id = state.current_cut_id
+    candidate_id = state.current_candidate_id
+    evaluation_id = state.current_evaluation_id
     articulation_id = state.current_articulation_id
     state.current_pattern_ids = []
     state.current_phenomenon_ids = []
     state.current_cut_id = None
+    state.current_candidate_id = None
+    state.current_evaluation_id = None
     state.current_articulation_id = None
     state.articulation_eligible = False
-    return pattern_ids, phenomenon_ids, cut_id, articulation_id
+    return (
+        pattern_ids,
+        phenomenon_ids,
+        cut_id,
+        candidate_id,
+        evaluation_id,
+        articulation_id,
+    )
 
 
 def reintegrate_field(
@@ -650,7 +684,9 @@ def reintegrate_field(
         trace.invalidated_pattern_ids = list(invalidated[0])
         trace.invalidated_phenomenon_ids = list(invalidated[1])
         trace.invalidated_cut_id = invalidated[2]
-        trace.invalidated_articulation_id = invalidated[3]
+        trace.invalidated_candidate_id = invalidated[3]
+        trace.invalidated_evaluation_id = invalidated[4]
+        trace.invalidated_articulation_id = invalidated[5]
 
     state.pending_reentry_targets = list(
         dict.fromkeys(
@@ -681,10 +717,13 @@ def run_cycle(
     ) = _update_field_with_phase_snapshots(state, hypotheses)
     reintegrations: List[ReintegrationTrace] = []
     cut = None
+    candidate: Optional[ArticulationCandidate] = None
+    evaluation: Optional[ArticulationEvaluation] = None
     articulation: Optional[Articulation] = None
     reinserted_stream_id = None
 
     if trace.drift_signals:
+        after_articulation_evaluation = snapshot_field(state)
         reintegrations = reintegrate_field(
             state,
             trace.drift_signals,
@@ -693,11 +732,46 @@ def run_cycle(
     else:
         cut = form_provisional_cut(state, hypotheses)
         if cut is not None:
-            articulation = articulate(state, cut)
-        if articulation is not None:
-            reinserted_stream_id = reinsert_articulation(
+            candidate = form_articulation_candidate(
                 state,
-                articulation,
+                cut,
+                hypotheses,
+            )
+        if candidate is not None:
+            evaluation = evaluate_articulation_candidate(
+                state,
+                candidate,
+                hypotheses,
+            )
+            if evaluation.drift_signals:
+                state.field_values.drift_load = clamp01(
+                    state.field_values.drift_load
+                    + (
+                        hypotheses.drift_load_signal_weight
+                        * sum(
+                            item.intensity
+                            for item in evaluation.drift_signals
+                        )
+                    )
+                )
+                state.clamp()
+        after_articulation_evaluation = snapshot_field(state)
+        if evaluation is not None and evaluation.accepted:
+            articulation = accept_articulation(
+                state,
+                candidate,
+                evaluation,
+            )
+            if articulation is not None:
+                reinserted_stream_id = reinsert_articulation(
+                    state,
+                    articulation,
+                    hypotheses,
+                )
+        elif evaluation is not None:
+            reintegrations = reintegrate_field(
+                state,
+                evaluation.drift_signals,
                 hypotheses,
             )
 
@@ -715,6 +789,10 @@ def run_cycle(
                 after_drift_detection,
             ),
             PhaseSnapshot(
+                CyclePhase.AFTER_ARTICULATION_EVALUATION,
+                after_articulation_evaluation,
+            ),
+            PhaseSnapshot(
                 CyclePhase.AFTER_REINTEGRATION_OR_ARTICULATION,
                 after,
             ),
@@ -722,6 +800,16 @@ def run_cycle(
         step_trace=deepcopy(trace),
         reintegrations=tuple(deepcopy(reintegrations)),
         cut_id=cut.cut_id if cut is not None else None,
+        candidate_id=(
+            candidate.candidate_id
+            if candidate is not None
+            else None
+        ),
+        evaluation_id=(
+            evaluation.evaluation_id
+            if evaluation is not None
+            else None
+        ),
         articulation_id=(
             articulation.articulation_id
             if articulation is not None
@@ -734,6 +822,8 @@ def run_cycle(
         trace=trace,
         reintegrations=reintegrations,
         cut=cut,
+        articulation_candidate=candidate,
+        articulation_evaluation=evaluation,
         articulation=articulation,
         reinserted_stream_id=reinserted_stream_id,
     )
@@ -790,6 +880,41 @@ def assert_native_invariants(state: FieldState) -> None:
     ):
         raise AssertionError("current cut must exist in field history")
 
+    candidate_ids = {
+        item.candidate_id for item in state.articulation_candidates
+    }
+    if len(candidate_ids) != len(state.articulation_candidates):
+        raise AssertionError("articulation candidate IDs must be unique")
+    if (
+        state.current_candidate_id is not None
+        and state.current_candidate_id not in candidate_ids
+    ):
+        raise AssertionError(
+            "current candidate must exist in field history"
+        )
+
+    evaluation_ids = {
+        item.evaluation_id for item in state.articulation_evaluations
+    }
+    evaluations_by_id = {
+        item.evaluation_id: item
+        for item in state.articulation_evaluations
+    }
+    if len(evaluation_ids) != len(state.articulation_evaluations):
+        raise AssertionError("articulation evaluation IDs must be unique")
+    if (
+        state.current_evaluation_id is not None
+        and state.current_evaluation_id not in evaluation_ids
+    ):
+        raise AssertionError(
+            "current evaluation must exist in field history"
+        )
+    for evaluation in state.articulation_evaluations:
+        if evaluation.candidate_id not in candidate_ids:
+            raise AssertionError(
+                "articulation evaluation references an absent candidate"
+            )
+
     articulation_ids = {
         item.articulation_id for item in state.articulations
     }
@@ -805,6 +930,45 @@ def assert_native_invariants(state: FieldState) -> None:
         and state.current_cut_id is None
     ):
         raise AssertionError("a current articulation requires a current cut")
+    if (
+        state.current_candidate_id is not None
+        and state.current_cut_id is None
+    ):
+        raise AssertionError("a current candidate requires a current cut")
+    if (
+        state.current_evaluation_id is not None
+        and state.current_candidate_id is None
+    ):
+        raise AssertionError(
+            "a current evaluation requires a current candidate"
+        )
+    if state.current_evaluation_id is not None:
+        current_evaluation = evaluations_by_id[state.current_evaluation_id]
+        if current_evaluation.candidate_id != state.current_candidate_id:
+            raise AssertionError(
+                "current evaluation must evaluate the current candidate"
+            )
+    if (
+        state.current_articulation_id is not None
+        and (
+            state.current_candidate_id is None
+            or state.current_evaluation_id is None
+        )
+    ):
+        raise AssertionError(
+            "an accepted articulation requires its current candidate "
+            "and evaluation"
+        )
+    for articulation in state.articulations:
+        if articulation.candidate_id not in candidate_ids:
+            raise AssertionError(
+                "accepted articulation references an absent candidate"
+            )
+        evaluation = evaluations_by_id.get(articulation.evaluation_id)
+        if evaluation is None or not evaluation.accepted:
+            raise AssertionError(
+                "accepted articulation requires an accepted evaluation"
+            )
     if state.active_drifts and state.articulation_eligible:
         raise AssertionError("drift suspends articulation eligibility")
     if state.articulation_eligible and not state.current_phenomenon_ids:

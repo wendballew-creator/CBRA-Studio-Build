@@ -1,5 +1,7 @@
 from copy import deepcopy
+from dataclasses import replace
 import unittest
+from unittest.mock import patch
 
 from cbra.native import (
     Apparatus,
@@ -11,6 +13,7 @@ from cbra.native import (
     RuntimeHypotheses,
     Stream,
     articulate,
+    form_articulation_candidate,
     form_provisional_cut,
     initialize_field,
     reinsert_articulation,
@@ -207,20 +210,43 @@ class NativeRuntimeArchitectureTests(unittest.TestCase):
         result = articulate(state, cut)
 
         self.assertIsNotNone(result)
-        self.assertIn(
+        self.assertNotIn(
             "How can creative becoming stay open under pressure?",
+            result.text,
+        )
+        self.assertIn(
+            "creative becoming stay open under pressure",
             result.text,
         )
         self.assertEqual(result.cut_id, cut.cut_id)
         self.assertEqual(result.included_stream_ids, cut.included_stream_ids)
         self.assertTrue(result.provisional)
+        evaluation = state.current_evaluation()
+        self.assertIsNotNone(evaluation)
+        self.assertTrue(evaluation.accepted)
+        self.assertEqual(result.evaluation_id, evaluation.evaluation_id)
 
         stream_id = reinsert_articulation(state, result)
         inserted = state.stream(stream_id)
         self.assertIsNotNone(inserted)
         self.assertEqual(inserted.kind, "articulation")
-        self.assertEqual(inserted.payload["text"], result.text)
+        self.assertNotIn("text", inserted.payload)
         self.assertEqual(inserted.payload["cut_id"], cut.cut_id)
+        self.assertEqual(
+            inserted.payload["included_stream_ids"],
+            cut.included_stream_ids,
+        )
+        self.assertEqual(reinsert_articulation(state, result), stream_id)
+        self.assertEqual(
+            len(
+                [
+                    item
+                    for item in state.streams
+                    if item.stream_id == stream_id
+                ]
+            ),
+            1,
+        )
 
         update_field(state, hypotheses)
         self.assertTrue(
@@ -524,6 +550,7 @@ class NativeRuntimeArchitectureTests(unittest.TestCase):
                 CyclePhase.BEFORE_UPDATE,
                 CyclePhase.AFTER_UPDATE_AND_EMERGENCE,
                 CyclePhase.AFTER_DRIFT_DETECTION,
+                CyclePhase.AFTER_ARTICULATION_EVALUATION,
                 CyclePhase.AFTER_REINTEGRATION_OR_ARTICULATION,
             ],
         )
@@ -691,6 +718,250 @@ class NativeRuntimeArchitectureTests(unittest.TestCase):
         self.assertIsInstance(state.history, tuple)
         self.assertEqual(state.history[0], first_entry)
         self.assertEqual([item.cycle for item in state.history], [1, 2])
+
+    def test_situated_expression_preserves_distinct_forms_without_runtime_language(self):
+        state, hypotheses = self.make_two_constellation_field()
+
+        result = run_cycle(state, hypotheses)
+
+        self.assertIsNotNone(result.articulation)
+        self.assertIsNotNone(result.articulation_candidate)
+        self.assertIsNotNone(result.articulation_evaluation)
+        self.assertTrue(result.articulation_evaluation.accepted)
+        entry = state.history[-1]
+        self.assertEqual(
+            entry.after_articulation_evaluation.current_candidate_id,
+            result.articulation_candidate.candidate_id,
+        )
+        self.assertEqual(
+            entry.after_articulation_evaluation.current_evaluation_id,
+            result.articulation_evaluation.evaluation_id,
+        )
+        self.assertIsNone(
+            entry.after_articulation_evaluation.current_articulation_id
+        )
+        self.assertEqual(
+            entry.after.current_articulation_id,
+            result.articulation.articulation_id,
+        )
+        basis = result.articulation_candidate.basis
+        self.assertEqual(len(basis.formations), 2)
+        self.assertEqual(
+            {
+                item.phenomenon_id for item in basis.formations
+            },
+            set(result.cut.phenomenon_ids),
+        )
+
+        text = result.articulation.text
+        self.assertEqual(text.count("One formation"), 1)
+        self.assertEqual(text.count("Another formation"), 1)
+        self.assertIn("cedar roots shelter soil", text)
+        self.assertIn("river currents shape stone", text)
+        self.assertIn("lantern ember waits", text)
+        self.assertIn("remains held open", text)
+        for internal in (
+            "stream:",
+            "phenomenon:",
+            "cut:",
+            "text chat apparatus",
+            "relational strength",
+            "cut permeability",
+            "user_input",
+        ):
+            self.assertNotIn(internal, text.lower())
+        self.assertNotRegex(
+            text.lower(),
+            r"(?:stream|phenomenon|relation|cut|articulation):[a-z0-9]",
+        )
+
+    def test_prior_articulation_returns_through_lineage_without_text_growth(self):
+        state, hypotheses = self.make_two_constellation_field()
+        texts = []
+
+        for _ in range(6):
+            result = run_cycle(state, hypotheses)
+            self.assertIsNotNone(result.articulation)
+            texts.append(result.articulation.text)
+
+        articulation_streams = [
+            item for item in state.streams if item.kind == "articulation"
+        ]
+        self.assertEqual(
+            len(articulation_streams),
+            len(state.articulations),
+        )
+        self.assertEqual(
+            len({item.stream_id for item in articulation_streams}),
+            len(articulation_streams),
+        )
+        self.assertTrue(
+            all("text" not in item.payload for item in articulation_streams)
+        )
+        self.assertTrue(
+            all(item.payload["included_stream_ids"] for item in articulation_streams)
+        )
+        self.assertTrue(
+            all(item.payload["source_stream_ids"] for item in articulation_streams)
+        )
+        self.assertTrue(
+            all(
+                state.stream(source_id).kind
+                not in {"apparatus", "articulation", "play_variation"}
+                for item in articulation_streams
+                for source_id in item.payload["source_stream_ids"]
+            )
+        )
+        self.assertLess(len(state.relations), 40)
+        self.assertLess(max(map(len, texts)) - min(map(len, texts)), 900)
+        self.assertTrue(
+            all(
+                text.count(
+                    "What has already been articulated is present through "
+                    "its effects"
+                )
+                <= 2
+                for text in texts
+            )
+        )
+
+    def test_post_articulation_moralization_reenters_at_articulation(self):
+        state, hypotheses = self.make_two_constellation_field()
+        text = (
+            "One formation says you should accept the right answer. "
+            "\n\nAnother formation remains perceptible. "
+            "Other material remains held open. This settles the matter."
+        )
+
+        result = self.run_cycle_with_candidate_text(
+            state,
+            hypotheses,
+            text,
+        )
+
+        self.assertIsNone(result.articulation)
+        self.assertIsNone(result.reinserted_stream_id)
+        self.assertFalse(result.articulation_evaluation.accepted)
+        self.assertEqual(
+            {
+                item.kind
+                for item in result.articulation_evaluation.drift_signals
+            },
+            {DriftKind.MORALIZATION},
+        )
+        self.assertEqual(
+            {item.reentry_target for item in result.reintegrations},
+            {ReentryTarget.ARTICULATION},
+        )
+        self.assertEqual(
+            result.reintegrations[0].invalidated_candidate_id,
+            result.articulation_candidate.candidate_id,
+        )
+        self.assertEqual(
+            result.reintegrations[0].invalidated_evaluation_id,
+            result.articulation_evaluation.evaluation_id,
+        )
+        entry = state.history[-1]
+        self.assertEqual(
+            entry.after_articulation_evaluation.current_candidate_id,
+            result.articulation_candidate.candidate_id,
+        )
+        self.assertTrue(
+            entry.after_articulation_evaluation.active_drifts
+        )
+        self.assertIsNone(entry.after.current_candidate_id)
+        self.assertIsNone(entry.after.current_evaluation_id)
+        self.assertIsNone(entry.articulation_id)
+        self.assertIn(
+            result.articulation_candidate.candidate_id,
+            {
+                item.candidate_id
+                for item in entry.after.articulation_candidates
+            },
+        )
+
+    def test_post_articulation_procedural_bypass_reenters_at_field_entry(self):
+        state, hypotheses = self.make_two_constellation_field()
+        text = (
+            "One formation reports that the pipeline selected "
+            "stream:user:1.\n\nAnother formation remains perceptible. "
+            "Other material remains held open."
+        )
+
+        result = self.run_cycle_with_candidate_text(
+            state,
+            hypotheses,
+            text,
+        )
+
+        self.assertFalse(result.articulation_evaluation.accepted)
+        self.assertEqual(
+            {
+                item.kind
+                for item in result.articulation_evaluation.drift_signals
+            },
+            {DriftKind.PROCEDURAL_BYPASS},
+        )
+        self.assertEqual(
+            {item.reentry_target for item in result.reintegrations},
+            {ReentryTarget.FIELD_ENTRY},
+        )
+
+    def test_post_articulation_narrative_dominance_reopens_mapping(self):
+        state, hypotheses = self.make_two_constellation_field()
+        text = (
+            "One formation remains visible. Another formation remains "
+            "visible. The only explanation is a single story. "
+            "Other material remains held open."
+        )
+
+        result = self.run_cycle_with_candidate_text(
+            state,
+            hypotheses,
+            text,
+        )
+
+        self.assertFalse(result.articulation_evaluation.accepted)
+        self.assertEqual(
+            {
+                item.kind
+                for item in result.articulation_evaluation.drift_signals
+            },
+            {DriftKind.NARRATIVE_DOMINANCE},
+        )
+        self.assertEqual(
+            {item.reentry_target for item in result.reintegrations},
+            {ReentryTarget.DIFFRACTIVE_MAPPING},
+        )
+
+    def run_cycle_with_candidate_text(self, state, hypotheses, text):
+        native_factory = form_articulation_candidate
+
+        def forced_factory(inner_state, cut, inner_hypotheses):
+            candidate = native_factory(
+                inner_state,
+                cut,
+                inner_hypotheses,
+            )
+            forced = replace(
+                candidate,
+                candidate_id="{0}:forced".format(candidate.candidate_id),
+                text=text,
+            )
+            inner_state.articulation_candidates = [
+                item
+                for item in inner_state.articulation_candidates
+                if item.candidate_id != candidate.candidate_id
+            ]
+            inner_state.articulation_candidates.append(forced)
+            inner_state.current_candidate_id = forced.candidate_id
+            return forced
+
+        with patch(
+            "cbra.native.runtime.form_articulation_candidate",
+            side_effect=forced_factory,
+        ):
+            return run_cycle(state, hypotheses)
 
     def make_two_constellation_field(self, framing="shared inquiry"):
         hypotheses = RuntimeHypotheses(

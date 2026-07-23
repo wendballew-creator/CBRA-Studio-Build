@@ -1,12 +1,73 @@
-"""Provisional cuts and articulation derived from field configuration."""
+"""Provisional cuts, situated expression, evaluation, and reinsertion."""
 
 from __future__ import annotations
 
+from copy import deepcopy
 from hashlib import sha1
-from typing import List, Optional
+import re
+from typing import Iterable, List, Optional, Sequence
 
 from .hypotheses import RuntimeHypotheses
-from .models import Articulation, FieldState, ProvisionalCut, Stream
+from .models import (
+    Articulation,
+    ArticulationBasis,
+    ArticulationCandidate,
+    ArticulationEvaluation,
+    ArticulationFormation,
+    ArticulationMaterial,
+    DriftKind,
+    DriftSignal,
+    FieldState,
+    ProvisionalCut,
+    Stream,
+    clamp01,
+)
+
+
+MORALIZATION_PATTERNS = (
+    r"\byou should\b",
+    r"\byou must\b",
+    r"\byou need to\b",
+    r"\byou have to\b",
+    r"\bought to\b",
+    r"\bthe right (?:answer|choice|way)\b",
+    r"\bthe wrong (?:answer|choice|way)\b",
+    r"\bclearly\b",
+    r"\bobviously\b",
+)
+
+CLOSURE_PATTERNS = (
+    r"\bthe answer is\b",
+    r"\bthere is no alternative\b",
+    r"\bthis settles\b",
+    r"\bmust be resolved\b",
+    r"\bfinal account\b",
+)
+
+NARRATIVE_DOMINANCE_PATTERNS = (
+    r"\bthe only explanation\b",
+    r"\bthe real reason\b",
+    r"\bthis proves\b",
+    r"\bnothing else explains\b",
+    r"\bsimply because\b",
+)
+
+PROCEDURAL_PATTERNS = (
+    r"\b(?:stream|relation|phenomenon|cut|articulation):[a-z0-9]",
+    r"\bfield id\b",
+    r"\bapparatus id\b",
+    r"\btimestep\b",
+    r"\boperator delta\b",
+    r"\bpipeline\b",
+    r"\bprovisional cut\b",
+    r"\bcut permeability\b",
+    r"\brelational strength\b",
+    r"\bstream type\b",
+    r"\bselected elements\b",
+    r"\btext_chat apparatus\b",
+    r"\b(?:coherence|resonance|difference|permeability|mutuality)"
+    r"\s+(?:is\s+)?0\.\d+",
+)
 
 
 def _stable_id(prefix: str, *parts: str) -> str:
@@ -78,7 +139,7 @@ def form_provisional_cut(
         apparatus_id=state.apparatus.apparatus_id,
         permeability=state.field_values.cut_permeability,
         timestep=state.timestep,
-        # The core deliberately makes no semantic exclusion.  Material that is
+        # The core deliberately makes no semantic exclusion. Material that is
         # not participating in this temporary relational component is held
         # open and remains available to later field updates.
         excluded_stream_ids=[],
@@ -86,138 +147,498 @@ def form_provisional_cut(
     if state.latest_cut() is None or state.latest_cut().cut_id != cut.cut_id:
         state.cuts.append(cut)
     state.current_cut_id = cut.cut_id
+    state.current_candidate_id = None
+    state.current_evaluation_id = None
     state.current_articulation_id = None
     state.articulation_eligible = True
     return cut
 
 
-def _shorten(text: str, limit: int = 180) -> str:
-    text = " ".join(str(text or "").split()).strip()
-    if len(text) <= limit:
-        return text
-    return text[: limit - 1].rstrip() + "…"
+def _clean_text(text: str) -> str:
+    return " ".join(str(text or "").split()).strip()
 
 
-def _stream_clause(stream: Stream) -> str:
-    if stream.kind == "apparatus":
-        facet = str(stream.payload.get("facet", "apparatus"))
-        values = stream.payload.get("values", [])
-        rendered = ", ".join(str(item) for item in values)
-        return "apparatus {0} ({1})".format(facet, _shorten(rendered))
-
-    if stream.kind == "play_variation":
-        source_ids = stream.payload.get("source_stream_ids", [])
-        return "a playable reconfiguration across {0}".format(
-            " and ".join(str(item) for item in source_ids)
+def _descriptive_fragment(text: str, limit: int = 180) -> str:
+    """Keep material present without returning a user's question as a quote."""
+    text = _clean_text(text)
+    was_question = text.endswith("?")
+    text = text.rstrip("?.! ")
+    if was_question:
+        text = re.sub(
+            r"^(?:how|what|why|when|where|who)\s+"
+            r"(?:can|could|should|would|do|does|did|is|are|am|"
+            r"might|may|will)\s+",
+            "",
+            text,
+            flags=re.IGNORECASE,
         )
-
-    if stream.kind == "articulation":
-        return "a prior articulation ({0})".format(
-            _shorten(str(stream.payload.get("text", "")), 120)
+        text = re.sub(
+            r"^(?:can|could|should|would|do|does|did|is|are|am|"
+            r"might|may|will)\s+",
+            "",
+            text,
+            flags=re.IGNORECASE,
         )
-
-    text = str(
-        stream.payload.get("text")
-        or stream.payload.get("label")
-        or stream.payload.get("title")
-        or ""
-    ).strip()
-    source = str(stream.payload.get("source", "") or "").strip()
-    label = stream.kind
-    if source:
-        label = "{0} from {1}".format(label, source)
-    if text:
-        return "{0} ('{1}')".format(label, _shorten(text))
-    return "{0} ({1})".format(label, stream.stream_id)
+    if text and text[0].isupper() and not text[:2].isupper():
+        text = text[0].lower() + text[1:]
+    if len(text) > limit:
+        text = text[: limit - 1].rstrip() + "…"
+    return text
 
 
-def _join_clauses(clauses: List[str]) -> str:
-    if not clauses:
-        return ""
-    if len(clauses) == 1:
-        return clauses[0]
-    if len(clauses) == 2:
-        return "{0} and {1}".format(clauses[0], clauses[1])
-    return "{0}, and {1}".format(", ".join(clauses[:-1]), clauses[-1])
+def _stream_source_ids(stream: Stream) -> List[str]:
+    source_ids = set()
+    keys = (
+        ("source_stream_ids",)
+        if stream.payload.get("source_stream_ids")
+        else ("included_stream_ids",)
+    )
+    for key in keys:
+        values = stream.payload.get(key, [])
+        if isinstance(values, (list, tuple, set)):
+            source_ids.update(str(item) for item in values)
+    return sorted(source_ids)
 
 
-def articulate(
+def _flatten_material_lineage(
+    state: FieldState,
+    basis: ArticulationBasis,
+) -> List[str]:
+    """Return original included material without recursive mediator lineage."""
+    lineage = set()
+    frontier = list(basis.included_stream_ids)
+    visited = set()
+    while frontier:
+        stream_id = frontier.pop()
+        if stream_id in visited:
+            continue
+        visited.add(stream_id)
+        stream = state.stream(stream_id)
+        if stream is None:
+            continue
+        if stream.kind == "apparatus":
+            continue
+        if stream.kind in {"articulation", "play_variation"}:
+            frontier.extend(_stream_source_ids(stream))
+            continue
+        lineage.add(stream.stream_id)
+    return sorted(lineage)
+
+
+def _stream_material(stream: Stream) -> ArticulationMaterial:
+    # Prior articulations return through lineage and relational effects. Their
+    # complete accepted text remains in append-only history, not in the next
+    # expression basis.
+    if stream.kind in {"apparatus", "articulation", "play_variation"}:
+        text = ""
+    else:
+        text = str(
+            stream.payload.get("text")
+            or stream.payload.get("label")
+            or stream.payload.get("title")
+            or stream.payload.get("summary")
+            or stream.payload.get("description")
+            or ""
+        )
+    return ArticulationMaterial(
+        stream_id=stream.stream_id,
+        kind=stream.kind,
+        text=_descriptive_fragment(text),
+        source_stream_ids=_stream_source_ids(stream),
+        provenance=deepcopy(stream.provenance),
+    )
+
+
+def build_articulation_basis(
     state: FieldState,
     cut: Optional[ProvisionalCut] = None,
-) -> Optional[Articulation]:
+) -> Optional[ArticulationBasis]:
+    """Preserve every current formation without ranking its material."""
     cut = cut or state.current_cut()
-    if cut is None:
-        return None
-    if state.current_cut_id != cut.cut_id:
+    if cut is None or state.current_cut_id != cut.cut_id:
         return None
 
-    included = [
-        state.stream(item_id) for item_id in cut.included_stream_ids
-    ]
-    included = [item for item in included if item is not None]
-    held_open = [
-        state.stream(item_id) for item_id in cut.held_open_stream_ids
-    ]
-    held_open = [item for item in held_open if item is not None]
-    phenomena = [
-        state.phenomenon(item_id) for item_id in cut.phenomenon_ids
-    ]
-    phenomena = [item for item in phenomena if item is not None]
-
-    opening = (
-        "Within the {0} apparatus, this field is provisionally forming through {1}."
-    ).format(
-        state.apparatus.medium,
-        _join_clauses([_stream_clause(item) for item in included]),
-    )
-
-    pattern_clauses: List[str] = []
-    for phenomenon in phenomena:
-        strength = phenomenon.qualities.get("relational_strength", 0.0)
-        resonance = phenomenon.qualities.get("resonance", 0.0)
-        difference = phenomenon.qualities.get("difference", 0.0)
-        pattern_clauses.append(
-            "{0} Relational strength is {1:.2f}, resonance {2:.2f}, and difference {3:.2f}; difference remains part of the form.".format(
-                phenomenon.description,
-                strength,
-                resonance,
-                difference,
+    formations: List[ArticulationFormation] = []
+    for phenomenon_id in cut.phenomenon_ids:
+        phenomenon = state.phenomenon(phenomenon_id)
+        if phenomenon is None:
+            continue
+        streams = [
+            state.stream(stream_id) for stream_id in phenomenon.stream_ids
+        ]
+        streams = [item for item in streams if item is not None]
+        materials = [_stream_material(item) for item in streams]
+        formations.append(
+            ArticulationFormation(
+                phenomenon_id=phenomenon.phenomenon_id,
+                materials=materials,
+                relation_ids=list(phenomenon.relation_ids),
+                qualities=dict(phenomenon.qualities),
+                apparatus_stream_ids=[
+                    item.stream_id
+                    for item in streams
+                    if item.kind == "apparatus"
+                ],
+                prior_articulation_ids=[
+                    str(item.payload.get("articulation_id", ""))
+                    for item in streams
+                    if item.kind == "articulation"
+                    and item.payload.get("articulation_id")
+                ],
+                play_variation_ids=[
+                    item.stream_id
+                    for item in streams
+                    if item.kind == "play_variation"
+                ],
             )
         )
-    pattern_text = " ".join(pattern_clauses)
 
-    if held_open:
-        held_open_text = (
-            "Material held open rather than resolved is {0}."
-        ).format(
-            _join_clauses([_stream_clause(item) for item in held_open])
-        )
-    else:
-        held_open_text = (
-            "No active stream is discarded by this cut; the boundary remains available to revision."
-        )
-
-    closing = (
-        "This articulation is a permeable cut ({0:.2f}), not a final account."
-    ).format(cut.permeability)
-    text = "\n\n".join(
-        item for item in [opening, pattern_text, held_open_text, closing] if item
-    )
-
-    articulation_id = _stable_id(
-        "articulation",
-        state.field_id,
-        cut.cut_id,
-        text,
-    )
-    articulation = Articulation(
-        articulation_id=articulation_id,
-        text=text,
+    held_open = [
+        state.stream(stream_id) for stream_id in cut.held_open_stream_ids
+    ]
+    return ArticulationBasis(
         cut_id=cut.cut_id,
-        phenomenon_ids=list(cut.phenomenon_ids),
+        apparatus_id=cut.apparatus_id,
+        formations=formations,
+        held_open_materials=[
+            _stream_material(item)
+            for item in held_open
+            if item is not None
+        ],
         included_stream_ids=list(cut.included_stream_ids),
         held_open_stream_ids=list(cut.held_open_stream_ids),
         relation_ids=list(cut.relation_ids),
+    )
+
+
+def _join_fragments(fragments: Sequence[str]) -> str:
+    fragments = [item for item in fragments if item]
+    if not fragments:
+        return ""
+    if len(fragments) == 1:
+        return fragments[0]
+    if len(fragments) == 2:
+        return "{0}; and {1}".format(fragments[0], fragments[1])
+    return "{0}; and {1}".format("; ".join(fragments[:-1]), fragments[-1])
+
+
+def _formation_quality_text(
+    formation: ArticulationFormation,
+    hypotheses: RuntimeHypotheses,
+) -> str:
+    floor = hypotheses.articulation_quality_signal_floor
+    resonance = formation.qualities.get("resonance", 0.0)
+    difference = formation.qualities.get("difference", 0.0)
+    interference = formation.qualities.get("interference", 0.0)
+    if resonance >= floor and difference >= floor:
+        return (
+            "Shared pattern and difference remain active together, so neither "
+            "has to absorb the other."
+        )
+    if interference >= floor or difference >= floor:
+        return (
+            "Difference remains active within the relation without being "
+            "treated as a problem to resolve."
+        )
+    if resonance >= floor:
+        return (
+            "A shared pattern is perceptible while the account remains open "
+            "to revision."
+        )
+    return "The relation remains tentative and available to change."
+
+
+def _render_formation(
+    formation: ArticulationFormation,
+    index: int,
+    hypotheses: RuntimeHypotheses,
+) -> str:
+    label = "One formation" if index == 0 else "Another formation"
+    fragments = [
+        item.text for item in formation.materials if item.text
+    ]
+    if fragments:
+        opening = "{0} brings these strands into relation: {1}.".format(
+            label,
+            _join_fragments(fragments),
+        )
+    else:
+        opening = (
+            "{0} remains perceptible through relational effects that do not "
+            "need to be restated as source material."
+        ).format(label)
+
+    sentences = [opening, _formation_quality_text(formation, hypotheses)]
+    if formation.apparatus_stream_ids:
+        sentences.append(
+            "The conditions of this exchange participate in how the relation "
+            "can appear."
+        )
+    if formation.prior_articulation_ids:
+        sentences.append(
+            "What has already been articulated is present through its effects "
+            "without being repeated as evidence."
+        )
+    if formation.play_variation_ids:
+        sentences.append(
+            "A possible reconfiguration also remains active within this "
+            "formation."
+        )
+    return " ".join(sentences)
+
+
+def _render_candidate_text(
+    basis: ArticulationBasis,
+    hypotheses: RuntimeHypotheses,
+) -> str:
+    paragraphs = [
+        _render_formation(formation, index, hypotheses)
+        for index, formation in enumerate(basis.formations)
+    ]
+    held_fragments = [
+        item.text for item in basis.held_open_materials if item.text
+    ]
+    if basis.held_open_materials:
+        if held_fragments:
+            held_text = (
+                "Alongside these formations, this material remains held open: "
+                "{0}. It stays available without being forced into resolution."
+            ).format(_join_fragments(held_fragments))
+        else:
+            held_text = (
+                "Alongside these formations, additional relational effects "
+                "remain held open without being forced into resolution."
+            )
+        paragraphs.append(held_text)
+    paragraphs.append(
+        "This orientation is temporary: it can change as these relations and "
+        "the conditions around them change."
+    )
+    return "\n\n".join(item for item in paragraphs if item)
+
+
+def form_articulation_candidate(
+    state: FieldState,
+    cut: Optional[ProvisionalCut] = None,
+    hypotheses: Optional[RuntimeHypotheses] = None,
+) -> Optional[ArticulationCandidate]:
+    hypotheses = hypotheses or RuntimeHypotheses()
+    basis = build_articulation_basis(state, cut)
+    if basis is None or not basis.formations:
+        return None
+    text = _render_candidate_text(basis, hypotheses)
+    candidate_id = _stable_id(
+        "candidate",
+        state.field_id,
+        basis.cut_id,
+        text,
+    )
+    candidate = ArticulationCandidate(
+        candidate_id=candidate_id,
+        text=text,
+        basis=basis,
+        timestep=state.timestep,
+    )
+    if not any(
+        item.candidate_id == candidate_id
+        for item in state.articulation_candidates
+    ):
+        state.articulation_candidates.append(candidate)
+    state.current_candidate_id = candidate_id
+    state.current_evaluation_id = None
+    state.current_articulation_id = None
+    return candidate
+
+
+def _pattern_evidence(
+    text: str,
+    patterns: Iterable[str],
+) -> List[str]:
+    evidence = []
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match is not None:
+            evidence.append("candidate language includes '{0}'".format(match.group(0)))
+    return evidence
+
+
+def _signal_intensity(
+    base: float,
+    evidence_count: int,
+    hypotheses: RuntimeHypotheses,
+) -> float:
+    return clamp01(
+        base
+        + (
+            hypotheses.post_articulation_evidence_increment
+            * max(0, evidence_count - 1)
+        )
+    )
+
+
+def _question_echo_evidence(
+    state: FieldState,
+    candidate: ArticulationCandidate,
+) -> List[str]:
+    normalized_candidate = _clean_text(candidate.text).lower()
+    evidence = []
+    for stream_id in candidate.basis.included_stream_ids:
+        stream = state.stream(stream_id)
+        if stream is None or stream.kind != "user_input":
+            continue
+        text = _clean_text(str(stream.payload.get("text", "")))
+        if text.endswith("?") and text.lower() in normalized_candidate:
+            evidence.append(
+                "candidate repeats a user question instead of forming a relation"
+            )
+    return evidence
+
+
+def evaluate_articulation_candidate(
+    state: FieldState,
+    candidate: ArticulationCandidate,
+    hypotheses: Optional[RuntimeHypotheses] = None,
+) -> ArticulationEvaluation:
+    """Evaluate expression after formation and before acceptance or reinsertion."""
+    hypotheses = hypotheses or RuntimeHypotheses()
+    text = candidate.text
+    signals: List[DriftSignal] = []
+
+    moralization = _pattern_evidence(
+        text,
+        MORALIZATION_PATTERNS + CLOSURE_PATTERNS,
+    )
+    if candidate.basis.held_open_materials and "held open" not in text.lower():
+        moralization.append(
+            "candidate closes material that the provisional boundary holds open"
+        )
+    if moralization:
+        intensity = _signal_intensity(
+            hypotheses.post_articulation_moralization_intensity,
+            len(moralization),
+            hypotheses,
+        )
+        if intensity >= hypotheses.post_articulation_drift_threshold:
+            signals.append(
+                DriftSignal(
+                    kind=DriftKind.MORALIZATION,
+                    intensity=intensity,
+                    evidence=moralization,
+                    detected_at=state.timestep,
+                    source="post_articulation_evaluation",
+                )
+            )
+
+    narrative = _pattern_evidence(text, NARRATIVE_DOMINANCE_PATTERNS)
+    formation_count = len(
+        re.findall(
+            r"(?m)^(?:One|Another) formation\b",
+            text,
+        )
+    )
+    if formation_count < len(candidate.basis.formations):
+        narrative.append(
+            "candidate does not keep every current formation perceptible"
+        )
+    narrative.extend(_question_echo_evidence(state, candidate))
+    if narrative:
+        intensity = _signal_intensity(
+            hypotheses.post_articulation_narrative_intensity,
+            len(narrative),
+            hypotheses,
+        )
+        if intensity >= hypotheses.post_articulation_drift_threshold:
+            signals.append(
+                DriftSignal(
+                    kind=DriftKind.NARRATIVE_DOMINANCE,
+                    intensity=intensity,
+                    evidence=narrative,
+                    detected_at=state.timestep,
+                    source="post_articulation_evaluation",
+                )
+            )
+
+    procedural = _pattern_evidence(text, PROCEDURAL_PATTERNS)
+    if procedural:
+        intensity = _signal_intensity(
+            hypotheses.post_articulation_procedural_intensity,
+            len(procedural),
+            hypotheses,
+        )
+        if intensity >= hypotheses.post_articulation_drift_threshold:
+            signals.append(
+                DriftSignal(
+                    kind=DriftKind.PROCEDURAL_BYPASS,
+                    intensity=intensity,
+                    evidence=procedural,
+                    detected_at=state.timestep,
+                    source="post_articulation_evaluation",
+                )
+            )
+
+    evidence = [
+        item
+        for signal in signals
+        for item in signal.evidence
+    ]
+    evaluation_id = _stable_id(
+        "evaluation",
+        candidate.candidate_id,
+        *(signal.kind.value for signal in signals),
+    )
+    evaluation = ArticulationEvaluation(
+        evaluation_id=evaluation_id,
+        candidate_id=candidate.candidate_id,
+        accepted=not signals,
+        drift_signals=signals,
+        evidence=evidence,
+        timestep=state.timestep,
+    )
+    if not any(
+        item.evaluation_id == evaluation_id
+        for item in state.articulation_evaluations
+    ):
+        state.articulation_evaluations.append(evaluation)
+    state.current_evaluation_id = evaluation_id
+    if signals:
+        state.active_drifts = deepcopy(signals)
+        state.articulation_eligible = False
+    return evaluation
+
+
+def accept_articulation(
+    state: FieldState,
+    candidate: ArticulationCandidate,
+    evaluation: ArticulationEvaluation,
+) -> Optional[Articulation]:
+    if not evaluation.accepted:
+        return None
+    if evaluation.candidate_id != candidate.candidate_id:
+        return None
+    if state.current_cut_id != candidate.basis.cut_id:
+        return None
+    articulation_id = _stable_id(
+        "articulation",
+        state.field_id,
+        candidate.candidate_id,
+        evaluation.evaluation_id,
+    )
+    articulation = Articulation(
+        articulation_id=articulation_id,
+        candidate_id=candidate.candidate_id,
+        evaluation_id=evaluation.evaluation_id,
+        text=candidate.text,
+        cut_id=candidate.basis.cut_id,
+        phenomenon_ids=[
+            item.phenomenon_id for item in candidate.basis.formations
+        ],
+        included_stream_ids=list(candidate.basis.included_stream_ids),
+        held_open_stream_ids=list(candidate.basis.held_open_stream_ids),
+        relation_ids=list(candidate.basis.relation_ids),
+        lineage_stream_ids=_flatten_material_lineage(
+            state,
+            candidate.basis,
+        ),
         timestep=state.timestep,
     )
     if not any(
@@ -225,8 +646,26 @@ def articulate(
         for item in state.articulations
     ):
         state.articulations.append(articulation)
-    state.current_articulation_id = articulation.articulation_id
+    state.current_articulation_id = articulation_id
     return articulation
+
+
+def articulate(
+    state: FieldState,
+    cut: Optional[ProvisionalCut] = None,
+    hypotheses: Optional[RuntimeHypotheses] = None,
+) -> Optional[Articulation]:
+    """Compatibility movement for direct, accepted native articulation."""
+    hypotheses = hypotheses or RuntimeHypotheses()
+    candidate = form_articulation_candidate(state, cut, hypotheses)
+    if candidate is None:
+        return None
+    evaluation = evaluate_articulation_candidate(
+        state,
+        candidate,
+        hypotheses,
+    )
+    return accept_articulation(state, candidate, evaluation)
 
 
 def reinsert_articulation(
@@ -234,7 +673,13 @@ def reinsert_articulation(
     articulation: Articulation,
     hypotheses: Optional[RuntimeHypotheses] = None,
 ) -> str:
+    """Reinsert one accepted articulation through lineage, not recursive text."""
     hypotheses = hypotheses or RuntimeHypotheses()
+    if not any(
+        item.articulation_id == articulation.articulation_id
+        for item in state.articulations
+    ):
+        raise ValueError("Only accepted articulations can be reinserted")
     stream_id = "stream:{0}".format(articulation.articulation_id)
     if state.stream(stream_id) is not None:
         return stream_id
@@ -244,11 +689,16 @@ def reinsert_articulation(
             stream_id=stream_id,
             kind="articulation",
             payload={
-                "text": articulation.text,
+                "articulation_id": articulation.articulation_id,
+                "candidate_id": articulation.candidate_id,
+                "evaluation_id": articulation.evaluation_id,
                 "cut_id": articulation.cut_id,
                 "phenomenon_ids": list(articulation.phenomenon_ids),
                 "included_stream_ids": list(
                     articulation.included_stream_ids
+                ),
+                "source_stream_ids": list(
+                    articulation.lineage_stream_ids
                 ),
                 "held_open_stream_ids": list(
                     articulation.held_open_stream_ids

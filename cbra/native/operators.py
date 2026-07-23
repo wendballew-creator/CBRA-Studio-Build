@@ -73,7 +73,14 @@ def _tokens(stream: Stream) -> Set[str]:
 
 def _declared_source_ids(stream: Stream) -> Set[str]:
     source_ids: Set[str] = set()
-    for key in ("source_stream_ids", "included_stream_ids"):
+    # A stabilized articulation declares flattened material lineage. Legacy
+    # generated streams may still carry only included_stream_ids.
+    keys = (
+        ("source_stream_ids",)
+        if stream.payload.get("source_stream_ids")
+        else ("included_stream_ids",)
+    )
+    for key in keys:
         values = stream.payload.get(key, [])
         if isinstance(values, (list, tuple, set)):
             source_ids.update(str(item) for item in values)
@@ -285,6 +292,11 @@ def propose_play(
         if left.kind in {"play_variation", "diffractive_trace"}:
             continue
         if right.kind in {"play_variation", "diffractive_trace"}:
+            continue
+        # An articulation is already a recursive field return. Varying its
+        # mediator relation would let generated output manufacture an
+        # expanding secondary field rather than participate through lineage.
+        if left.kind == "articulation" or right.kind == "articulation":
             continue
         # Apparatus facets already participate in relations with field
         # material.  Generating variations among apparatus facets alone would
