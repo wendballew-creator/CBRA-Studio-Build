@@ -50,11 +50,18 @@ from .models import (
     StepTrace,
     Stream,
 )
+from .session_models import (
+    NativeSession,
+    ReintegrationReference,
+    TurnOutcomeKind,
+    TurnRecord,
+)
 
 
 SCHEMA_VERSION = 1
 CHECKPOINT_PAYLOAD_TYPE = "native_field_checkpoint"
 TRACE_PAYLOAD_TYPE = "native_lifecycle_trace"
+SESSION_PAYLOAD_TYPE = "native_thread_session"
 
 
 def assert_json_compatible(value: Any, path: str = "value") -> None:
@@ -985,6 +992,116 @@ class FieldStateSchema(BoundaryModel):
         )
 
 
+class ReintegrationReferenceSchema(BoundaryModel):
+    cycle: StrictInt
+    index: StrictInt
+    drift_kind: DriftKind
+    reentry_target: ReentryTarget
+
+    @classmethod
+    def from_native(
+        cls,
+        item: ReintegrationReference,
+    ) -> "ReintegrationReferenceSchema":
+        return cls(
+            cycle=item.cycle,
+            index=item.index,
+            drift_kind=item.drift_kind,
+            reentry_target=item.reentry_target,
+        )
+
+    def to_native(self) -> ReintegrationReference:
+        return ReintegrationReference(
+            cycle=self.cycle,
+            index=self.index,
+            drift_kind=self.drift_kind,
+            reentry_target=self.reentry_target,
+        )
+
+
+class TurnRecordSchema(BoundaryModel):
+    turn_id: StrictStr
+    revision: StrictInt
+    material_digest: StrictStr
+    user_stream_id: StrictStr
+    additional_stream_ids: List[StrictStr]
+    cycle_start: StrictInt
+    cycle_end: StrictInt
+    candidate_ids: List[StrictStr]
+    evaluation_ids: List[StrictStr]
+    articulation_ids: List[StrictStr]
+    reintegrations: List[ReintegrationReferenceSchema]
+    outcome: TurnOutcomeKind
+
+    @classmethod
+    def from_native(cls, item: TurnRecord) -> "TurnRecordSchema":
+        return cls(
+            turn_id=item.turn_id,
+            revision=item.revision,
+            material_digest=item.material_digest,
+            user_stream_id=item.user_stream_id,
+            additional_stream_ids=list(item.additional_stream_ids),
+            cycle_start=item.cycle_start,
+            cycle_end=item.cycle_end,
+            candidate_ids=list(item.candidate_ids),
+            evaluation_ids=list(item.evaluation_ids),
+            articulation_ids=list(item.articulation_ids),
+            reintegrations=[
+                ReintegrationReferenceSchema.from_native(value)
+                for value in item.reintegrations
+            ],
+            outcome=item.outcome,
+        )
+
+    def to_native(self) -> TurnRecord:
+        return TurnRecord(
+            turn_id=self.turn_id,
+            revision=self.revision,
+            material_digest=self.material_digest,
+            user_stream_id=self.user_stream_id,
+            additional_stream_ids=tuple(self.additional_stream_ids),
+            cycle_start=self.cycle_start,
+            cycle_end=self.cycle_end,
+            candidate_ids=tuple(self.candidate_ids),
+            evaluation_ids=tuple(self.evaluation_ids),
+            articulation_ids=tuple(self.articulation_ids),
+            reintegrations=tuple(
+                value.to_native() for value in self.reintegrations
+            ),
+            outcome=self.outcome,
+        )
+
+
+class NativeSessionSchema(BoundaryModel):
+    thread_id: StrictStr
+    field_id: StrictStr
+    field: FieldStateSchema
+    revision: StrictInt
+    turns: List[TurnRecordSchema]
+
+    @classmethod
+    def from_native(cls, item: NativeSession) -> "NativeSessionSchema":
+        return cls(
+            thread_id=item.thread_id,
+            field_id=item.field_id,
+            field=FieldStateSchema.from_native(item.field),
+            revision=item.revision,
+            turns=[
+                TurnRecordSchema.from_native(value)
+                for value in item.turns
+            ],
+        )
+
+    def to_native(self) -> NativeSession:
+        return NativeSession(
+            thread_id=self.thread_id,
+            field_id=self.field_id,
+            field=self.field.to_native(),
+            revision=self.revision,
+            turns=tuple(value.to_native() for value in self.turns),
+        )
+
+
 class TracePayloadSchema(BoundaryModel):
     field_id: StrictStr
     entries: List[HistoryEntrySchema]
@@ -1007,3 +1124,10 @@ class TraceEnvelopeSchema(BoundaryModel):
     payload_type: StrictStr
     integrity: IntegritySchema
     payload: TracePayloadSchema
+
+
+class SessionEnvelopeSchema(BoundaryModel):
+    schema_version: StrictInt
+    payload_type: StrictStr
+    integrity: IntegritySchema
+    payload: NativeSessionSchema

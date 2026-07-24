@@ -26,17 +26,22 @@ from .runtime import assert_native_invariants
 from .schemas import (
     CHECKPOINT_PAYLOAD_TYPE,
     SCHEMA_VERSION,
+    SESSION_PAYLOAD_TYPE,
     TRACE_PAYLOAD_TYPE,
     CheckpointEnvelopeSchema,
     FieldStateSchema,
     HistoryEntrySchema,
     IntegritySchema,
+    NativeSessionSchema,
+    SessionEnvelopeSchema,
     TraceEnvelopeSchema,
     TracePayloadSchema,
     assert_json_compatible,
     model_dump,
     model_validate,
 )
+from .session import assert_session_invariants
+from .session_models import NativeSession
 
 
 PathLike = Union[str, os.PathLike]
@@ -182,6 +187,28 @@ def serialize_trace(state: FieldState) -> bytes:
         TRACE_PAYLOAD_TYPE,
         payload,
         TraceEnvelopeSchema,
+    )
+
+
+def serialize_session(session: NativeSession) -> bytes:
+    """Return canonical UTF-8 JSON for a native field and turn ledger."""
+    try:
+        assert_session_invariants(session)
+        _validate_restored_field(session.field)
+        schema = NativeSessionSchema.from_native(session)
+        reconstructed = schema.to_native()
+        assert_session_invariants(reconstructed)
+        _validate_restored_field(reconstructed.field)
+    except (ValidationError, AssertionError, ValueError) as exc:
+        if isinstance(exc, NativePersistenceError):
+            raise
+        raise NativeValidationError(
+            "Native session cannot be serialized: {0}".format(exc)
+        ) from exc
+    return _make_envelope(
+        SESSION_PAYLOAD_TYPE,
+        schema,
+        SessionEnvelopeSchema,
     )
 
 
@@ -338,6 +365,27 @@ def restore_trace(data: Serialized) -> NativeTraceArchive:
             )
         ) from exc
     return archive
+
+
+def restore_session(data: Serialized) -> NativeSession:
+    """Strictly reconstruct a native field and immutable turn ledger."""
+    envelope = _parse_envelope(
+        data,
+        SESSION_PAYLOAD_TYPE,
+        SessionEnvelopeSchema,
+    )
+    try:
+        session = envelope.payload.to_native()
+        assert_session_invariants(session)
+        _validate_restored_field(session.field)
+    except (AssertionError, ValueError) as exc:
+        if isinstance(exc, NativePersistenceError):
+            raise
+        raise NativeValidationError(
+            "Restored native session violates ownership or ledger "
+            "invariants: {0}".format(exc)
+        ) from exc
+    return session
 
 
 def _ids(items: Iterable[Any], attribute: str, label: str) -> Set[str]:
@@ -867,3 +915,23 @@ def load_trace(path: PathLike) -> NativeTraceArchive:
     """Load and validate a lifecycle trace from an explicit path."""
     source = Path(path)
     return restore_trace(_decode_file_payload(source.read_bytes()))
+
+
+def save_session(
+    path: PathLike,
+    session: NativeSession,
+    compress: Optional[bool] = None,
+) -> None:
+    """Atomically save one complete native session to an explicit path."""
+    destination = Path(path)
+    data = serialize_session(session)
+    _atomic_write(
+        destination,
+        _encode_file_payload(data, _use_gzip(destination, compress)),
+    )
+
+
+def load_session(path: PathLike) -> NativeSession:
+    """Load and validate a complete native session from an explicit path."""
+    source = Path(path)
+    return restore_session(_decode_file_payload(source.read_bytes()))
