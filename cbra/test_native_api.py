@@ -946,6 +946,33 @@ class NativeFastAPITests(unittest.TestCase):
             "#/components/schemas/TurnPageResponse",
         )
 
+    def test_browser_client_uses_only_native_public_contracts(self):
+        response = self.client.get("/ui")
+
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        for required in (
+            'newClaim("thread:")',
+            'newClaim("turn:")',
+            '"/generate"',
+            "expected_revision",
+            "/turns?",
+            "next_after_revision",
+            "idempotent_replay",
+            "session_not_found",
+        ):
+            self.assertIn(required, html)
+        for retired in (
+            "interaction-test-1",
+            "/file",
+            "/attachments/clear",
+            "loopcycle",
+            "data.messages",
+            "active_attachment",
+            "current_field_id",
+        ):
+            self.assertNotIn(retired, html)
+
 
 if __name__ == "__main__":
     unittest.main()

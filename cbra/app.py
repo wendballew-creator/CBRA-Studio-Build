@@ -41,7 +41,7 @@ from cbra.store import (
 
 
 APP_TITLE = "CBRA Writing Support"
-APP_VERSION = "0.4.0-native-turn-projection"
+APP_VERSION = "0.5.0-native-browser"
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
