@@ -386,7 +386,7 @@ class NativeFastAPITests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
-        self.application = create_app(session_root=self.root)
+        self.application = self.make_app()
         self.client = TestClient(
             self.application,
             raise_server_exceptions=False,
@@ -395,6 +395,12 @@ class NativeFastAPITests(unittest.TestCase):
     def tearDown(self):
         self.client.close()
         self.temporary.cleanup()
+
+    def make_app(self):
+        repository = NativeSessionRepository(self.root)
+        return create_app(
+            service=NativeApplicationService(repository),
+        )
 
     def generate(self, text=FIRST_STRAND, **values):
         body = {
@@ -439,7 +445,7 @@ class NativeFastAPITests(unittest.TestCase):
         self.assertEqual(first_response.status_code, 201)
         first = first_response.json()
         self.client.close()
-        restarted = create_app(session_root=self.root)
+        restarted = self.make_app()
         self.application = restarted
         self.client = TestClient(
             restarted,
@@ -509,7 +515,7 @@ class NativeFastAPITests(unittest.TestCase):
     def test_restart_continues_thread_and_related_turn_can_articulate(self):
         first = self.generate().json()
         self.client.close()
-        restarted = create_app(session_root=self.root)
+        restarted = self.make_app()
         self.client = TestClient(
             restarted,
             raise_server_exceptions=False,
@@ -632,7 +638,7 @@ class NativeFastAPITests(unittest.TestCase):
             },
         ).json()
         self.client.close()
-        restarted = create_app(session_root=self.root)
+        restarted = self.make_app()
         self.client = TestClient(
             restarted,
             raise_server_exceptions=False,
@@ -876,7 +882,7 @@ class NativeFastAPITests(unittest.TestCase):
         self.assertIsNone(body["text"])
 
         self.client.close()
-        restarted = create_app(session_root=self.root)
+        restarted = self.make_app()
         self.client = TestClient(
             restarted,
             raise_server_exceptions=False,

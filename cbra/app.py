@@ -25,6 +25,10 @@ from cbra.application import (
     NativeApplicationService,
     TurnProjectionPaginationError,
 )
+from cbra.corpus import (
+    CorpusLimits,
+    load_canonical_snapshot,
+)
 from cbra.native import (
     NativePersistenceError,
     NativeSessionError,
@@ -41,7 +45,7 @@ from cbra.store import (
 
 
 APP_TITLE = "CBRA Writing Support"
-APP_VERSION = "0.5.0-native-browser"
+APP_VERSION = "0.6.0-native-canonical-bootstrap"
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
@@ -103,12 +107,21 @@ def _default_session_root() -> Path:
     return PROJECT_ROOT / ".cbra-runtime" / "sessions"
 
 
+def _default_corpus_root() -> Path:
+    configured = os.environ.get("CBRA_CORPUS_ROOT")
+    if configured:
+        return Path(configured)
+    return PROJECT_ROOT / "corpus"
+
+
 def create_app(
     *,
     session_root: Optional[PathLike] = None,
     repository: Optional[NativeSessionRepository] = None,
     compress: bool = True,
     service: Optional[NativeApplicationService] = None,
+    corpus_root: Optional[PathLike] = None,
+    corpus_limits: Optional[CorpusLimits] = None,
 ) -> FastAPI:
     """Construct an injectable HTTP adapter with explicit durable storage."""
     supplied = sum(
@@ -118,8 +131,26 @@ def create_app(
         raise ValueError(
             "Provide only one of session_root, repository, or service"
         )
+    if service is not None and (
+        corpus_root is not None or corpus_limits is not None
+    ):
+        raise ValueError(
+            "A supplied service already owns its canonical corpus snapshot"
+        )
 
     if service is None:
+        resolved_corpus_root = Path(
+            corpus_root if corpus_root is not None
+            else _default_corpus_root()
+        )
+        canonical_corpus = load_canonical_snapshot(
+            resolved_corpus_root,
+            limits=(
+                corpus_limits
+                if corpus_limits is not None
+                else CorpusLimits.from_environment()
+            ),
+        )
         if repository is None:
             resolved_root = Path(
                 session_root if session_root is not None
@@ -130,7 +161,10 @@ def create_app(
                 resolved_root,
                 compress=compress,
             )
-        service = NativeApplicationService(repository)
+        service = NativeApplicationService(
+            repository,
+            canonical_corpus=canonical_corpus,
+        )
 
     application = FastAPI(title=APP_TITLE, version=APP_VERSION)
     application.state.native_service = service

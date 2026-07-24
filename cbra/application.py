@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Sequence, Tuple
 
+from cbra.corpus import CanonicalCorpusSnapshot
 from cbra.native import (
     DEFAULT_MAX_CYCLES,
     NativeSession,
@@ -78,12 +79,14 @@ class NativeApplicationService:
         *,
         max_cycles: int = DEFAULT_MAX_CYCLES,
         hypotheses: Optional[RuntimeHypotheses] = None,
+        canonical_corpus: Optional[CanonicalCorpusSnapshot] = None,
     ) -> None:
         if type(max_cycles) is not int or max_cycles < 1:
             raise ValueError("max_cycles must be a positive integer")
         self.repository = repository
         self.max_cycles = max_cycles
         self.hypotheses = hypotheses
+        self.canonical_corpus = canonical_corpus
 
     def create_thread(
         self,
@@ -93,7 +96,15 @@ class NativeApplicationService:
         turn_id: str,
     ) -> ApplicationTurnResult:
         """Create an exactly claimed session or replay its first turn."""
-        session = create_session(thread_id=thread_id)
+        initial_streams = (
+            self.canonical_corpus.to_streams()
+            if self.canonical_corpus is not None
+            else ()
+        )
+        session = create_session(
+            thread_id=thread_id,
+            initial_streams=initial_streams,
+        )
         updated, outcome = submit_turn(
             session,
             user_text,
