@@ -3,6 +3,7 @@
 import gzip
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -19,11 +20,18 @@ from cbra.native import (
     create_session,
 )
 from cbra.native.articulation import form_articulation_candidate
-from cbra.store import NativeSessionRepository
+from cbra.store import (
+    NativeSessionRepository,
+    SessionAlreadyExistsError,
+)
 
 
 FIRST_STRAND = "Cedar roots shelter soil and hold moisture."
 RELATED_STRAND = "Cedar soil holds water around the roots."
+THREAD_A = "thread:{0}".format("a" * 32)
+THREAD_B = "thread:{0}".format("b" * 32)
+TURN_A = "turn:{0}".format("1" * 32)
+TURN_B = "turn:{0}".format("2" * 32)
 
 
 class NativeApplicationServiceTests(unittest.TestCase):
@@ -31,19 +39,16 @@ class NativeApplicationServiceTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
         self.repository = NativeSessionRepository(self.root)
-        self.service = NativeApplicationService(
-            self.repository,
-            thread_id_factory=lambda: "thread:service",
-        )
+        self.service = NativeApplicationService(self.repository)
 
     def tearDown(self):
         self.temporary.cleanup()
 
     def test_create_restart_continue_and_summary_are_native_and_durable(self):
         first = self.service.create_thread(
+            "thread:service",
             FIRST_STRAND,
             turn_id="turn:1",
-            expected_revision=0,
         )
 
         self.assertEqual(
@@ -79,9 +84,9 @@ class NativeApplicationServiceTests(unittest.TestCase):
 
     def test_retry_is_idempotent_and_changed_reuse_conflicts(self):
         first = self.service.create_thread(
+            "thread:retry",
             FIRST_STRAND,
             turn_id="turn:stable",
-            expected_revision=0,
         )
         before = self.repository.load(first.outcome.thread_id)
 
@@ -108,9 +113,9 @@ class NativeApplicationServiceTests(unittest.TestCase):
 
     def test_stale_revision_does_not_change_durable_session(self):
         first = self.service.create_thread(
+            "thread:stale",
             FIRST_STRAND,
             turn_id="turn:1",
-            expected_revision=0,
         )
         before = self.repository.load(first.outcome.thread_id)
 
@@ -156,27 +161,109 @@ class NativeApplicationServiceTests(unittest.TestCase):
         self.assertEqual(restored.revision, 1)
         self.assertEqual(len(restored.turns), 1)
 
-    def test_creation_collision_retries_with_a_fresh_thread_identity(self):
-        occupied = create_session(thread_id="thread:occupied")
-        self.repository.create(occupied)
-        identities = iter(("thread:occupied", "thread:fresh"))
-        service = NativeApplicationService(
-            self.repository,
-            thread_id_factory=lambda: next(identities),
-        )
-
-        result = service.create_thread(
+    def test_claimed_creation_replays_after_restart_without_duplication(self):
+        first = self.service.create_thread(
+            "thread:claimed",
             FIRST_STRAND,
-            expected_revision=0,
+            turn_id="turn:initial",
+        )
+        restarted = NativeApplicationService(
+            NativeSessionRepository(self.root),
         )
 
-        self.assertEqual(result.outcome.thread_id, "thread:fresh")
+        replay = restarted.create_thread(
+            "thread:claimed",
+            FIRST_STRAND,
+            turn_id="turn:initial",
+        )
+
+        self.assertFalse(first.replayed)
+        self.assertTrue(replay.replayed)
+        self.assertEqual(replay.outcome, first.outcome)
+        restored = self.repository.load("thread:claimed")
+        self.assertEqual(restored.revision, 1)
+        self.assertEqual(len(restored.turns), 1)
         self.assertEqual(
-            self.repository.load("thread:occupied"),
-            occupied,
+            len(list(self.root.glob("native-session-*"))),
+            1,
+        )
+
+    def test_claimed_creation_conflicts_do_not_mutate_existing_session(self):
+        first = self.service.create_thread(
+            "thread:claimed-conflict",
+            FIRST_STRAND,
+            turn_id="turn:initial",
+        )
+        before = self.repository.load(first.outcome.thread_id)
+
+        with self.assertRaises(TurnConflictError):
+            self.service.create_thread(
+                "thread:claimed-conflict",
+                "Different initial material.",
+                turn_id="turn:initial",
+            )
+        with self.assertRaises(SessionAlreadyExistsError):
+            self.service.create_thread(
+                "thread:claimed-conflict",
+                FIRST_STRAND,
+                turn_id="turn:different",
+            )
+        self.assertEqual(
+            self.repository.load(first.outcome.thread_id),
+            before,
+        )
+
+    def test_same_turn_identity_is_valid_in_different_claimed_threads(self):
+        first = self.service.create_thread(
+            "thread:first-claim",
+            FIRST_STRAND,
+            turn_id="turn:shared",
+        )
+        second = self.service.create_thread(
+            "thread:second-claim",
+            FIRST_STRAND,
+            turn_id="turn:shared",
+        )
+
+        self.assertNotEqual(
+            first.outcome.thread_id,
+            second.outcome.thread_id,
+        )
+        self.assertEqual(first.outcome.turn_id, second.outcome.turn_id)
+        self.assertFalse(first.replayed)
+        self.assertFalse(second.replayed)
+
+    def test_concurrent_identical_creation_converges_on_one_session(self):
+        def create():
+            service = NativeApplicationService(
+                NativeSessionRepository(self.root),
+            )
+            return service.create_thread(
+                "thread:concurrent-claim",
+                FIRST_STRAND,
+                turn_id="turn:concurrent-initial",
+            )
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            results = list(executor.map(lambda _: create(), range(16)))
+
+        self.assertEqual(
+            sum(not result.replayed for result in results),
+            1,
         )
         self.assertEqual(
-            self.repository.load("thread:fresh").revision,
+            sum(result.replayed for result in results),
+            15,
+        )
+        self.assertEqual(
+            [result.outcome for result in results],
+            [results[0].outcome] * len(results),
+        )
+        restored = self.repository.load("thread:concurrent-claim")
+        self.assertEqual(restored.revision, 1)
+        self.assertEqual(len(restored.turns), 1)
+        self.assertEqual(
+            len(list(self.root.glob("native-session-*"))),
             1,
         )
 
@@ -197,9 +284,9 @@ class NativeFastAPITests(unittest.TestCase):
 
     def generate(self, text=FIRST_STRAND, **values):
         body = {
+            "thread_id": values.pop("thread_id", THREAD_A),
             "user_text": text,
-            "turn_id": values.pop("turn_id", "turn:1"),
-            "expected_revision": values.pop("expected_revision", 0),
+            "turn_id": values.pop("turn_id", TURN_A),
         }
         body.update(values)
         return self.client.post("/generate", json=body)
@@ -209,12 +296,13 @@ class NativeFastAPITests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         body = response.json()
-        self.assertEqual(body["turn_id"], "turn:1")
+        self.assertEqual(body["thread_id"], THREAD_A)
+        self.assertEqual(body["turn_id"], TURN_A)
         self.assertEqual(body["revision"], 1)
         self.assertEqual(body["outcome"], "no_articulation")
         self.assertIsNone(body["text"])
+        self.assertFalse(body["idempotent_replay"])
         self.assertIsNone(body["debug"])
-        self.assertTrue(body["thread_id"].startswith("thread:"))
         self.assertTrue(body["request_id"])
         serialized = response.text
         for forbidden in (
@@ -230,7 +318,79 @@ class NativeFastAPITests(unittest.TestCase):
         repository = self.application.state.native_service.repository
         session = repository.load(body["thread_id"])
         self.assertEqual(session.revision, 1)
-        self.assertEqual(session.turns[0].turn_id, "turn:1")
+        self.assertEqual(session.turns[0].turn_id, TURN_A)
+
+    def test_generate_retry_recovers_preclaimed_thread_after_restart(self):
+        first_response = self.generate()
+        self.assertEqual(first_response.status_code, 201)
+        first = first_response.json()
+        self.client.close()
+        restarted = create_app(session_root=self.root)
+        self.application = restarted
+        self.client = TestClient(
+            restarted,
+            raise_server_exceptions=False,
+        )
+
+        retry_response = self.generate()
+
+        self.assertEqual(retry_response.status_code, 200)
+        retry = retry_response.json()
+        self.assertTrue(retry["idempotent_replay"])
+        for field in (
+            "thread_id",
+            "turn_id",
+            "revision",
+            "outcome",
+            "text",
+        ):
+            self.assertEqual(retry[field], first[field])
+        repository = restarted.state.native_service.repository
+        restored = repository.load(THREAD_A)
+        self.assertEqual(restored.revision, 1)
+        self.assertEqual(len(restored.turns), 1)
+        self.assertEqual(
+            len(list(self.root.glob("native-session-*"))),
+            1,
+        )
+
+    def test_generate_conflicts_leave_claimed_session_unchanged(self):
+        first = self.generate().json()
+        repository = self.application.state.native_service.repository
+        before = repository.load(first["thread_id"])
+
+        changed_material = self.generate(
+            "Changed initial material.",
+        )
+        changed_identity = self.generate(turn_id=TURN_B)
+
+        self.assertEqual(changed_material.status_code, 409)
+        self.assertEqual(
+            changed_material.json()["error"]["code"],
+            "turn_conflict",
+        )
+        self.assertEqual(changed_identity.status_code, 409)
+        self.assertEqual(
+            changed_identity.json()["error"]["code"],
+            "session_conflict",
+        )
+        self.assertEqual(repository.load(first["thread_id"]), before)
+
+    def test_same_initial_turn_id_can_claim_independent_threads(self):
+        first = self.generate(thread_id=THREAD_A)
+        second = self.generate(thread_id=THREAD_B)
+
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(second.status_code, 201)
+        self.assertEqual(first.json()["turn_id"], TURN_A)
+        self.assertEqual(second.json()["turn_id"], TURN_A)
+        self.assertNotEqual(
+            first.json()["thread_id"],
+            second.json()["thread_id"],
+        )
+        repository = self.application.state.native_service.repository
+        self.assertEqual(repository.load(THREAD_A).revision, 1)
+        self.assertEqual(repository.load(THREAD_B).revision, 1)
 
     def test_restart_continues_thread_and_related_turn_can_articulate(self):
         first = self.generate().json()
@@ -269,20 +429,21 @@ class NativeFastAPITests(unittest.TestCase):
             thread_path,
             json={
                 "user_text": FIRST_STRAND,
-                "turn_id": "turn:1",
+                "turn_id": TURN_A,
                 "expected_revision": 0,
                 "mode": "debug",
             },
         )
         self.assertEqual(retry.status_code, 200)
         self.assertEqual(retry.json()["revision"], 1)
+        self.assertTrue(retry.json()["idempotent_replay"])
         self.assertTrue(retry.json()["debug"]["idempotent_replay"])
 
         conflict = self.client.post(
             thread_path,
             json={
                 "user_text": "Changed material.",
-                "turn_id": "turn:1",
+                "turn_id": TURN_A,
                 "expected_revision": 1,
             },
         )
@@ -359,6 +520,8 @@ class NativeFastAPITests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         body = response.json()
         self.assertEqual(body["error"]["code"], "invalid_request")
+        self.assertIn("thread_id", body["error"]["fields"])
+        self.assertIn("turn_id", body["error"]["fields"])
         self.assertIn("user_text", body["error"]["fields"])
         self.assertIn("expected_revision", body["error"]["fields"])
         self.assertIn("unexpected", body["error"]["fields"])
@@ -366,12 +529,34 @@ class NativeFastAPITests(unittest.TestCase):
 
         whitespace = self.client.post(
             "/generate",
-            json={"user_text": "   ", "turn_id": "  "},
+            json={
+                "thread_id": "thread:not-hex",
+                "user_text": "   ",
+                "turn_id": "turn:not-hex",
+            },
         )
         self.assertEqual(whitespace.status_code, 422)
         self.assertEqual(
             whitespace.json()["error"]["code"],
             "invalid_request",
+        )
+
+        oversized = self.client.post(
+            "/generate",
+            json={
+                "thread_id": "thread:{0}".format("a" * 33),
+                "user_text": FIRST_STRAND,
+                "turn_id": "turn:{0}".format("1" * 33),
+            },
+        )
+        self.assertEqual(oversized.status_code, 422)
+        self.assertIn(
+            "thread_id",
+            oversized.json()["error"]["fields"],
+        )
+        self.assertIn(
+            "turn_id",
+            oversized.json()["error"]["fields"],
         )
 
     def test_corrupt_durable_state_returns_safe_server_error(self):
@@ -402,7 +587,6 @@ class NativeFastAPITests(unittest.TestCase):
         service = NativeApplicationService(
             repository,
             hypotheses=hypotheses,
-            thread_id_factory=lambda: "thread:reintegration-api",
         )
         self.client.close()
         self.application = create_app(service=service)
@@ -477,8 +661,29 @@ class NativeFastAPITests(unittest.TestCase):
         document = response.json()
         generate = document["paths"]["/generate"]["post"]
         self.assertIn("201", generate["responses"])
+        self.assertIn("200", generate["responses"])
         self.assertIn("409", generate["responses"])
         self.assertIn("422", generate["responses"])
+        request_reference = generate["requestBody"]["content"][
+            "application/json"
+        ]["schema"]["$ref"]
+        request_name = request_reference.rsplit("/", 1)[-1]
+        create_request = document["components"]["schemas"][request_name]
+        self.assertEqual(
+            set(create_request["required"]),
+            {"thread_id", "turn_id", "user_text"},
+        )
+        self.assertNotIn(
+            "expected_revision",
+            create_request["properties"],
+        )
+        response_schema = document["components"]["schemas"][
+            "TurnResponse"
+        ]
+        self.assertIn(
+            "idempotent_replay",
+            response_schema["required"],
+        )
         thread_path = document["paths"]["/thread/{thread_id}"]
         self.assertNotIn("delete", thread_path)
 

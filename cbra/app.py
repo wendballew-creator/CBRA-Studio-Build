@@ -7,12 +7,13 @@ from pathlib import Path
 from typing import Optional, Union
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from cbra.api_models import (
+    CreateThreadRequest,
     ErrorResponse,
     HealthResponse,
     SessionSummaryResponse,
@@ -36,7 +37,7 @@ from cbra.store import (
 
 
 APP_TITLE = "CBRA Writing Support"
-APP_VERSION = "0.3.0-native-api"
+APP_VERSION = "0.3.1-native-bootstrap"
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
@@ -259,17 +260,22 @@ def create_app(
         response_model=TurnResponse,
         status_code=201,
         responses={
+            200: {"model": TurnResponse},
             409: {"model": ErrorResponse},
             422: {"model": ErrorResponse},
             500: {"model": ErrorResponse},
         },
     )
-    async def generate(req: TurnRequest) -> TurnResponse:
+    async def generate(
+        req: CreateThreadRequest,
+        response: Response,
+    ) -> TurnResponse:
         result = service.create_thread(
+            req.thread_id,
             req.user_text,
             turn_id=req.turn_id,
-            expected_revision=req.expected_revision,
         )
+        response.status_code = 200 if result.replayed else 201
         return TurnResponse.from_result(
             _request_id(),
             result,

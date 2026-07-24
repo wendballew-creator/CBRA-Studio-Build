@@ -30,6 +30,28 @@ from cbra.application import (
 from cbra.native import TurnOutcomeKind
 
 
+CLIENT_ID_HEX_LENGTH = 32
+THREAD_ID_PREFIX = "thread:"
+TURN_ID_PREFIX = "turn:"
+THREAD_ID_LENGTH = len(THREAD_ID_PREFIX) + CLIENT_ID_HEX_LENGTH
+TURN_ID_LENGTH = len(TURN_ID_PREFIX) + CLIENT_ID_HEX_LENGTH
+LOWERCASE_HEX = frozenset("0123456789abcdef")
+
+
+def _validate_claimed_id(value, prefix, label):
+    suffix = value[len(prefix) :] if value.startswith(prefix) else ""
+    if (
+        len(value) != len(prefix) + CLIENT_ID_HEX_LENGTH
+        or len(suffix) != CLIENT_ID_HEX_LENGTH
+        or any(character not in LOWERCASE_HEX for character in suffix)
+    ):
+        raise ValueError(
+            "{0} must be {1} followed by 32 lowercase hexadecimal "
+            "characters".format(label, prefix)
+        )
+    return value
+
+
 if hasattr(BaseModel, "model_validate"):
 
     class PublicModel(BaseModel):
@@ -44,6 +66,72 @@ else:
 
         class Config:
             extra = "forbid"
+
+
+class CreateThreadRequest(PublicModel):
+    thread_id: StrictStr = Field(
+        ...,
+        min_length=THREAD_ID_LENGTH,
+        max_length=THREAD_ID_LENGTH,
+    )
+    turn_id: StrictStr = Field(
+        ...,
+        min_length=TURN_ID_LENGTH,
+        max_length=TURN_ID_LENGTH,
+    )
+    user_text: StrictStr = Field(..., min_length=1)
+    mode: Literal["production", "debug"] = "production"
+
+    if field_validator is not None:
+
+        @field_validator("thread_id")
+        @classmethod
+        def thread_id_is_collision_resistant(cls, value):
+            return _validate_claimed_id(
+                value,
+                THREAD_ID_PREFIX,
+                "thread_id",
+            )
+
+        @field_validator("turn_id")
+        @classmethod
+        def turn_id_is_collision_resistant(cls, value):
+            return _validate_claimed_id(
+                value,
+                TURN_ID_PREFIX,
+                "turn_id",
+            )
+
+        @field_validator("user_text")
+        @classmethod
+        def user_text_has_material(cls, value):
+            if not value.strip():
+                raise ValueError("user_text must contain non-whitespace")
+            return value
+
+    else:
+
+        @validator("thread_id")
+        def thread_id_is_collision_resistant(cls, value):
+            return _validate_claimed_id(
+                value,
+                THREAD_ID_PREFIX,
+                "thread_id",
+            )
+
+        @validator("turn_id")
+        def turn_id_is_collision_resistant(cls, value):
+            return _validate_claimed_id(
+                value,
+                TURN_ID_PREFIX,
+                "turn_id",
+            )
+
+        @validator("user_text")
+        def user_text_has_material(cls, value):
+            if not value.strip():
+                raise ValueError("user_text must contain non-whitespace")
+            return value
 
 
 class TurnRequest(PublicModel):
@@ -115,6 +203,7 @@ class TurnResponse(PublicModel):
     revision: StrictInt
     outcome: TurnOutcomeKind
     text: Optional[StrictStr]
+    idempotent_replay: StrictBool
     debug: Optional[TurnDebug] = None
 
     @classmethod
@@ -142,6 +231,7 @@ class TurnResponse(PublicModel):
             revision=outcome.revision,
             outcome=outcome.kind,
             text=outcome.text,
+            idempotent_replay=result.replayed,
             debug=debug,
         )
 
