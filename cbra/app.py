@@ -1,19 +1,42 @@
+"""Thin FastAPI adapter over durable native CBRA sessions."""
+
 from __future__ import annotations
 
-from dataclasses import asdict, is_dataclass
+import os
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional
+from typing import Optional, Union
 from uuid import uuid4
 
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from cbra.engine import articulate, initialize_field_state, step_field
-from cbra.models import FieldState, Stream
+from cbra.api_models import (
+    ErrorResponse,
+    HealthResponse,
+    SessionSummaryResponse,
+    TurnRequest,
+    TurnResponse,
+)
+from cbra.application import NativeApplicationService
+from cbra.native import (
+    NativePersistenceError,
+    NativeSessionError,
+    SessionOwnershipError,
+    StaleRevisionError,
+    TurnConflictError,
+)
+from cbra.store import (
+    NativeSessionRepository,
+    SessionAlreadyExistsError,
+    SessionNotFoundError,
+    SessionRepositoryError,
+)
+
 
 APP_TITLE = "CBRA Writing Support"
-APP_VERSION = "0.2.0-field-prototype"
+APP_VERSION = "0.3.0-native-api"
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
@@ -23,174 +46,278 @@ if not UI_INDEX.exists():
     if fallback_ui.exists():
         UI_INDEX = fallback_ui
 
-app = FastAPI(title=APP_TITLE, version=APP_VERSION)
-
-# Simple in-memory session substrate for the field prototype
-THREAD_FIELDS: Dict[str, FieldState] = {}
+PathLike = Union[str, os.PathLike]
 
 
-class GenerateRequest(BaseModel):
-    user_text: str = Field(..., min_length=1)
-    mode: Literal["production", "debug"] = "production"
+def _request_id() -> str:
+    return str(uuid4())
 
 
-def ok(
+def _error_response(
     *,
-    request_id: str,
-    thread_id: Optional[str],
-    text: Optional[str],
-    debug: Optional[Dict[str, Any]],
-    data: Optional[Dict[str, Any]],
-) -> Dict[str, Any]:
-    return {
-        "request_id": request_id,
-        "thread_id": thread_id,
-        "text": text,
-        "debug": debug,
-        "data": data,
-    }
-
-
-def err(*, request_id: str, code: str, message: str) -> Dict[str, Any]:
-    return {
-        "request_id": request_id,
-        "error": {
+    status_code: int,
+    code: str,
+    message: str,
+    fields=None,
+) -> JSONResponse:
+    body = ErrorResponse(
+        request_id=_request_id(),
+        error={
             "code": code,
             "message": message,
+            "fields": fields,
         },
-    }
+    )
+    if hasattr(body, "model_dump"):
+        content = body.model_dump(mode="json", exclude_none=True)
+    else:
+        content = body.dict(exclude_none=True)
+    return JSONResponse(status_code=status_code, content=content)
 
 
-def _state_to_dict(state: FieldState) -> Dict[str, Any]:
-    if is_dataclass(state):
-        return asdict(state)
-    return dict(state)
+def _validation_fields(exc: RequestValidationError):
+    fields = []
+    for error in exc.errors():
+        location = error.get("loc", ())
+        visible = [
+            str(item)
+            for item in location
+            if item not in {"body", "path", "query"}
+        ]
+        if visible:
+            field = ".".join(visible)
+            if field not in fields:
+                fields.append(field)
+    return fields or None
 
 
-def _append_user_stream(state: FieldState, text: str) -> None:
-    state.streams.append(
-        Stream(
-            stream_id="user_{0}".format(state.timestep + 1),
-            kind="user_input",
-            payload={"text": text},
-            participation=1.0,
-            persistence=0.8,
+def _default_session_root() -> Path:
+    configured = os.environ.get("CBRA_SESSION_ROOT")
+    if configured:
+        return Path(configured)
+    return PROJECT_ROOT / ".cbra-runtime" / "sessions"
+
+
+def create_app(
+    *,
+    session_root: Optional[PathLike] = None,
+    repository: Optional[NativeSessionRepository] = None,
+    compress: bool = True,
+    service: Optional[NativeApplicationService] = None,
+) -> FastAPI:
+    """Construct an injectable HTTP adapter with explicit durable storage."""
+    supplied = sum(
+        item is not None for item in (session_root, repository, service)
+    )
+    if supplied > 1:
+        raise ValueError(
+            "Provide only one of session_root, repository, or service"
         )
+
+    if service is None:
+        if repository is None:
+            resolved_root = Path(
+                session_root if session_root is not None
+                else _default_session_root()
+            )
+            resolved_root.mkdir(parents=True, exist_ok=True)
+            repository = NativeSessionRepository(
+                resolved_root,
+                compress=compress,
+            )
+        service = NativeApplicationService(repository)
+
+    application = FastAPI(title=APP_TITLE, version=APP_VERSION)
+    application.state.native_service = service
+
+    @application.exception_handler(RequestValidationError)
+    async def invalid_request(
+        request: Request,
+        exc: RequestValidationError,
+    ) -> JSONResponse:
+        return _error_response(
+            status_code=422,
+            code="invalid_request",
+            message="Request validation failed.",
+            fields=_validation_fields(exc),
+        )
+
+    @application.exception_handler(SessionNotFoundError)
+    async def missing_session(
+        request: Request,
+        exc: SessionNotFoundError,
+    ) -> JSONResponse:
+        return _error_response(
+            status_code=404,
+            code="session_not_found",
+            message="The requested native session does not exist.",
+        )
+
+    @application.exception_handler(StaleRevisionError)
+    async def stale_revision(
+        request: Request,
+        exc: StaleRevisionError,
+    ) -> JSONResponse:
+        return _error_response(
+            status_code=409,
+            code="stale_revision",
+            message="The native session revision has changed.",
+        )
+
+    @application.exception_handler(TurnConflictError)
+    async def turn_conflict(
+        request: Request,
+        exc: TurnConflictError,
+    ) -> JSONResponse:
+        return _error_response(
+            status_code=409,
+            code="turn_conflict",
+            message="The turn ID already names different material.",
+        )
+
+    @application.exception_handler(SessionAlreadyExistsError)
+    async def creation_conflict(
+        request: Request,
+        exc: SessionAlreadyExistsError,
+    ) -> JSONResponse:
+        return _error_response(
+            status_code=409,
+            code="session_conflict",
+            message="A new native session could not be claimed.",
+        )
+
+    @application.exception_handler(StarletteHTTPException)
+    async def http_error(
+        request: Request,
+        exc: StarletteHTTPException,
+    ) -> JSONResponse:
+        if exc.status_code == 404:
+            code = "route_not_found"
+            message = "The requested route does not exist."
+        elif exc.status_code == 405:
+            code = "method_not_allowed"
+            message = "The requested method is not supported."
+        else:
+            code = "http_error"
+            message = "The HTTP request could not be completed."
+        return _error_response(
+            status_code=exc.status_code,
+            code=code,
+            message=message,
+        )
+
+    durable_errors = (
+        NativePersistenceError,
+        SessionOwnershipError,
+        SessionRepositoryError,
+        NativeSessionError,
     )
 
+    @application.exception_handler(Exception)
+    async def safe_server_error(
+        request: Request,
+        exc: Exception,
+    ) -> JSONResponse:
+        if isinstance(exc, durable_errors):
+            return _error_response(
+                status_code=500,
+                code="invalid_durable_state",
+                message="The durable native session could not be used.",
+            )
+        return _error_response(
+            status_code=500,
+            code="internal_error",
+            message="The request could not be completed.",
+        )
 
-def _run_field_turn(state: FieldState, user_text: str) -> Dict[str, Any]:
-    _append_user_stream(state, user_text)
-    step_field(state, user_text)
-    text = articulate(state)
-
-    debug = {
-        "field_signature": dict(state.field_signature),
-        "field_values": asdict(state.field_values),
-        "drift_flags": asdict(state.drift_flags),
-        "timestep": state.timestep,
-        "stream_count": len(state.streams),
-        "streams": [asdict(s) for s in state.streams],
-        "notes": dict(state.notes),
-    }
-
-    return {
-        "text": text,
-        "debug": debug,
-        "field": _state_to_dict(state),
-    }
-
-
-@app.get("/", response_class=HTMLResponse)
-@app.get("/ui", response_class=HTMLResponse)
-def ui() -> HTMLResponse:
-    if not UI_INDEX.exists():
+    @application.get("/", response_class=HTMLResponse)
+    @application.get("/ui", response_class=HTMLResponse)
+    def ui() -> HTMLResponse:
+        if not UI_INDEX.exists():
+            return HTMLResponse(
+                (
+                    "<html><body><h1>UI not found</h1>"
+                    "<p>ui/index.html is missing.</p></body></html>"
+                ),
+                status_code=404,
+            )
         return HTMLResponse(
-            "<html><body><h1>UI not found</h1><p>ui/index.html is missing.</p></body></html>",
-            status_code=404,
+            UI_INDEX.read_text(encoding="utf-8", errors="replace")
         )
-    return HTMLResponse(UI_INDEX.read_text(encoding="utf-8", errors="replace"))
 
-
-@app.get("/health")
-def health() -> Dict[str, Any]:
-    return {
-        "ok": True,
-        "app": APP_TITLE,
-        "version": APP_VERSION,
-        "active_threads": len(THREAD_FIELDS),
-    }
-
-
-@app.post("/generate")
-async def generate(req: GenerateRequest) -> Dict[str, Any]:
-    request_id = str(uuid4())
-    try:
-        state = initialize_field_state(req.user_text)
-        result = _run_field_turn(state, req.user_text)
-        return ok(
-            request_id=request_id,
-            thread_id=None,
-            text=result["text"],
-            debug=result["debug"] if req.mode == "debug" else None,
-            data={"field": result["field"]},
+    @application.get("/health", response_model=HealthResponse)
+    def health() -> HealthResponse:
+        return HealthResponse(
+            ok=True,
+            app=APP_TITLE,
+            version=APP_VERSION,
+            persistence="native_session_repository",
         )
-    except Exception as exc:
-        return err(request_id=request_id, code="INTERNAL_ERROR", message=str(exc))
 
-
-@app.post("/chat/{thread_id}")
-async def chat(thread_id: str, req: GenerateRequest) -> Dict[str, Any]:
-    request_id = str(uuid4())
-    try:
-        state = THREAD_FIELDS.get(thread_id)
-        if state is None:
-            state = initialize_field_state(req.user_text)
-            THREAD_FIELDS[thread_id] = state
-
-        result = _run_field_turn(state, req.user_text)
-
-        return ok(
-            request_id=request_id,
-            thread_id=thread_id,
-            text=result["text"],
-            debug=result["debug"] if req.mode == "debug" else None,
-            data={"field": result["field"]},
+    @application.post(
+        "/generate",
+        response_model=TurnResponse,
+        status_code=201,
+        responses={
+            409: {"model": ErrorResponse},
+            422: {"model": ErrorResponse},
+            500: {"model": ErrorResponse},
+        },
+    )
+    async def generate(req: TurnRequest) -> TurnResponse:
+        result = service.create_thread(
+            req.user_text,
+            turn_id=req.turn_id,
+            expected_revision=req.expected_revision,
         )
-    except Exception as exc:
-        return err(request_id=request_id, code="INTERNAL_ERROR", message=str(exc))
-
-
-@app.get("/thread/{thread_id}")
-def get_thread_route(thread_id: str) -> Dict[str, Any]:
-    request_id = str(uuid4())
-    try:
-        state = THREAD_FIELDS.get(thread_id)
-        if state is None:
-            return err(request_id=request_id, code="NOT_FOUND", message="Thread not found")
-        return ok(
-            request_id=request_id,
-            thread_id=thread_id,
-            text=None,
-            debug=None,
-            data={"field": _state_to_dict(state)},
+        return TurnResponse.from_result(
+            _request_id(),
+            result,
+            include_debug=req.mode == "debug",
         )
-    except Exception as exc:
-        return err(request_id=request_id, code="INTERNAL_ERROR", message=str(exc))
 
-
-@app.delete("/thread/{thread_id}")
-def delete_thread_route(thread_id: str) -> Dict[str, Any]:
-    request_id = str(uuid4())
-    try:
-        existed = thread_id in THREAD_FIELDS
-        THREAD_FIELDS.pop(thread_id, None)
-        return ok(
-            request_id=request_id,
-            thread_id=thread_id,
-            text=None,
-            debug=None,
-            data={"deleted": existed},
+    @application.post(
+        "/chat/{thread_id}",
+        response_model=TurnResponse,
+        responses={
+            404: {"model": ErrorResponse},
+            409: {"model": ErrorResponse},
+            422: {"model": ErrorResponse},
+            500: {"model": ErrorResponse},
+        },
+    )
+    async def chat(
+        thread_id: str,
+        req: TurnRequest,
+    ) -> TurnResponse:
+        result = service.submit_thread_turn(
+            thread_id,
+            req.user_text,
+            turn_id=req.turn_id,
+            expected_revision=req.expected_revision,
         )
-    except Exception as exc:
-        return err(request_id=request_id, code="INTERNAL_ERROR", message=str(exc))
+        return TurnResponse.from_result(
+            _request_id(),
+            result,
+            include_debug=req.mode == "debug",
+        )
+
+    @application.get(
+        "/thread/{thread_id}",
+        response_model=SessionSummaryResponse,
+        responses={
+            404: {"model": ErrorResponse},
+            500: {"model": ErrorResponse},
+        },
+    )
+    def get_thread_route(thread_id: str) -> SessionSummaryResponse:
+        summary = service.summarize_thread(thread_id)
+        return SessionSummaryResponse.from_summary(
+            _request_id(),
+            summary,
+        )
+
+    return application
+
+
+app = create_app()

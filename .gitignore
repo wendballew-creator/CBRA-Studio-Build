@@ -33,3 +33,4 @@ main.py.bak*
 * copy.txt
 run_regression_checks.sh
 run_regression_checks_clean.sh
+.cbra-runtime/
