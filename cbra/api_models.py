@@ -25,6 +25,8 @@ except ImportError:  # Pydantic 1
 
 from cbra.application import (
     ApplicationSessionSummary,
+    ApplicationTurnPage,
+    ApplicationTurnProjection,
     ApplicationTurnResult,
 )
 from cbra.native import TurnOutcomeKind
@@ -257,6 +259,54 @@ class SessionSummaryResponse(PublicModel):
             turn_count=summary.turn_count,
             latest_outcome=summary.latest_outcome,
             reintegration_pending=summary.reintegration_pending,
+        )
+
+
+class TurnProjectionResponse(PublicModel):
+    turn_id: StrictStr
+    revision: StrictInt
+    user_text: StrictStr
+    outcome: TurnOutcomeKind
+    text: Optional[StrictStr]
+
+    @classmethod
+    def from_projection(
+        cls,
+        projection: ApplicationTurnProjection,
+    ) -> "TurnProjectionResponse":
+        return cls(
+            turn_id=projection.turn_id,
+            revision=projection.revision,
+            user_text=projection.user_text,
+            outcome=projection.outcome,
+            text=projection.text,
+        )
+
+
+class TurnPageResponse(PublicModel):
+    request_id: StrictStr
+    thread_id: StrictStr
+    session_revision: StrictInt
+    turns: List[TurnProjectionResponse]
+    next_after_revision: StrictInt
+    has_more: StrictBool
+
+    @classmethod
+    def from_page(
+        cls,
+        request_id: str,
+        page: ApplicationTurnPage,
+    ) -> "TurnPageResponse":
+        return cls(
+            request_id=request_id,
+            thread_id=page.thread_id,
+            session_revision=page.session_revision,
+            turns=[
+                TurnProjectionResponse.from_projection(item)
+                for item in page.turns
+            ],
+            next_after_revision=page.next_after_revision,
+            has_more=page.has_more,
         )
 
 

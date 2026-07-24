@@ -4,6 +4,7 @@ import gzip
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -11,8 +12,12 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from cbra.app import create_app
-from cbra.application import NativeApplicationService
+from cbra.application import (
+    NativeApplicationService,
+    TurnProjectionPaginationError,
+)
 from cbra.native import (
+    NativeSessionError,
     RuntimeHypotheses,
     StaleRevisionError,
     TurnConflictError,
@@ -81,6 +86,115 @@ class NativeApplicationServiceTests(unittest.TestCase):
         self.assertEqual(summary.latest_outcome, second.outcome.kind)
         self.assertFalse(summary.reintegration_pending)
         self.assertGreaterEqual(summary.cycle_count, 2)
+
+    def test_turn_projection_is_exact_bounded_and_read_only(self):
+        first = self.service.create_thread(
+            "thread:projection",
+            FIRST_STRAND,
+            turn_id="turn:first",
+        )
+        second = self.service.submit_thread_turn(
+            first.outcome.thread_id,
+            RELATED_STRAND,
+            turn_id="turn:second",
+            expected_revision=1,
+        )
+        path = self.repository.path_for(first.outcome.thread_id)
+        before = path.read_bytes()
+
+        first_page = self.service.project_thread_turns(
+            first.outcome.thread_id,
+            limit=1,
+        )
+        second_page = self.service.project_thread_turns(
+            first.outcome.thread_id,
+            after_revision=first_page.next_after_revision,
+            limit=1,
+        )
+        complete = first_page.turns + second_page.turns
+
+        self.assertEqual(first_page.session_revision, 2)
+        self.assertEqual(first_page.next_after_revision, 1)
+        self.assertTrue(first_page.has_more)
+        self.assertEqual(second_page.next_after_revision, 2)
+        self.assertFalse(second_page.has_more)
+        self.assertEqual(
+            [item.revision for item in complete],
+            [1, 2],
+        )
+        self.assertEqual(
+            [item.user_text for item in complete],
+            [FIRST_STRAND, RELATED_STRAND],
+        )
+        self.assertIsNone(complete[0].text)
+        self.assertEqual(complete[1].text, second.outcome.text)
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(
+            self.repository.load(first.outcome.thread_id).revision,
+            2,
+        )
+
+    def test_turn_projection_validates_cursor_and_native_references(self):
+        first = self.service.create_thread(
+            "thread:projection-validation",
+            FIRST_STRAND,
+            turn_id="turn:first",
+        )
+        self.service.submit_thread_turn(
+            first.outcome.thread_id,
+            RELATED_STRAND,
+            turn_id="turn:second",
+            expected_revision=1,
+        )
+        with self.assertRaises(TurnProjectionPaginationError):
+            self.service.project_thread_turns(
+                first.outcome.thread_id,
+                after_revision=3,
+            )
+        with self.assertRaises(TurnProjectionPaginationError):
+            self.service.project_thread_turns(
+                first.outcome.thread_id,
+                limit=101,
+            )
+
+        corrupt = deepcopy(
+            self.repository.load(first.outcome.thread_id)
+        )
+        user_stream_id = corrupt.turns[0].user_stream_id
+        next(
+            item
+            for item in corrupt.field.streams
+            if item.stream_id == user_stream_id
+        ).payload = {}
+        with patch.object(
+            self.repository,
+            "load",
+            return_value=corrupt,
+        ):
+            with self.assertRaises(NativeSessionError):
+                self.service.project_thread_turns(
+                    first.outcome.thread_id,
+                )
+
+        missing_articulation = deepcopy(
+            self.repository.load(first.outcome.thread_id)
+        )
+        accepted_id = missing_articulation.turns[1].articulation_ids[0]
+        missing_articulation.field.articulations = [
+            item
+            for item in missing_articulation.field.articulations
+            if item.articulation_id != accepted_id
+        ]
+        with patch.object(
+            self.repository,
+            "load",
+            return_value=missing_articulation,
+        ):
+            with self.assertRaises(NativeSessionError):
+                self.service.project_thread_turns(
+                    first.outcome.thread_id,
+                    after_revision=1,
+                )
 
     def test_retry_is_idempotent_and_changed_reuse_conflicts(self):
         first = self.service.create_thread(
@@ -507,6 +621,127 @@ class NativeFastAPITests(unittest.TestCase):
         )
         self.assertEqual(self.client.get(path).status_code, 200)
 
+    def test_turn_pages_restore_exact_history_without_gaps_after_restart(self):
+        first = self.generate().json()
+        continuation = self.client.post(
+            "/chat/{0}".format(first["thread_id"]),
+            json={
+                "user_text": RELATED_STRAND,
+                "turn_id": TURN_B,
+                "expected_revision": 1,
+            },
+        ).json()
+        self.client.close()
+        restarted = create_app(session_root=self.root)
+        self.client = TestClient(
+            restarted,
+            raise_server_exceptions=False,
+        )
+        path = "/thread/{0}/turns".format(first["thread_id"])
+
+        first_page_response = self.client.get(path, params={"limit": 1})
+        first_page = first_page_response.json()
+        second_page_response = self.client.get(
+            path,
+            params={
+                "after_revision": first_page["next_after_revision"],
+                "limit": 1,
+            },
+        )
+        second_page = second_page_response.json()
+
+        self.assertEqual(first_page_response.status_code, 200)
+        self.assertEqual(second_page_response.status_code, 200)
+        self.assertEqual(first_page["session_revision"], 2)
+        self.assertTrue(first_page["has_more"])
+        self.assertFalse(second_page["has_more"])
+        turns = first_page["turns"] + second_page["turns"]
+        self.assertEqual([item["revision"] for item in turns], [1, 2])
+        self.assertEqual(
+            [item["user_text"] for item in turns],
+            [FIRST_STRAND, RELATED_STRAND],
+        )
+        self.assertIsNone(turns[0]["text"])
+        self.assertEqual(turns[1]["text"], continuation["text"])
+        forbidden = (
+            "material_digest",
+            "stream_id",
+            "candidate_id",
+            "cycle_start",
+            "field_values",
+            "reintegration",
+        )
+        for field in forbidden:
+            self.assertNotIn(field, first_page_response.text)
+            self.assertNotIn(field, second_page_response.text)
+
+    def test_turn_page_pagination_errors_are_typed_and_safe(self):
+        first = self.generate().json()
+        path = "/thread/{0}/turns".format(first["thread_id"])
+
+        negative = self.client.get(
+            path,
+            params={"after_revision": -1},
+        )
+        too_large = self.client.get(path, params={"limit": 101})
+        future = self.client.get(
+            path,
+            params={"after_revision": 2},
+        )
+        missing = self.client.get(
+            "/thread/{0}/turns".format(THREAD_B)
+        )
+
+        self.assertEqual(negative.status_code, 422)
+        self.assertEqual(
+            negative.json()["error"]["code"],
+            "invalid_request",
+        )
+        self.assertEqual(too_large.status_code, 422)
+        self.assertEqual(
+            too_large.json()["error"]["code"],
+            "invalid_request",
+        )
+        self.assertEqual(future.status_code, 422)
+        self.assertEqual(
+            future.json()["error"]["code"],
+            "invalid_pagination",
+        )
+        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(
+            missing.json()["error"]["code"],
+            "session_not_found",
+        )
+
+    def test_invalid_projection_reference_returns_safe_server_error(self):
+        first = self.generate().json()
+        repository = self.application.state.native_service.repository
+        corrupt = deepcopy(repository.load(first["thread_id"]))
+        user_stream_id = corrupt.turns[0].user_stream_id
+        next(
+            item
+            for item in corrupt.field.streams
+            if item.stream_id == user_stream_id
+        ).payload = {
+            "text": {"private": "payload"}
+        }
+
+        with patch.object(
+            repository,
+            "load",
+            return_value=corrupt,
+        ):
+            response = self.client.get(
+                "/thread/{0}/turns".format(first["thread_id"])
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json()["error"]["code"],
+            "invalid_durable_state",
+        )
+        self.assertNotIn("private", response.text)
+
     def test_invalid_requests_are_422_without_echoing_payloads(self):
         response = self.client.post(
             "/generate",
@@ -654,6 +889,17 @@ class NativeFastAPITests(unittest.TestCase):
             "reintegration_pending",
         )
         self.assertTrue(summary["reintegration_pending"])
+        turns = self.client.get(
+            "/thread/{0}/turns".format(first["thread_id"])
+        ).json()["turns"]
+        self.assertEqual(
+            [item["outcome"] for item in turns],
+            ["no_articulation", "reintegration_pending"],
+        )
+        self.assertEqual(
+            [item["text"] for item in turns],
+            [None, None],
+        )
 
     def test_openapi_declares_typed_errors_and_no_delete_operation(self):
         response = self.client.get("/openapi.json")
@@ -686,6 +932,19 @@ class NativeFastAPITests(unittest.TestCase):
         )
         thread_path = document["paths"]["/thread/{thread_id}"]
         self.assertNotIn("delete", thread_path)
+        turn_path = document["paths"][
+            "/thread/{thread_id}/turns"
+        ]["get"]
+        self.assertIn("200", turn_path["responses"])
+        self.assertIn("404", turn_path["responses"])
+        self.assertIn("422", turn_path["responses"])
+        self.assertIn("500", turn_path["responses"])
+        self.assertEqual(
+            turn_path["responses"]["200"]["content"][
+                "application/json"
+            ]["schema"]["$ref"],
+            "#/components/schemas/TurnPageResponse",
+        )
 
 
 if __name__ == "__main__":

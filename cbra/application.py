@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Tuple
 
 from cbra.native import (
     DEFAULT_MAX_CYCLES,
     NativeSession,
+    NativeSessionError,
     RuntimeHypotheses,
     StaleRevisionError,
     Stream,
@@ -40,6 +41,32 @@ class ApplicationSessionSummary:
     cycle_count: int
     latest_outcome: Optional[TurnOutcomeKind]
     reintegration_pending: bool
+
+
+@dataclass(frozen=True)
+class ApplicationTurnProjection:
+    """One ledger-owned turn rendered without exposing native field state."""
+
+    turn_id: str
+    revision: int
+    user_text: str
+    outcome: TurnOutcomeKind
+    text: Optional[str]
+
+
+@dataclass(frozen=True)
+class ApplicationTurnPage:
+    """One immutable, cursor-bounded page of public native turns."""
+
+    thread_id: str
+    session_revision: int
+    turns: Tuple[ApplicationTurnProjection, ...]
+    next_after_revision: int
+    has_more: bool
+
+
+class TurnProjectionPaginationError(ValueError):
+    """A transcript cursor cannot name a valid bounded session page."""
 
 
 class NativeApplicationService:
@@ -178,4 +205,94 @@ class NativeApplicationService:
             reintegration_pending=(
                 latest_outcome == TurnOutcomeKind.REINTEGRATION_PENDING
             ),
+        )
+
+    def project_thread_turns(
+        self,
+        thread_id: str,
+        *,
+        after_revision: int = 0,
+        limit: int = 50,
+    ) -> ApplicationTurnPage:
+        """Project one immutable page from ledger-owned public references."""
+        if type(after_revision) is not int or after_revision < 0:
+            raise TurnProjectionPaginationError(
+                "after_revision must be a non-negative integer"
+            )
+        if type(limit) is not int or limit < 1 or limit > 100:
+            raise TurnProjectionPaginationError(
+                "limit must be between 1 and 100"
+            )
+
+        session = self.repository.load(thread_id)
+        if after_revision > session.revision:
+            raise TurnProjectionPaginationError(
+                "after_revision exceeds the current session revision"
+            )
+
+        streams = {
+            item.stream_id: item
+            for item in session.field.streams
+        }
+        articulations = {
+            item.articulation_id: item
+            for item in session.field.articulations
+        }
+        selected = session.turns[
+            after_revision : after_revision + limit
+        ]
+        projected = []
+        for record in selected:
+            user_stream = streams.get(record.user_stream_id)
+            if user_stream is None or user_stream.kind != "user_input":
+                raise NativeSessionError(
+                    "turn projection references an invalid user stream"
+                )
+            user_text = user_stream.payload.get("text")
+            if not isinstance(user_text, str) or not user_text.strip():
+                raise NativeSessionError(
+                    "turn projection user stream has invalid text"
+                )
+
+            text = None
+            if record.outcome == TurnOutcomeKind.ACCEPTED_ARTICULATION:
+                if len(record.articulation_ids) != 1:
+                    raise NativeSessionError(
+                        "accepted turn projection has invalid articulation "
+                        "references"
+                    )
+                articulation = articulations.get(
+                    record.articulation_ids[0]
+                )
+                if (
+                    articulation is None
+                    or not isinstance(articulation.text, str)
+                    or not articulation.text.strip()
+                ):
+                    raise NativeSessionError(
+                        "accepted turn projection references invalid text"
+                    )
+                text = articulation.text
+
+            projected.append(
+                ApplicationTurnProjection(
+                    turn_id=record.turn_id,
+                    revision=record.revision,
+                    user_text=user_text,
+                    outcome=record.outcome,
+                    text=text,
+                )
+            )
+
+        next_after_revision = (
+            projected[-1].revision
+            if projected
+            else after_revision
+        )
+        return ApplicationTurnPage(
+            thread_id=session.thread_id,
+            session_revision=session.revision,
+            turns=tuple(projected),
+            next_after_revision=next_after_revision,
+            has_more=next_after_revision < session.revision,
         )

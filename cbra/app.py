@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, Union
 from uuid import uuid4
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -17,10 +17,14 @@ from cbra.api_models import (
     ErrorResponse,
     HealthResponse,
     SessionSummaryResponse,
+    TurnPageResponse,
     TurnRequest,
     TurnResponse,
 )
-from cbra.application import NativeApplicationService
+from cbra.application import (
+    NativeApplicationService,
+    TurnProjectionPaginationError,
+)
 from cbra.native import (
     NativePersistenceError,
     NativeSessionError,
@@ -37,7 +41,7 @@ from cbra.store import (
 
 
 APP_TITLE = "CBRA Writing Support"
-APP_VERSION = "0.3.1-native-bootstrap"
+APP_VERSION = "0.4.0-native-turn-projection"
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
@@ -187,6 +191,17 @@ def create_app(
             message="A new native session could not be claimed.",
         )
 
+    @application.exception_handler(TurnProjectionPaginationError)
+    async def invalid_pagination(
+        request: Request,
+        exc: TurnProjectionPaginationError,
+    ) -> JSONResponse:
+        return _error_response(
+            status_code=422,
+            code="invalid_pagination",
+            message="The requested transcript page is invalid.",
+        )
+
     @application.exception_handler(StarletteHTTPException)
     async def http_error(
         request: Request,
@@ -321,6 +336,30 @@ def create_app(
         return SessionSummaryResponse.from_summary(
             _request_id(),
             summary,
+        )
+
+    @application.get(
+        "/thread/{thread_id}/turns",
+        response_model=TurnPageResponse,
+        responses={
+            404: {"model": ErrorResponse},
+            422: {"model": ErrorResponse},
+            500: {"model": ErrorResponse},
+        },
+    )
+    def get_thread_turns_route(
+        thread_id: str,
+        after_revision: int = Query(default=0, ge=0),
+        limit: int = Query(default=50, ge=1, le=100),
+    ) -> TurnPageResponse:
+        page = service.project_thread_turns(
+            thread_id,
+            after_revision=after_revision,
+            limit=limit,
+        )
+        return TurnPageResponse.from_page(
+            _request_id(),
+            page,
         )
 
     return application
