@@ -61,26 +61,31 @@ The harness is fixed to this disposable smoke apparatus:
 
 ChatGPT subscriptions and API Platform billing are separate. Before running
 the harness, use a dedicated restricted API project key and the smallest
-suitable project spend limit. Export the key only in the local Terminal
-process. Never paste it into ChatGPT, a command, a file, `.env`, or Git.
+suitable project spend limit. Never paste the key into ChatGPT, a command, a
+file, `.env`, or Git.
 
 From a clean checkout descending from application-activation commit `04b04f0`,
 create an empty report directory outside the repository and run:
 
 ```bash
 artifact_dir="$(mktemp -d "${TMPDIR:-/tmp}/cbra-openai-live-report.XXXXXX")"
-read -s OPENAI_API_KEY
-export OPENAI_API_KEY
 python scripts/validate_openai_live.py \
   --artifact-dir "$artifact_dir" \
-  --confirm-one-billable-request
-unset OPENAI_API_KEY
+  --confirm-one-billable-request \
+  --prompt-for-api-key
 ```
 
-The explicit confirmation flag, a nonempty `OPENAI_API_KEY`, a clean eligible
-checkout, an empty out-of-repository artifact directory, and the absence of
-ambient OpenAI endpoint, organization, project, or logging overrides are all
-required. The API key is never accepted as a command argument.
+Secure prompt mode asks for the same key twice without displaying it. Each
+entry must have one complete OpenAI secret-key shape, and both entries must
+match before preflight can construct a client. This rejects incomplete,
+whitespace-bearing, and accidentally duplicated pastes before any provider
+attempt. The key remains in the Python process only and is never accepted as a
+command argument.
+
+The explicit confirmation flag, a clean eligible checkout, an empty
+out-of-repository artifact directory, and the absence of ambient OpenAI
+endpoint, organization, project, or logging overrides are all required.
+`OPENAI_API_KEY` must be unset when using secure prompt mode.
 
 The harness submits fixed cedar-and-soil strands through the real FastAPI
 application. Startup, health, the first turn, reads, replay, restart, and
@@ -98,3 +103,10 @@ and replay results. It excludes request bodies, instructions, corpus and user
 text, provider output, authorization material, and the API key. Temporary
 corpus and session files are removed before the report is written. Review the
 sanitized report, then revoke the dedicated test key.
+
+Provider HTTP failures are classified from status alone. In particular, a
+`401` is reported as `authentication_failed` without copying the provider's
+error body. Optional request ID, response-status, or model metadata that does
+not satisfy the report's conservative format is omitted rather than allowed
+to obscure the provider result; `omitted_metadata` records only the field
+name, never its value.

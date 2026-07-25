@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+import getpass
 import hashlib
+import hmac
 import importlib
 import json
 import os
@@ -61,6 +63,56 @@ class LiveValidationError(RuntimeError):
     """The controlled live validation cannot proceed safely."""
 
 
+def _validated_api_key(value: object) -> str:
+    if (
+        not isinstance(value, str)
+        or value != value.strip()
+        or not value.startswith("sk-")
+        or not 20 <= len(value) <= 2_048
+        or any(
+            ord(character) < 33 or ord(character) > 126
+            for character in value
+        )
+        or value.count("sk-") != 1
+    ):
+        raise LiveValidationError(
+            "API key entry appears incomplete, duplicated, or malformed"
+        )
+    return value
+
+
+def capture_api_key(
+    prompt_reader=None,
+    notice=None,
+) -> str:
+    """Capture and confirm one key without echoing or persisting it."""
+    if prompt_reader is None:
+        prompt_reader = getpass.getpass
+    if notice is None:
+        notice = print
+    first = _validated_api_key(
+        prompt_reader(
+            "Paste the restricted API key once, then press Return: "
+        )
+    )
+    notice(
+        "One key-shaped value was captured. "
+        "Paste the same key once more to confirm."
+    )
+    second = _validated_api_key(
+        prompt_reader(
+            "Paste the same restricted API key once more, "
+            "then press Return: "
+        )
+    )
+    if not hmac.compare_digest(first, second):
+        raise LiveValidationError(
+            "The two API key entries did not match"
+        )
+    notice("Matching key entry confirmed.")
+    return first
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -99,17 +151,21 @@ def validate_operator_preflight(
     artifact_dir: Path,
     confirmed: bool,
     environment: Mapping[str, str],
+    require_api_key: bool = True,
 ) -> Dict[str, object]:
     """Fail closed before importing CBRA or constructing an HTTP client."""
     if not confirmed:
         raise LiveValidationError(
             "The explicit one-billable-request confirmation is required"
         )
-    api_key = environment.get("OPENAI_API_KEY")
-    if not isinstance(api_key, str) or not api_key.strip():
-        raise LiveValidationError(
-            "OPENAI_API_KEY is required in the process environment"
-        )
+    api_key = None
+    if require_api_key:
+        api_key = environment.get("OPENAI_API_KEY")
+        if api_key is None:
+            raise LiveValidationError(
+                "OPENAI_API_KEY is required in the process environment"
+            )
+        api_key = _validated_api_key(api_key)
     for name in _AMBIENT_PROVIDER_OVERRIDES:
         if environment.get(name) is not None:
             raise LiveValidationError(
@@ -167,14 +223,16 @@ def validate_operator_preflight(
             "Checkout does not descend from the application-activation base"
         ) from None
     head_commit = _run_git(resolved_repo, ("rev-parse", "HEAD"))
-    return {
+    facts = {
         "base_commit": BASE_COMMIT,
         "head_commit": head_commit,
         "clean_tree": True,
         "repo_root": str(resolved_repo),
         "artifact_dir": str(resolved_artifacts),
-        "api_key": api_key,
     }
+    if require_api_key:
+        facts["api_key"] = api_key
+    return facts
 
 
 def _safe_metadata_text(value: object) -> Optional[str]:
@@ -206,6 +264,30 @@ def _usage_metadata(payload: object) -> Optional[Dict[str, object]]:
     return allowed or None
 
 
+def _provider_result(
+    *,
+    http_status: Optional[int],
+    transport_failure: bool,
+) -> str:
+    if transport_failure:
+        return "transport_failure"
+    if http_status is None:
+        return "response_unavailable"
+    if 200 <= http_status < 300:
+        return "response_received"
+    if http_status == 401:
+        return "authentication_failed"
+    if http_status == 403:
+        return "access_denied"
+    if http_status == 429:
+        return "rate_limit_or_quota_exceeded"
+    if 400 <= http_status < 500:
+        return "request_rejected"
+    if 500 <= http_status < 600:
+        return "provider_error"
+    return "http_failure"
+
+
 class SingleAttemptTransport(httpx.BaseTransport):
     """Delegate at most one HTTP request while retaining safe metadata only."""
 
@@ -221,7 +303,15 @@ class SingleAttemptTransport(httpx.BaseTransport):
         self.response_model = None
         self.usage = None
         self.transport_failure = False
-        self.unsafe_metadata = False
+        self.omitted_metadata = []
+
+    def _optional_metadata(self, name: str, value: object) -> Optional[str]:
+        if value is None:
+            return None
+        safe_value = _safe_metadata_text(value)
+        if safe_value is None and name not in self.omitted_metadata:
+            self.omitted_metadata.append(name)
+        return safe_value
 
     def _validate_request(self, request: httpx.Request) -> Dict[str, object]:
         if (
@@ -300,10 +390,10 @@ class SingleAttemptTransport(httpx.BaseTransport):
 
     def capture_response(self, response: httpx.Response) -> None:
         self.http_status = response.status_code
-        raw_request_id = response.headers.get("x-request-id")
-        self.request_id = _safe_metadata_text(raw_request_id)
-        if raw_request_id is not None and self.request_id is None:
-            self.unsafe_metadata = True
+        self.request_id = self._optional_metadata(
+            "request_id",
+            response.headers.get("x-request-id"),
+        )
         try:
             response.read()
             payload = response.json()
@@ -313,14 +403,14 @@ class SingleAttemptTransport(httpx.BaseTransport):
             return
         raw_status = payload.get("status")
         raw_model = payload.get("model")
-        self.response_status = _safe_metadata_text(raw_status)
-        self.response_model = _safe_metadata_text(raw_model)
-        if (
-            raw_status is not None and self.response_status is None
-        ) or (
-            raw_model is not None and self.response_model is None
-        ):
-            self.unsafe_metadata = True
+        self.response_status = self._optional_metadata(
+            "response_status",
+            raw_status,
+        )
+        self.response_model = self._optional_metadata(
+            "response_model",
+            raw_model,
+        )
         self.usage = _usage_metadata(payload.get("usage"))
 
     def close(self) -> None:
@@ -720,11 +810,6 @@ def execute_live_validation(
                         "Restart replay changed durable session bytes"
                     )
 
-        if factory.transport.unsafe_metadata:
-            raise LiveValidationError(
-                "Provider metadata was unsafe for the sanitized report"
-            )
-
         report = {
             "apparatus": {
                 "base_url": OFFICIAL_BASE_URL,
@@ -753,8 +838,15 @@ def execute_live_validation(
                 "attempt_count": factory.transport.attempt_count,
                 "http_status": factory.transport.http_status,
                 "latency_ms": factory.transport.latency_ms,
+                "omitted_metadata": sorted(
+                    factory.transport.omitted_metadata
+                ),
                 "request": factory.transport.request_metadata,
                 "request_id": factory.transport.request_id,
+                "result": _provider_result(
+                    http_status=factory.transport.http_status,
+                    transport_failure=factory.transport.transport_failure,
+                ),
                 "response_model": factory.transport.response_model,
                 "response_status": factory.transport.response_status,
                 "transport_failure": factory.transport.transport_failure,
@@ -830,6 +922,14 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Explicitly permit at most one billable Responses request",
     )
+    parser.add_argument(
+        "--prompt-for-api-key",
+        action="store_true",
+        help=(
+            "Securely capture and compare two hidden key entries instead "
+            "of reading OPENAI_API_KEY"
+        ),
+    )
     return parser
 
 
@@ -837,13 +937,32 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     arguments = _parser().parse_args(argv)
     repo_root = Path(__file__).resolve().parent.parent
     try:
-        facts = validate_operator_preflight(
-            repo_root=repo_root,
-            artifact_dir=arguments.artifact_dir,
-            confirmed=arguments.confirm_one_billable_request,
-            environment=os.environ,
-        )
-        api_key = str(facts.pop("api_key"))
+        if not arguments.confirm_one_billable_request:
+            raise LiveValidationError(
+                "The explicit one-billable-request confirmation is required"
+            )
+        environment = dict(os.environ)
+        if arguments.prompt_for_api_key:
+            if environment.get("OPENAI_API_KEY") is not None:
+                raise LiveValidationError(
+                    "Remove OPENAI_API_KEY before using secure prompt mode"
+                )
+            facts = validate_operator_preflight(
+                repo_root=repo_root,
+                artifact_dir=arguments.artifact_dir,
+                confirmed=arguments.confirm_one_billable_request,
+                environment=environment,
+                require_api_key=False,
+            )
+            api_key = capture_api_key()
+        else:
+            facts = validate_operator_preflight(
+                repo_root=repo_root,
+                artifact_dir=arguments.artifact_dir,
+                confirmed=arguments.confirm_one_billable_request,
+                environment=environment,
+            )
+            api_key = str(facts.pop("api_key"))
         facts.pop("repo_root", None)
         facts.pop("artifact_dir", None)
         report = execute_live_validation(

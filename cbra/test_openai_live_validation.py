@@ -22,6 +22,7 @@ from scripts.validate_openai_live import (
     REPORT_FILENAME,
     SingleAttemptTransport,
     TEXT_VERBOSITY,
+    capture_api_key,
     execute_live_validation,
     main,
     validate_operator_preflight,
@@ -149,6 +150,63 @@ class OpenAILiveValidationTests(unittest.TestCase):
         self.assertIn("not permitted", str(ambient.exception))
         self.assertNotIn(TEST_API_KEY, str(ambient.exception))
 
+    def test_preflight_rejects_incomplete_or_duplicated_key_entries(self):
+        invalid_entries = (
+            "not-an-api-key",
+            " " + TEST_API_KEY,
+            TEST_API_KEY + " ",
+            TEST_API_KEY + TEST_API_KEY,
+        )
+        for value in invalid_entries:
+            with self.subTest(value_length=len(value)):
+                with self.assertRaises(LiveValidationError) as captured:
+                    validate_operator_preflight(
+                        repo_root=self.repo_root,
+                        artifact_dir=self.artifacts,
+                        confirmed=True,
+                        environment={"OPENAI_API_KEY": value},
+                    )
+                self.assertIn("duplicated", str(captured.exception))
+                self.assertNotIn(value, str(captured.exception))
+
+    def test_secure_key_capture_requires_one_matching_key_twice(self):
+        entries = iter((TEST_API_KEY, TEST_API_KEY))
+        prompts = []
+        notices = []
+
+        captured = capture_api_key(
+            prompt_reader=lambda prompt: (
+                prompts.append(prompt) or next(entries)
+            ),
+            notice=notices.append,
+        )
+
+        self.assertEqual(captured, TEST_API_KEY)
+        self.assertEqual(len(prompts), 2)
+        self.assertEqual(len(notices), 2)
+        rendered = "\n".join(prompts + notices)
+        self.assertNotIn(TEST_API_KEY, rendered)
+
+    def test_secure_key_capture_rejects_duplication_and_mismatch(self):
+        duplicated = iter((TEST_API_KEY + TEST_API_KEY,))
+        with self.assertRaises(LiveValidationError) as duplicate_error:
+            capture_api_key(
+                prompt_reader=lambda prompt: next(duplicated),
+                notice=lambda message: None,
+            )
+        self.assertIn("duplicated", str(duplicate_error.exception))
+
+        mismatched = iter((
+            TEST_API_KEY,
+            "sk-another-valid-validation-secret-key",
+        ))
+        with self.assertRaises(LiveValidationError) as mismatch_error:
+            capture_api_key(
+                prompt_reader=lambda prompt: next(mismatched),
+                notice=lambda message: None,
+            )
+        self.assertIn("did not match", str(mismatch_error.exception))
+
     def test_preflight_rejects_artifacts_inside_repository(self):
         with tempfile.TemporaryDirectory(
             dir=str(self.repo_root)
@@ -252,6 +310,11 @@ class OpenAILiveValidationTests(unittest.TestCase):
         self.assertEqual(report["provider"]["attempt_count"], 1)
         self.assertEqual(report["provider"]["http_status"], 200)
         self.assertEqual(
+            report["provider"]["result"],
+            "response_received",
+        )
+        self.assertEqual(report["provider"]["omitted_metadata"], [])
+        self.assertEqual(
             report["provider"]["request_id"],
             "req_live_validation",
         )
@@ -351,12 +414,52 @@ class OpenAILiveValidationTests(unittest.TestCase):
             "safe_provider_failure",
         )
         self.assertEqual(report["provider"]["http_status"], 401)
+        self.assertEqual(
+            report["provider"]["result"],
+            "authentication_failed",
+        )
         self.assertEqual(report["provider"]["attempt_count"], 1)
         self.assertNotIn(TEST_API_KEY, report_text)
         self.assertEqual(
             report["durable_state"]["before_second_sha256"],
             report["durable_state"]["after_second_sha256"],
         )
+
+    def test_authentication_result_survives_unfamiliar_request_id(self):
+        def unauthorized(request):
+            return httpx.Response(
+                401,
+                headers={
+                    "x-request-id": "request id with unfamiliar formatting"
+                },
+                json={
+                    "error": {
+                        "message": "Incorrect API key provided",
+                        "type": "invalid_request_error",
+                    }
+                },
+            )
+
+        report = self.execute(unauthorized)
+        report_text = (self.artifacts / REPORT_FILENAME).read_text(
+            encoding="utf-8"
+        )
+
+        self.assertEqual(
+            report["application_result"],
+            "safe_provider_failure",
+        )
+        self.assertEqual(
+            report["provider"]["result"],
+            "authentication_failed",
+        )
+        self.assertEqual(report["provider"]["http_status"], 401)
+        self.assertIsNone(report["provider"]["request_id"])
+        self.assertEqual(
+            report["provider"]["omitted_metadata"],
+            ["request_id"],
+        )
+        self.assertNotIn("unfamiliar formatting", report_text)
 
     def test_transport_failure_is_generic_and_rolls_back(self):
         def fail(request):
@@ -369,25 +472,63 @@ class OpenAILiveValidationTests(unittest.TestCase):
             "safe_provider_failure",
         )
         self.assertTrue(report["provider"]["transport_failure"])
+        self.assertEqual(
+            report["provider"]["result"],
+            "transport_failure",
+        )
         self.assertEqual(report["provider"]["attempt_count"], 1)
         self.assertEqual(
             report["durable_state"]["before_second_sha256"],
             report["durable_state"]["after_second_sha256"],
         )
 
-    def test_credential_shaped_provider_header_aborts_before_first_write(self):
+    def test_unfamiliar_or_credential_shaped_metadata_is_omitted(self):
         unsafe_values = (
+            TEST_API_KEY,
             "sk-malicious-provider-header-value",
             "Bearer-hidden-authorization-material",
+            "request id with spaces (edge)",
         )
         for value in unsafe_values:
             with self.subTest(value=value):
-                with self.assertRaises(LiveValidationError) as captured:
-                    self.execute(
-                        completed_handler(request_id=value)
-                    )
-                self.assertIn("metadata", str(captured.exception))
-                self.assertEqual(list(self.artifacts.iterdir()), [])
+                report = self.execute(
+                    completed_handler(request_id=value)
+                )
+                report_text = (
+                    self.artifacts / REPORT_FILENAME
+                ).read_text(encoding="utf-8")
+
+                self.assertEqual(
+                    report["application_result"],
+                    "full_pass",
+                )
+                self.assertIsNone(report["provider"]["request_id"])
+                self.assertEqual(
+                    report["provider"]["omitted_metadata"],
+                    ["request_id"],
+                )
+                self.assertNotIn(value, report_text)
+                self.assertNotIn(TEST_API_KEY, report_text)
+                (self.artifacts / REPORT_FILENAME).unlink()
+
+    def test_alternate_response_model_format_is_omitted_not_fatal(self):
+        def alternate_model(request):
+            payload = response_payload()
+            payload["model"] = "gpt-5.6-luna (snapshot candidate)"
+            return httpx.Response(
+                200,
+                headers={"x-request-id": "req_alternate_model"},
+                json=payload,
+            )
+
+        report = self.execute(alternate_model)
+
+        self.assertEqual(report["application_result"], "full_pass")
+        self.assertIsNone(report["provider"]["response_model"])
+        self.assertEqual(
+            report["provider"]["omitted_metadata"],
+            ["response_model"],
+        )
 
     def test_cli_refuses_without_billing_flag_and_writes_nothing(self):
         with patch.dict(
@@ -400,6 +541,26 @@ class OpenAILiveValidationTests(unittest.TestCase):
             )
 
         self.assertEqual(result, 2)
+        self.assertEqual(list(self.artifacts.iterdir()), [])
+
+    def test_cli_prompt_mode_rejects_ambient_key_before_prompting(self):
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": TEST_API_KEY},
+            clear=True,
+        ):
+            with patch(
+                "scripts.validate_openai_live.capture_api_key"
+            ) as capture:
+                result = main([
+                    "--artifact-dir",
+                    str(self.artifacts),
+                    "--confirm-one-billable-request",
+                    "--prompt-for-api-key",
+                ])
+
+        self.assertEqual(result, 2)
+        capture.assert_not_called()
         self.assertEqual(list(self.artifacts.iterdir()), [])
 
 
