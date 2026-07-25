@@ -8,6 +8,7 @@ from typing import Optional, Sequence, Tuple
 from cbra.corpus import CanonicalCorpusSnapshot
 from cbra.native import (
     DEFAULT_MAX_CYCLES,
+    ArticulationRenderer,
     NativeSession,
     NativeSessionError,
     RuntimeHypotheses,
@@ -80,6 +81,7 @@ class NativeApplicationService:
         max_cycles: int = DEFAULT_MAX_CYCLES,
         hypotheses: Optional[RuntimeHypotheses] = None,
         canonical_corpus: Optional[CanonicalCorpusSnapshot] = None,
+        renderer: Optional[ArticulationRenderer] = None,
     ) -> None:
         if type(max_cycles) is not int or max_cycles < 1:
             raise ValueError("max_cycles must be a positive integer")
@@ -87,6 +89,14 @@ class NativeApplicationService:
         self.max_cycles = max_cycles
         self.hypotheses = hypotheses
         self.canonical_corpus = canonical_corpus
+        if (
+            renderer is not None
+            and not callable(getattr(renderer, "render", None))
+        ):
+            raise TypeError(
+                "renderer must provide a callable render method"
+            )
+        self.renderer = renderer
 
     def create_thread(
         self,
@@ -122,6 +132,7 @@ class NativeApplicationService:
                     expected_revision=0,
                     max_cycles=self.max_cycles,
                     hypotheses=self.hypotheses,
+                    renderer=self.renderer,
                 )
                 return updated, ApplicationTurnResult(
                     outcome=outcome,
@@ -140,6 +151,7 @@ class NativeApplicationService:
                 expected_revision=0,
                 max_cycles=self.max_cycles,
                 hypotheses=self.hypotheses,
+                renderer=self.renderer,
             )
             return updated, ApplicationTurnResult(
                 outcome=outcome,
@@ -172,6 +184,7 @@ class NativeApplicationService:
                 expected_revision=expected_revision,
                 max_cycles=self.max_cycles,
                 hypotheses=self.hypotheses,
+                renderer=self.renderer,
             )
             return updated, ApplicationTurnResult(
                 outcome=outcome,

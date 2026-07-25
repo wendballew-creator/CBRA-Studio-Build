@@ -7,6 +7,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 from uuid import uuid4
 
 from .articulation import (
+    ArticulationRenderer,
     accept_articulation,
     evaluate_articulation_candidate,
     form_articulation_candidate,
@@ -707,6 +708,7 @@ def reintegrate_field(
 def run_cycle(
     state: FieldState,
     hypotheses: Optional[RuntimeHypotheses] = None,
+    renderer: Optional[ArticulationRenderer] = None,
 ) -> CycleResult:
     hypotheses = hypotheses or RuntimeHypotheses()
     before = snapshot_field(state)
@@ -732,11 +734,19 @@ def run_cycle(
     else:
         cut = form_provisional_cut(state, hypotheses)
         if cut is not None:
-            candidate = form_articulation_candidate(
-                state,
-                cut,
-                hypotheses,
-            )
+            if renderer is None:
+                candidate = form_articulation_candidate(
+                    state,
+                    cut,
+                    hypotheses,
+                )
+            else:
+                candidate = form_articulation_candidate(
+                    state,
+                    cut,
+                    hypotheses,
+                    renderer,
+                )
         if candidate is not None:
             evaluation = evaluate_articulation_candidate(
                 state,

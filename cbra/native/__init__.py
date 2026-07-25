@@ -7,6 +7,10 @@ concerns are allowed to shape the core.
 """
 
 from .articulation import (
+    MAX_RENDERED_ARTICULATION_CHARS,
+    ArticulationRenderer,
+    ArticulationRendererError,
+    NativeTemplateArticulationRenderer,
     accept_articulation,
     articulate,
     build_articulation_basis,
@@ -92,6 +96,8 @@ from .session_models import (
 
 __all__ = [
     "Apparatus",
+    "ArticulationRenderer",
+    "ArticulationRendererError",
     "Articulation",
     "ArticulationBasis",
     "ArticulationCandidate",
@@ -112,6 +118,7 @@ __all__ = [
     "HistoryEntry",
     "IntegrityError",
     "NativeFormatError",
+    "NativeTemplateArticulationRenderer",
     "NativePersistenceError",
     "NativeSession",
     "NativeSessionError",
@@ -125,6 +132,7 @@ __all__ = [
     "ReintegrationReference",
     "Relation",
     "RuntimeHypotheses",
+    "MAX_RENDERED_ARTICULATION_CHARS",
     "SessionOwnershipError",
     "StaleRevisionError",
     "Stream",

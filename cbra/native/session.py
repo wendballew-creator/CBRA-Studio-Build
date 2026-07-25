@@ -8,6 +8,7 @@ from copy import deepcopy
 from typing import Dict, Optional, Sequence, Tuple
 from uuid import uuid4
 
+from .articulation import ArticulationRenderer
 from .hypotheses import RuntimeHypotheses
 from .models import Apparatus, FieldState, Stream
 from .runtime import (
@@ -181,6 +182,7 @@ def submit_turn(
     expected_revision: Optional[int] = None,
     max_cycles: int = DEFAULT_MAX_CYCLES,
     hypotheses: Optional[RuntimeHypotheses] = None,
+    renderer: Optional[ArticulationRenderer] = None,
 ) -> Tuple[NativeSession, TurnOutcome]:
     """Append material once and expose the field's bounded truthful outcome."""
     assert_session_invariants(session)
@@ -281,7 +283,10 @@ def submit_turn(
     cycle_start = len(working.field.history) + 1
     kind = TurnOutcomeKind.NO_ARTICULATION
     for _ in range(max_cycles):
-        result = run_cycle(working.field, hypotheses)
+        if renderer is None:
+            result = run_cycle(working.field, hypotheses)
+        else:
+            result = run_cycle(working.field, hypotheses, renderer)
         if result.articulation is not None:
             kind = TurnOutcomeKind.ACCEPTED_ARTICULATION
             break

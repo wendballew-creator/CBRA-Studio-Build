@@ -5,7 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from hashlib import sha1
 import re
-from typing import Iterable, List, Optional, Sequence
+from typing import Iterable, List, Optional, Protocol, Sequence
 
 from .hypotheses import RuntimeHypotheses
 from .models import (
@@ -68,6 +68,57 @@ PROCEDURAL_PATTERNS = (
     r"\b(?:coherence|resonance|difference|permeability|mutuality)"
     r"\s+(?:is\s+)?0\.\d+",
 )
+
+MAX_RENDERED_ARTICULATION_CHARS = 32768
+
+
+class ArticulationRenderer(Protocol):
+    """Propose text from an isolated native articulation basis."""
+
+    def render(self, basis: ArticulationBasis) -> str:
+        """Return proposed user-facing text without mutating native state."""
+
+
+class ArticulationRendererError(ValueError):
+    """A renderer returned text that cannot become a native candidate."""
+
+
+class NativeTemplateArticulationRenderer:
+    """Deterministic renderer preserving the original native wording."""
+
+    def __init__(
+        self,
+        hypotheses: Optional[RuntimeHypotheses] = None,
+    ) -> None:
+        self.hypotheses = hypotheses or RuntimeHypotheses()
+
+    def render(self, basis: ArticulationBasis) -> str:
+        paragraphs = [
+            _render_formation(formation, index, self.hypotheses)
+            for index, formation in enumerate(basis.formations)
+        ]
+        held_fragments = [
+            item.text for item in basis.held_open_materials if item.text
+        ]
+        if basis.held_open_materials:
+            if held_fragments:
+                held_text = (
+                    "Alongside these formations, this material remains held "
+                    "open: {0}. It stays available without being forced into "
+                    "resolution."
+                ).format(_join_fragments(held_fragments))
+            else:
+                held_text = (
+                    "Alongside these formations, additional relational "
+                    "effects remain held open without being forced into "
+                    "resolution."
+                )
+            paragraphs.append(held_text)
+        paragraphs.append(
+            "This orientation is temporary: it can change as these relations "
+            "and the conditions around them change."
+        )
+        return "\n\n".join(item for item in paragraphs if item)
 
 
 def _stable_id(prefix: str, *parts: str) -> str:
@@ -387,46 +438,57 @@ def _render_formation(
     return " ".join(sentences)
 
 
-def _render_candidate_text(
-    basis: ArticulationBasis,
-    hypotheses: RuntimeHypotheses,
-) -> str:
-    paragraphs = [
-        _render_formation(formation, index, hypotheses)
-        for index, formation in enumerate(basis.formations)
-    ]
-    held_fragments = [
-        item.text for item in basis.held_open_materials if item.text
-    ]
-    if basis.held_open_materials:
-        if held_fragments:
-            held_text = (
-                "Alongside these formations, this material remains held open: "
-                "{0}. It stays available without being forced into resolution."
-            ).format(_join_fragments(held_fragments))
-        else:
-            held_text = (
-                "Alongside these formations, additional relational effects "
-                "remain held open without being forced into resolution."
+def _validated_rendered_text(value: object) -> str:
+    if not isinstance(value, str):
+        raise ArticulationRendererError(
+            "articulation renderer must return text"
+        )
+    if not value.strip():
+        raise ArticulationRendererError(
+            "articulation renderer returned empty text"
+        )
+    if len(value) > MAX_RENDERED_ARTICULATION_CHARS:
+        raise ArticulationRendererError(
+            "articulation renderer text exceeds {0} characters".format(
+                MAX_RENDERED_ARTICULATION_CHARS
             )
-        paragraphs.append(held_text)
-    paragraphs.append(
-        "This orientation is temporary: it can change as these relations and "
-        "the conditions around them change."
-    )
-    return "\n\n".join(item for item in paragraphs if item)
+        )
+    if any(
+        (
+            character != "\n"
+            and (
+                ord(character) < 0x20
+                or 0x7F <= ord(character) <= 0x9F
+                or 0xD800 <= ord(character) <= 0xDFFF
+            )
+        )
+        for character in value
+    ):
+        raise ArticulationRendererError(
+            "articulation renderer text contains unsafe control characters"
+        )
+    return value
 
 
 def form_articulation_candidate(
     state: FieldState,
     cut: Optional[ProvisionalCut] = None,
     hypotheses: Optional[RuntimeHypotheses] = None,
+    renderer: Optional[ArticulationRenderer] = None,
 ) -> Optional[ArticulationCandidate]:
     hypotheses = hypotheses or RuntimeHypotheses()
     basis = build_articulation_basis(state, cut)
     if basis is None or not basis.formations:
         return None
-    text = _render_candidate_text(basis, hypotheses)
+    resolved_renderer = (
+        renderer
+        if renderer is not None
+        else NativeTemplateArticulationRenderer(hypotheses)
+    )
+    render = getattr(resolved_renderer, "render", None)
+    if not callable(render):
+        raise TypeError("renderer must provide a callable render method")
+    text = _validated_rendered_text(render(deepcopy(basis)))
     candidate_id = _stable_id(
         "candidate",
         state.field_id,
