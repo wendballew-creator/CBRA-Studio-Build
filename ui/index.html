@@ -216,6 +216,60 @@
       margin-top: 14px;
     }
 
+    .attachment-picker {
+      display: grid;
+      gap: 8px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel-soft);
+      padding: 11px 12px;
+    }
+
+    .attachment-picker input {
+      background: var(--panel);
+    }
+
+    .attachment-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .selected-files {
+      display: grid;
+      gap: 5px;
+      margin: 0;
+      padding: 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+      list-style: none;
+    }
+
+    .selected-files li {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .file-size {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+
+    .attachment-note {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.4;
+    }
+
+    .clear-attachments {
+      padding: 7px 10px;
+      font-size: 0.78rem;
+    }
+
     .composer-actions {
       display: flex;
       justify-content: space-between;
@@ -317,6 +371,32 @@
             id="prompt"
             placeholder="Write here…"
           ></textarea>
+          <div class="attachment-picker">
+            <div class="attachment-heading">
+              <label for="attachments">Supporting documents (optional)</label>
+              <button
+                id="clearAttachmentsBtn"
+                class="secondary clear-attachments"
+                type="button"
+              >Clear selection</button>
+            </div>
+            <input
+              id="attachments"
+              type="file"
+              multiple
+              accept=".txt,.md,.docx,.pdf,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf"
+              aria-describedby="attachmentNote"
+            >
+            <ul
+              class="selected-files"
+              id="selectedFiles"
+              aria-live="polite"
+            ></ul>
+            <p class="attachment-note" id="attachmentNote">
+              Accepted formats: TXT, Markdown, DOCX, and text-bearing PDF.
+              Files remain in this page only until their turn is resolved.
+            </p>
+          </div>
           <div class="composer-actions">
             <span class="hint">Command/Ctrl + Enter to send</span>
             <button id="sendBtn" type="button">Send</button>
@@ -348,6 +428,7 @@
         exists: false,
         turns: [],
         pending: null,
+        selectedAttachments: [],
         busy: false
       };
 
@@ -357,6 +438,10 @@
         create: document.getElementById("newThreadBtn"),
         send: document.getElementById("sendBtn"),
         prompt: document.getElementById("prompt"),
+        attachments: document.getElementById("attachments"),
+        clearAttachments:
+          document.getElementById("clearAttachmentsBtn"),
+        selectedFiles: document.getElementById("selectedFiles"),
         transcript: document.getElementById("transcript"),
         summary: document.getElementById("threadSummary"),
         status: document.getElementById("status"),
@@ -412,11 +497,90 @@
         elements.send.disabled = busy;
         elements.threadId.disabled = busy;
         elements.prompt.disabled = busy;
-        elements.send.textContent = busy
-          ? "Working…"
-          : state.pending
-            ? "Retry turn"
-            : "Send";
+        elements.attachments.disabled = busy;
+        elements.clearAttachments.disabled =
+          busy || state.selectedAttachments.length === 0;
+        elements.send.textContent = sendButtonLabel();
+      }
+
+      function sendButtonLabel() {
+        if (state.busy) {
+          return "Working…";
+        }
+        if (!state.pending) {
+          return "Send";
+        }
+        if (!composerMatchesPending(state.pending)) {
+          return "Resolve prior turn";
+        }
+        return state.pending.needsReconciliation
+          ? "Recover turn"
+          : "Retry turn";
+      }
+
+      function formatBytes(value) {
+        if (value < 1024) {
+          return `${value} B`;
+        }
+        if (value < 1024 * 1024) {
+          return `${(value / 1024).toFixed(1)} KB`;
+        }
+        return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+      }
+
+      function renderSelectedFiles() {
+        elements.selectedFiles.replaceChildren();
+        if (state.selectedAttachments.length === 0) {
+          const item = document.createElement("li");
+          item.textContent = "No documents selected.";
+          elements.selectedFiles.appendChild(item);
+        } else {
+          for (const attachment of state.selectedAttachments) {
+            const item = document.createElement("li");
+            const name = document.createElement("span");
+            const size = document.createElement("span");
+            name.textContent = attachment.file.name;
+            size.className = "file-size";
+            size.textContent = formatBytes(attachment.file.size);
+            item.append(name, size);
+            elements.selectedFiles.appendChild(item);
+          }
+        }
+        elements.clearAttachments.disabled =
+          state.busy || state.selectedAttachments.length === 0;
+      }
+
+      function clearAttachmentSelection() {
+        state.selectedAttachments = [];
+        elements.attachments.value = "";
+        renderSelectedFiles();
+        elements.send.textContent = sendButtonLabel();
+      }
+
+      function clearComposer() {
+        elements.prompt.value = "";
+        clearAttachmentSelection();
+      }
+
+      function attachmentsMatch(left, right) {
+        return (
+          left.length === right.length &&
+          left.every(
+            (attachment, index) =>
+              attachment.attachmentId === right[index].attachmentId &&
+              attachment.file === right[index].file
+          )
+        );
+      }
+
+      function composerMatchesPending(pending) {
+        return (
+          elements.prompt.value.trim() === pending.userText &&
+          attachmentsMatch(
+            state.selectedAttachments,
+            pending.attachments
+          )
+        );
       }
 
       function appendMessage(container, role, text) {
@@ -481,11 +645,8 @@
         elements.statePill.textContent = state.exists
           ? `Durable · revision ${state.revision}`
           : "Claimed · not created";
-        elements.send.textContent = state.busy
-          ? "Working…"
-          : state.pending
-            ? "Retry turn"
-            : "Send";
+        renderSelectedFiles();
+        elements.send.textContent = sendButtonLabel();
       }
 
       async function requestJson(path, options = {}) {
@@ -547,6 +708,7 @@
         let cursor = 0;
         let observedRevision = 0;
         const turns = [];
+        let isNew = false;
 
         try {
           while (true) {
@@ -577,40 +739,38 @@
             error.status === 404 &&
             error.code === "session_not_found"
           ) {
-            state.threadId = threadId;
-            state.revision = 0;
-            state.exists = false;
-            state.turns = [];
-            rememberThread(threadId);
-            render();
-            return { isNew: true, recoveredPending: false };
+            isNew = true;
+          } else {
+            throw error;
           }
-          throw error;
         }
 
         state.threadId = threadId;
-        state.revision = observedRevision;
-        state.exists = true;
-        state.turns = turns;
+        state.revision = isNew ? 0 : observedRevision;
+        state.exists = !isNew;
+        state.turns = isNew ? [] : turns;
         rememberThread(threadId);
 
         let recoveredPending = false;
         if (state.pending && state.pending.threadId === threadId) {
-          recoveredPending = turns.some(
+          recoveredPending = state.turns.some(
             turn => turn.turn_id === state.pending.turnId
           );
           if (recoveredPending) {
-            if (elements.prompt.value.trim() === state.pending.userText) {
-              elements.prompt.value = "";
-            }
+            const liveMaterialWasPending =
+              composerMatchesPending(state.pending);
             state.pending = null;
+            if (liveMaterialWasPending) {
+              clearComposer();
+            }
           } else {
-            state.pending.creating = false;
+            state.pending.creating = isNew;
             state.pending.expectedRevision = state.revision;
+            state.pending.needsReconciliation = false;
           }
         }
         render();
-        return { isNew: false, recoveredPending };
+        return { isNew, recoveredPending };
       }
 
       function visibleError(error) {
@@ -631,13 +791,30 @@
           return;
         }
 
-        if (state.pending && state.pending.threadId !== threadId) {
-          state.pending = null;
-        }
-
         setBusy(true);
         setStatus("Restoring durable turn history…");
         try {
+          if (state.pending && state.pending.threadId !== threadId) {
+            const pendingThreadId = state.pending.threadId;
+            elements.threadId.value = pendingThreadId;
+            setStatus(
+              "Checking the unresolved turn before switching threads…"
+            );
+            await loadThreadData(pendingThreadId);
+            if (state.pending) {
+              setStatus(
+                "The earlier interrupted turn is not durable yet. " +
+                "Resolve or retry it before switching threads.",
+                true
+              );
+              return;
+            }
+          }
+
+          if (state.threadId && state.threadId !== threadId) {
+            clearComposer();
+          }
+          elements.threadId.value = threadId;
           const result = await loadThreadData(threadId);
           if (result.recoveredPending) {
             setStatus(
@@ -663,6 +840,15 @@
       }
 
       function claimNewThread() {
+        if (state.pending) {
+          elements.threadId.value = state.pending.threadId;
+          setStatus(
+            "Resolve the earlier interrupted turn before claiming " +
+            "another thread.",
+            true
+          );
+          return;
+        }
         const threadId = newClaim("thread:");
         state.threadId = threadId;
         state.revision = 0;
@@ -670,7 +856,7 @@
         state.turns = [];
         state.pending = null;
         elements.threadId.value = threadId;
-        elements.prompt.value = "";
+        clearComposer();
         rememberThread(threadId);
         render();
         setStatus(
@@ -682,64 +868,152 @@
 
       async function sendTurn() {
         const threadId = elements.threadId.value.trim();
-        const userText = elements.prompt.value.trim();
         if (!THREAD_PATTERN.test(threadId)) {
           setStatus("Load or create a valid claimed thread first.", true);
           return;
         }
-        if (!userText) {
+        if (state.threadId !== threadId) {
+          clearAttachmentSelection();
+          setStatus(
+            "Load the changed thread before adding new material. " +
+            "Document selection was cleared to prevent cross-thread use.",
+            true
+          );
+          return;
+        }
+
+        const userText = elements.prompt.value.trim();
+        if (!state.pending && !userText) {
           setStatus("Enter material for this turn.", true);
           return;
         }
 
         setBusy(true);
         try {
-          if (state.threadId !== threadId) {
-            await loadThreadData(threadId);
+          if (
+            state.pending &&
+            (
+              state.pending.needsReconciliation ||
+              !composerMatchesPending(state.pending)
+            )
+          ) {
+            setStatus(
+              "Checking whether the earlier interrupted turn persisted…"
+            );
+            const reconciliation = await loadThreadData(threadId);
+            if (reconciliation.recoveredPending) {
+              setStatus(
+                `Recovered persisted turn at revision ${state.revision}.` +
+                (
+                  elements.prompt.value.trim() ||
+                  state.selectedAttachments.length
+                    ? " Edited material remains ready for a new turn."
+                    : ""
+                )
+              );
+              return;
+            }
           }
 
-          if (
-            !state.pending ||
-            state.pending.threadId !== threadId ||
-            state.pending.userText !== userText
-          ) {
+          if (!state.pending) {
+            const attachments = Object.freeze(
+              state.selectedAttachments.map(attachment =>
+                Object.freeze({
+                  attachmentId: attachment.attachmentId,
+                  file: attachment.file
+                })
+              )
+            );
             state.pending = {
               threadId,
               turnId: newClaim("turn:"),
               userText,
+              attachments,
               creating: !state.exists,
-              expectedRevision: state.revision
+              expectedRevision: state.revision,
+              needsReconciliation: false
             };
           }
 
           const pending = state.pending;
+          const hasAttachments = pending.attachments.length > 0;
           const path = pending.creating
-            ? "/generate"
-            : `/chat/${encodeURIComponent(threadId)}`;
-          const body = pending.creating
-            ? {
-                thread_id: pending.threadId,
-                turn_id: pending.turnId,
-                user_text: pending.userText,
-                mode: "production"
-              }
-            : {
-                turn_id: pending.turnId,
-                user_text: pending.userText,
-                expected_revision: pending.expectedRevision,
-                mode: "production"
-              };
+            ? hasAttachments
+              ? "/generate/attachments"
+              : "/generate"
+            : hasAttachments
+              ? `/chat/${encodeURIComponent(threadId)}/attachments`
+              : `/chat/${encodeURIComponent(threadId)}`;
+          let options;
+
+          if (hasAttachments) {
+            const form = new FormData();
+            if (pending.creating) {
+              form.append("thread_id", pending.threadId);
+            }
+            form.append("user_text", pending.userText);
+            form.append("turn_id", pending.turnId);
+            if (!pending.creating) {
+              form.append(
+                "expected_revision",
+                String(pending.expectedRevision)
+              );
+            }
+            form.append("mode", "production");
+            const orderedAttachments =
+              Array.from(pending.attachments).sort(
+                (left, right) =>
+                  left.attachmentId.localeCompare(right.attachmentId)
+              );
+            for (const attachment of orderedAttachments) {
+              form.append(
+                "attachment_id",
+                attachment.attachmentId
+              );
+              form.append(
+                "files",
+                attachment.file,
+                attachment.file.name
+              );
+            }
+            options = {
+              method: "POST",
+              body: form
+            };
+          } else {
+            const body = pending.creating
+              ? {
+                  thread_id: pending.threadId,
+                  turn_id: pending.turnId,
+                  user_text: pending.userText,
+                  mode: "production"
+                }
+              : {
+                  turn_id: pending.turnId,
+                  user_text: pending.userText,
+                  expected_revision: pending.expectedRevision,
+                  mode: "production"
+                };
+            options = {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body)
+            };
+          }
 
           setStatus(
             pending.creating
-              ? "Creating the claimed durable thread…"
-              : `Submitting against revision ${pending.expectedRevision}…`
+              ? hasAttachments
+                ? "Creating the claimed durable thread with documents…"
+                : "Creating the claimed durable thread…"
+              : hasAttachments
+                ? "Submitting documents against revision " +
+                  `${pending.expectedRevision}…`
+                : `Submitting against revision ${pending.expectedRevision}…`
           );
-          const response = await requestJson(path, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body)
-          });
+          const liveMaterialWasPending =
+            composerMatchesPending(pending);
+          const response = await requestJson(path, options);
           if (
             response.thread_id !== pending.threadId ||
             response.turn_id !== pending.turnId
@@ -747,13 +1021,20 @@
             throw new Error("The server returned a different turn identity.");
           }
 
-          await loadThreadData(threadId);
-          elements.prompt.value = "";
-          state.pending = null;
-          render();
+          const restored = await loadThreadData(threadId);
+          if (!restored.recoveredPending) {
+            throw new Error(
+              "The persisted turn was absent from its durable projection."
+            );
+          }
           setStatus(
             `Turn ${response.revision} persisted: ${response.outcome}` +
-            `${response.idempotent_replay ? " (recovered replay)." : "."}`
+            `${response.idempotent_replay ? " (recovered replay)." : "."}` +
+            (
+              liveMaterialWasPending
+                ? ""
+                : " Edited material remains ready for a new turn."
+            )
           );
         } catch (error) {
           if (
@@ -769,6 +1050,7 @@
               if (state.pending) {
                 state.pending.creating = false;
                 state.pending.expectedRevision = state.revision;
+                state.pending.needsReconciliation = false;
               }
               if (result.recoveredPending) {
                 setStatus(
@@ -781,8 +1063,11 @@
                   true
                 );
               }
-            } catch (_) {
-              setStatus(visibleError(error), true);
+            } catch (restoreError) {
+              if (state.pending) {
+                state.pending.needsReconciliation = true;
+              }
+              setStatus(visibleError(restoreError), true);
             }
           } else if (
             error instanceof PublicHttpError &&
@@ -799,12 +1084,33 @@
               "Review the restored history before sending a new turn.",
               true
             );
+          } else if (
+            error instanceof PublicHttpError &&
+            (
+              error.code === "attachment_too_large" ||
+              error.code === "unsupported_attachment" ||
+              error.code === "invalid_attachment" ||
+              error.code === "invalid_request"
+            )
+          ) {
+            state.pending = null;
+            setStatus(visibleError(error), true);
           } else {
+            if (
+              state.pending &&
+              (
+                !(error instanceof PublicHttpError) ||
+                error.status >= 500
+              )
+            ) {
+              state.pending.needsReconciliation = true;
+            }
             setStatus(
               state.pending &&
-              !(error instanceof PublicHttpError)
-                ? "The request was interrupted. Retry will reuse the " +
-                  "same claimed thread and turn IDs."
+              state.pending.needsReconciliation
+                ? "The request was interrupted. Recovery will check " +
+                  "durable history before reusing the same turn and " +
+                  "document IDs."
                 : visibleError(error),
               true
             );
@@ -818,6 +1124,20 @@
       elements.load.addEventListener("click", loadSelectedThread);
       elements.create.addEventListener("click", claimNewThread);
       elements.send.addEventListener("click", sendTurn);
+      elements.attachments.addEventListener("change", () => {
+        const selected = Array.from(elements.attachments.files || []);
+        state.selectedAttachments = selected.map(file =>
+          Object.freeze({
+            attachmentId: newClaim("attachment:"),
+            file
+          })
+        );
+        render();
+      });
+      elements.clearAttachments.addEventListener(
+        "click",
+        clearAttachmentSelection
+      );
       elements.prompt.addEventListener("keydown", event => {
         if (
           (event.metaKey || event.ctrlKey) &&
@@ -826,6 +1146,9 @@
           event.preventDefault();
           sendTurn();
         }
+      });
+      elements.prompt.addEventListener("input", () => {
+        elements.send.textContent = sendButtonLabel();
       });
 
       const initialThread = recalledThread() || newClaim("thread:");

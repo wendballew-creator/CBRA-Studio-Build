@@ -960,12 +960,20 @@ class NativeFastAPITests(unittest.TestCase):
         for required in (
             'newClaim("thread:")',
             'newClaim("turn:")',
+            'newClaim("attachment:")',
             '"/generate"',
+            '"/generate/attachments"',
+            "/attachments`",
+            "new FormData()",
             "expected_revision",
             "/turns?",
             "next_after_revision",
             "idempotent_replay",
             "session_not_found",
+            "needsReconciliation",
+            "attachment_too_large",
+            "unsupported_attachment",
+            "invalid_attachment",
         ):
             self.assertIn(required, html)
         for retired in (
@@ -976,6 +984,9 @@ class NativeFastAPITests(unittest.TestCase):
             "data.messages",
             "active_attachment",
             "current_field_id",
+            "sessionStorage",
+            "indexedDB",
+            '"Content-Type": "multipart/form-data"',
         ):
             self.assertNotIn(retired, html)
 

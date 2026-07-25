@@ -63,7 +63,7 @@ from cbra.store import (
 
 
 APP_TITLE = "CBRA Writing Support"
-APP_VERSION = "0.7.0-native-attachment-ingress"
+APP_VERSION = "0.8.0-native-browser-attachments"
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
