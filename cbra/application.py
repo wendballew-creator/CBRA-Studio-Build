@@ -11,7 +11,6 @@ from cbra.native import (
     NativeSession,
     NativeSessionError,
     RuntimeHypotheses,
-    StaleRevisionError,
     Stream,
     TurnOutcome,
     TurnOutcomeKind,
@@ -21,6 +20,7 @@ from cbra.native import (
 from cbra.store import (
     NativeSessionRepository,
     SessionAlreadyExistsError,
+    SessionNotFoundError,
 )
 
 
@@ -102,30 +102,38 @@ class NativeApplicationService:
             if self.canonical_corpus is not None
             else ()
         )
-        session = create_session(
-            thread_id=thread_id,
-            initial_streams=initial_streams,
-        )
-        updated, outcome = submit_turn(
-            session,
-            user_text,
-            additional_streams=additional_streams,
-            turn_id=turn_id,
-            expected_revision=0,
-            max_cycles=self.max_cycles,
-            hypotheses=self.hypotheses,
-        )
-        try:
-            self.repository.create(updated)
-        except SessionAlreadyExistsError:
-            current = self.repository.load(thread_id)
-            if (
-                not current.turns
-                or current.turns[0].turn_id != turn_id
-            ):
-                raise
-            _, replay_outcome = submit_turn(
-                current,
+
+        def create_or_replay(current):
+            if current is not None:
+                if (
+                    not current.turns
+                    or current.turns[0].turn_id != turn_id
+                ):
+                    raise SessionAlreadyExistsError(
+                        "Session already exists for thread {0}".format(
+                            thread_id
+                        )
+                    )
+                updated, outcome = submit_turn(
+                    current,
+                    user_text,
+                    additional_streams=additional_streams,
+                    turn_id=turn_id,
+                    expected_revision=0,
+                    max_cycles=self.max_cycles,
+                    hypotheses=self.hypotheses,
+                )
+                return updated, ApplicationTurnResult(
+                    outcome=outcome,
+                    replayed=True,
+                )
+
+            session = create_session(
+                thread_id=thread_id,
+                initial_streams=initial_streams,
+            )
+            updated, outcome = submit_turn(
+                session,
                 user_text,
                 additional_streams=additional_streams,
                 turn_id=turn_id,
@@ -133,14 +141,12 @@ class NativeApplicationService:
                 max_cycles=self.max_cycles,
                 hypotheses=self.hypotheses,
             )
-            return ApplicationTurnResult(
-                outcome=replay_outcome,
-                replayed=True,
+            return updated, ApplicationTurnResult(
+                outcome=outcome,
+                replayed=False,
             )
-        return ApplicationTurnResult(
-            outcome=outcome,
-            replayed=False,
-        )
+
+        return self.repository.transact(thread_id, create_or_replay)
 
     def submit_thread_turn(
         self,
@@ -151,51 +157,28 @@ class NativeApplicationService:
         expected_revision: Optional[int] = None,
         additional_streams: Sequence[Stream] = (),
     ) -> ApplicationTurnResult:
-        """Load, submit, and compare-and-save one native turn."""
-        session = self.repository.load(thread_id)
-        observed_revision = session.revision
-        updated, outcome = submit_turn(
-            session,
-            user_text,
-            additional_streams=additional_streams,
-            turn_id=turn_id,
-            expected_revision=expected_revision,
-            max_cycles=self.max_cycles,
-            hypotheses=self.hypotheses,
-        )
-        if updated is session:
-            return ApplicationTurnResult(
-                outcome=outcome,
-                replayed=True,
-            )
+        """Submit or replay one native turn inside its durable transaction."""
 
-        try:
-            self.repository.save(
-                updated,
-                expected_revision=observed_revision,
-            )
-        except StaleRevisionError as conflict:
-            current = self.repository.load(thread_id)
-            retried, retry_outcome = submit_turn(
+        def submit_or_replay(current):
+            if current is None:
+                raise SessionNotFoundError(
+                    "Session not found for thread {0}".format(thread_id)
+                )
+            updated, outcome = submit_turn(
                 current,
                 user_text,
                 additional_streams=additional_streams,
-                turn_id=outcome.turn_id,
+                turn_id=turn_id,
                 expected_revision=expected_revision,
                 max_cycles=self.max_cycles,
                 hypotheses=self.hypotheses,
             )
-            if retried is current:
-                return ApplicationTurnResult(
-                    outcome=retry_outcome,
-                    replayed=True,
-                )
-            raise conflict
+            return updated, ApplicationTurnResult(
+                outcome=outcome,
+                replayed=updated is current,
+            )
 
-        return ApplicationTurnResult(
-            outcome=outcome,
-            replayed=False,
-        )
+        return self.repository.transact(thread_id, submit_or_replay)
 
     def load_session(self, thread_id: str) -> NativeSession:
         """Load a session for internal service use without exposing its field."""

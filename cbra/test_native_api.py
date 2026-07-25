@@ -246,31 +246,34 @@ class NativeApplicationServiceTests(unittest.TestCase):
             before,
         )
 
-    def test_identical_concurrent_save_is_recovered_as_a_replay(self):
-        class IdenticalRaceRepository(NativeSessionRepository):
-            raced = False
+    def test_service_submits_inside_one_repository_transaction(self):
+        class ObservedRepository(NativeSessionRepository):
+            transaction_calls = 0
+            compare_save_calls = 0
+
+            def transact(self, thread_id, operation):
+                self.transaction_calls += 1
+                return super().transact(thread_id, operation)
 
             def save(self, session, expected_revision):
-                if not self.raced:
-                    self.raced = True
-                    super().save(session, expected_revision)
-                    raise StaleRevisionError("simulated concurrent save")
+                self.compare_save_calls += 1
                 return super().save(session, expected_revision)
 
-        repository = IdenticalRaceRepository(self.root)
-        base = create_session(thread_id="thread:race")
+        repository = ObservedRepository(self.root)
+        base = create_session(thread_id="thread:transaction-boundary")
         repository.create(base)
         service = NativeApplicationService(repository)
 
         result = service.submit_thread_turn(
             base.thread_id,
             FIRST_STRAND,
-            turn_id="turn:race",
+            turn_id="turn:transaction-boundary",
             expected_revision=0,
         )
 
-        self.assertTrue(result.replayed)
-        self.assertEqual(result.outcome.revision, 1)
+        self.assertFalse(result.replayed)
+        self.assertEqual(repository.transaction_calls, 1)
+        self.assertEqual(repository.compare_save_calls, 0)
         restored = repository.load(base.thread_id)
         self.assertEqual(restored.revision, 1)
         self.assertEqual(len(restored.turns), 1)

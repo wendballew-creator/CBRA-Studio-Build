@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import fcntl
 import hashlib
+from copy import deepcopy
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, Union
+from typing import Callable, Iterator, Optional, Tuple, TypeVar, Union
 
 from cbra.native.persistence import load_session, save_session
 from cbra.native.session import (
@@ -18,6 +19,7 @@ from cbra.native.session_models import NativeSession
 
 
 PathLike = Union[str, Path]
+TransactionResult = TypeVar("TransactionResult")
 
 
 class SessionRepositoryError(ValueError):
@@ -67,6 +69,30 @@ class NativeSessionRepository:
             self._key(thread_id)
         )
 
+    @staticmethod
+    def _validate_owned(
+        session: NativeSession,
+        thread_id: str,
+    ) -> None:
+        if not isinstance(session, NativeSession):
+            raise SessionRepositoryError(
+                "transaction must return a native session"
+            )
+        if session.thread_id != thread_id:
+            raise SessionOwnershipError(
+                "Durable session belongs to a different thread"
+            )
+        assert_session_invariants(session)
+
+    def _load_owned(
+        self,
+        path: Path,
+        thread_id: str,
+    ) -> NativeSession:
+        session = load_session(path)
+        self._validate_owned(session, thread_id)
+        return session
+
     @contextmanager
     def _lock(
         self,
@@ -103,12 +129,7 @@ class NativeSessionRepository:
                 raise SessionNotFoundError(
                     "Session not found for thread {0}".format(thread_id)
                 )
-            session = load_session(path)
-        if session.thread_id != thread_id:
-            raise SessionOwnershipError(
-                "Durable session belongs to a different thread"
-            )
-        assert_session_invariants(session)
+            session = self._load_owned(path, thread_id)
         return session
 
     def save(
@@ -130,11 +151,7 @@ class NativeSessionRepository:
                         session.thread_id
                     )
                 )
-            current = load_session(path)
-            if current.thread_id != session.thread_id:
-                raise SessionOwnershipError(
-                    "Durable session belongs to a different thread"
-                )
+            current = self._load_owned(path, session.thread_id)
             if current.revision != expected_revision:
                 raise StaleRevisionError(
                     "Expected durable revision {0}, found {1}".format(
@@ -149,6 +166,54 @@ class NativeSessionRepository:
                     "Native session must advance exactly one revision"
                 )
             save_session(path, session, compress=self.compress)
+
+    def transact(
+        self,
+        thread_id: str,
+        operation: Callable[
+            [Optional[NativeSession]],
+            Tuple[NativeSession, TransactionResult],
+        ],
+    ) -> TransactionResult:
+        """Execute and durably claim at most one revision under one lock."""
+        if not callable(operation):
+            raise TypeError("operation must be callable")
+        path = self.path_for(thread_id)
+        with self._lock(thread_id, exclusive=True):
+            current = (
+                self._load_owned(path, thread_id)
+                if path.exists()
+                else None
+            )
+            working = deepcopy(current)
+            returned = operation(working)
+            if not isinstance(returned, tuple) or len(returned) != 2:
+                raise SessionRepositoryError(
+                    "transaction operation must return (session, result)"
+                )
+            updated, result = returned
+            self._validate_owned(updated, thread_id)
+
+            if current is None:
+                if updated.revision != 1:
+                    raise StaleRevisionError(
+                        "A new native session must claim revision 1"
+                    )
+                save_session(path, updated, compress=self.compress)
+                return result
+
+            if updated == current:
+                return result
+            if updated.revision != current.revision + 1:
+                raise StaleRevisionError(
+                    "Native session must advance exactly one revision"
+                )
+            if updated.turns[:-1] != current.turns:
+                raise SessionRepositoryError(
+                    "Native session transaction must preserve prior turns"
+                )
+            save_session(path, updated, compress=self.compress)
+            return result
 
     def exists(self, thread_id: str) -> bool:
         return self.path_for(thread_id).exists()
