@@ -4,7 +4,8 @@ httpx2; python_version >= "3.10"
 uvicorn
 python-dotenv
 pydantic
-openai
+openai>=2,<2.48; python_version < "3.10"
+openai>=2,<3; python_version >= "3.10"
 python-docx
 python-multipart
 pypdf
