@@ -190,6 +190,70 @@ class TurnRequest(PublicModel):
             return value
 
 
+class AttachmentTurnRequest(PublicModel):
+    """Strict multipart continuation fields before attachment extraction."""
+
+    user_text: StrictStr = Field(..., min_length=1)
+    turn_id: StrictStr = Field(
+        ...,
+        min_length=TURN_ID_LENGTH,
+        max_length=TURN_ID_LENGTH,
+    )
+    expected_revision: StrictInt
+    mode: Literal["production", "debug"] = "production"
+
+    if field_validator is not None:
+
+        @field_validator("user_text")
+        @classmethod
+        def user_text_has_material(cls, value):
+            if not value.strip():
+                raise ValueError("user_text must contain non-whitespace")
+            return value
+
+        @field_validator("turn_id")
+        @classmethod
+        def turn_id_is_collision_resistant(cls, value):
+            return _validate_claimed_id(
+                value,
+                TURN_ID_PREFIX,
+                "turn_id",
+            )
+
+        @field_validator("expected_revision")
+        @classmethod
+        def revision_is_non_negative(cls, value):
+            if value < 0:
+                raise ValueError(
+                    "expected_revision must be non-negative"
+                )
+            return value
+
+    else:
+
+        @validator("user_text")
+        def user_text_has_material(cls, value):
+            if not value.strip():
+                raise ValueError("user_text must contain non-whitespace")
+            return value
+
+        @validator("turn_id")
+        def turn_id_is_collision_resistant(cls, value):
+            return _validate_claimed_id(
+                value,
+                TURN_ID_PREFIX,
+                "turn_id",
+            )
+
+        @validator("expected_revision")
+        def revision_is_non_negative(cls, value):
+            if value < 0:
+                raise ValueError(
+                    "expected_revision must be non-negative"
+                )
+            return value
+
+
 class TurnDebug(PublicModel):
     cycle_start: StrictInt
     cycle_end: StrictInt

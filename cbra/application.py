@@ -94,6 +94,7 @@ class NativeApplicationService:
         user_text: str,
         *,
         turn_id: str,
+        additional_streams: Sequence[Stream] = (),
     ) -> ApplicationTurnResult:
         """Create an exactly claimed session or replay its first turn."""
         initial_streams = (
@@ -108,6 +109,7 @@ class NativeApplicationService:
         updated, outcome = submit_turn(
             session,
             user_text,
+            additional_streams=additional_streams,
             turn_id=turn_id,
             expected_revision=0,
             max_cycles=self.max_cycles,
@@ -125,6 +127,7 @@ class NativeApplicationService:
             _, replay_outcome = submit_turn(
                 current,
                 user_text,
+                additional_streams=additional_streams,
                 turn_id=turn_id,
                 expected_revision=0,
                 max_cycles=self.max_cycles,

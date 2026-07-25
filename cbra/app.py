@@ -4,15 +4,25 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional, Union
+from typing import List, Optional, Union
 from uuid import uuid4
 
-from fastapi import FastAPI, Query, Request, Response
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from cbra.api_models import (
+    AttachmentTurnRequest,
     CreateThreadRequest,
     ErrorResponse,
     HealthResponse,
@@ -20,6 +30,14 @@ from cbra.api_models import (
     TurnPageResponse,
     TurnRequest,
     TurnResponse,
+)
+from cbra.attachments import (
+    AttachmentLimits,
+    AttachmentTooLargeError,
+    InvalidAttachmentError,
+    UnsupportedAttachmentError,
+    build_attachment_streams,
+    read_uploaded_attachments,
 )
 from cbra.application import (
     NativeApplicationService,
@@ -45,7 +63,7 @@ from cbra.store import (
 
 
 APP_TITLE = "CBRA Writing Support"
-APP_VERSION = "0.6.0-native-canonical-bootstrap"
+APP_VERSION = "0.7.0-native-attachment-ingress"
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
@@ -122,6 +140,7 @@ def create_app(
     service: Optional[NativeApplicationService] = None,
     corpus_root: Optional[PathLike] = None,
     corpus_limits: Optional[CorpusLimits] = None,
+    attachment_limits: Optional[AttachmentLimits] = None,
 ) -> FastAPI:
     """Construct an injectable HTTP adapter with explicit durable storage."""
     supplied = sum(
@@ -137,6 +156,11 @@ def create_app(
         raise ValueError(
             "A supplied service already owns its canonical corpus snapshot"
         )
+    resolved_attachment_limits = (
+        attachment_limits
+        if attachment_limits is not None
+        else AttachmentLimits.from_environment()
+    )
 
     if service is None:
         resolved_corpus_root = Path(
@@ -168,6 +192,7 @@ def create_app(
 
     application = FastAPI(title=APP_TITLE, version=APP_VERSION)
     application.state.native_service = service
+    application.state.attachment_limits = resolved_attachment_limits
 
     @application.exception_handler(RequestValidationError)
     async def invalid_request(
@@ -234,6 +259,39 @@ def create_app(
             status_code=422,
             code="invalid_pagination",
             message="The requested transcript page is invalid.",
+        )
+
+    @application.exception_handler(AttachmentTooLargeError)
+    async def attachment_too_large(
+        request: Request,
+        exc: AttachmentTooLargeError,
+    ) -> JSONResponse:
+        return _error_response(
+            status_code=413,
+            code="attachment_too_large",
+            message="The submitted attachment request is too large.",
+        )
+
+    @application.exception_handler(UnsupportedAttachmentError)
+    async def unsupported_attachment(
+        request: Request,
+        exc: UnsupportedAttachmentError,
+    ) -> JSONResponse:
+        return _error_response(
+            status_code=415,
+            code="unsupported_attachment",
+            message="The submitted attachment format is unsupported.",
+        )
+
+    @application.exception_handler(InvalidAttachmentError)
+    async def invalid_attachment(
+        request: Request,
+        exc: InvalidAttachmentError,
+    ) -> JSONResponse:
+        return _error_response(
+            status_code=422,
+            code="invalid_attachment",
+            message="The submitted attachment could not be accepted.",
         )
 
     @application.exception_handler(StarletteHTTPException)
@@ -332,6 +390,69 @@ def create_app(
         )
 
     @application.post(
+        "/generate/attachments",
+        response_model=TurnResponse,
+        status_code=201,
+        responses={
+            200: {"model": TurnResponse},
+            409: {"model": ErrorResponse},
+            413: {"model": ErrorResponse},
+            415: {"model": ErrorResponse},
+            422: {"model": ErrorResponse},
+            500: {"model": ErrorResponse},
+        },
+    )
+    async def generate_with_attachments(
+        response: Response,
+        thread_id: str = Form(...),
+        user_text: str = Form(...),
+        turn_id: str = Form(...),
+        attachment_ids: List[str] = Form(
+            ...,
+            alias="attachment_id",
+        ),
+        files: List[UploadFile] = File(...),
+        mode: str = Form("production"),
+    ):
+        try:
+            request_model = CreateThreadRequest(
+                thread_id=thread_id,
+                user_text=user_text,
+                turn_id=turn_id,
+                mode=mode,
+            )
+        except ValidationError as exc:
+            return _error_response(
+                status_code=422,
+                code="invalid_request",
+                message="Request validation failed.",
+                fields=_validation_fields(exc),
+            )
+        uploads = await read_uploaded_attachments(
+            attachment_ids=attachment_ids,
+            uploads=files,
+            limits=resolved_attachment_limits,
+        )
+        streams = build_attachment_streams(
+            thread_id=request_model.thread_id,
+            turn_id=request_model.turn_id,
+            attachments=uploads,
+            limits=resolved_attachment_limits,
+        )
+        result = service.create_thread(
+            request_model.thread_id,
+            request_model.user_text,
+            turn_id=request_model.turn_id,
+            additional_streams=streams,
+        )
+        response.status_code = 200 if result.replayed else 201
+        return TurnResponse.from_result(
+            _request_id(),
+            result,
+            include_debug=request_model.mode == "debug",
+        )
+
+    @application.post(
         "/chat/{thread_id}",
         response_model=TurnResponse,
         responses={
@@ -355,6 +476,68 @@ def create_app(
             _request_id(),
             result,
             include_debug=req.mode == "debug",
+        )
+
+    @application.post(
+        "/chat/{thread_id}/attachments",
+        response_model=TurnResponse,
+        responses={
+            404: {"model": ErrorResponse},
+            409: {"model": ErrorResponse},
+            413: {"model": ErrorResponse},
+            415: {"model": ErrorResponse},
+            422: {"model": ErrorResponse},
+            500: {"model": ErrorResponse},
+        },
+    )
+    async def chat_with_attachments(
+        thread_id: str,
+        user_text: str = Form(...),
+        turn_id: str = Form(...),
+        expected_revision: int = Form(...),
+        attachment_ids: List[str] = Form(
+            ...,
+            alias="attachment_id",
+        ),
+        files: List[UploadFile] = File(...),
+        mode: str = Form("production"),
+    ):
+        try:
+            request_model = AttachmentTurnRequest(
+                user_text=user_text,
+                turn_id=turn_id,
+                expected_revision=expected_revision,
+                mode=mode,
+            )
+        except ValidationError as exc:
+            return _error_response(
+                status_code=422,
+                code="invalid_request",
+                message="Request validation failed.",
+                fields=_validation_fields(exc),
+            )
+        uploads = await read_uploaded_attachments(
+            attachment_ids=attachment_ids,
+            uploads=files,
+            limits=resolved_attachment_limits,
+        )
+        streams = build_attachment_streams(
+            thread_id=thread_id,
+            turn_id=request_model.turn_id,
+            attachments=uploads,
+            limits=resolved_attachment_limits,
+        )
+        result = service.submit_thread_turn(
+            thread_id,
+            request_model.user_text,
+            turn_id=request_model.turn_id,
+            expected_revision=request_model.expected_revision,
+            additional_streams=streams,
+        )
+        return TurnResponse.from_result(
+            _request_id(),
+            result,
+            include_debug=request_model.mode == "debug",
         )
 
     @application.get(
