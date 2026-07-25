@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import dataclass
 from hashlib import sha1
 import re
-from typing import Iterable, List, Optional, Protocol, Sequence
+from typing import Dict, Iterable, List, Optional, Protocol, Sequence, Tuple
 
 from .hypotheses import RuntimeHypotheses
 from .models import (
+    Apparatus,
     Articulation,
     ArticulationBasis,
     ArticulationCandidate,
@@ -70,6 +72,39 @@ PROCEDURAL_PATTERNS = (
 )
 
 MAX_RENDERED_ARTICULATION_CHARS = 32768
+_RENDERER_MATERIAL_PREFIX = "cbra.renderer."
+_RENDERER_MATERIAL_FACETS = (
+    "models",
+    "prompts",
+    "tools",
+    "constraints",
+)
+_RENDERER_IDENTIFIER_PATTERN = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,159}$"
+)
+_RENDERER_SECRET_PATTERNS = (
+    re.compile(r"\bauthorization\b", re.IGNORECASE),
+    re.compile(r"\bbearer\s+", re.IGNORECASE),
+    re.compile(r"\bapi[_ -]?key\b", re.IGNORECASE),
+    re.compile(r"\b(?:access|refresh)[_ -]?token\b", re.IGNORECASE),
+    re.compile(r"\bclient[_ -]?secret\b", re.IGNORECASE),
+    re.compile(r"\bpassword\b", re.IGNORECASE),
+    re.compile(
+        r"\b(?:api[_ -]?key|token|secret|password)\s*[:=]",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bsk-[A-Za-z0-9_-]{8,}\b"),
+    re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
+    re.compile(r"\bAIza[0-9A-Za-z_-]{20,}\b"),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"),
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    re.compile(
+        r"[?&](?:api[_-]?key|access[_-]?token|token|secret|password|key)=",
+        re.IGNORECASE,
+    ),
+    re.compile(r"://[^/\s:@]+:[^/\s@]+@"),
+)
 
 
 class ArticulationRenderer(Protocol):
@@ -81,6 +116,10 @@ class ArticulationRenderer(Protocol):
 
 class ArticulationRendererError(ValueError):
     """A renderer returned text that cannot become a native candidate."""
+
+
+class ArticulationRendererBindingError(ValueError):
+    """A renderer and the field's durable apparatus do not match."""
 
 
 class NativeTemplateArticulationRenderer:
@@ -119,6 +158,291 @@ class NativeTemplateArticulationRenderer:
             "and the conditions around them change."
         )
         return "\n\n".join(item for item in paragraphs if item)
+
+
+def _validate_binding_text(
+    label: str,
+    value: object,
+    *,
+    identifier: bool,
+    maximum: int,
+) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ArticulationRendererBindingError(
+            "{0} must be a non-empty string".format(label)
+        )
+    if value != value.strip():
+        raise ArticulationRendererBindingError(
+            "{0} cannot contain surrounding whitespace".format(label)
+        )
+    if len(value) > maximum:
+        raise ArticulationRendererBindingError(
+            "{0} exceeds {1} characters".format(label, maximum)
+        )
+    if any(
+        ord(character) < 0x20
+        or 0x7F <= ord(character) <= 0x9F
+        or 0xD800 <= ord(character) <= 0xDFFF
+        for character in value
+    ):
+        raise ArticulationRendererBindingError(
+            "{0} contains unsafe control characters".format(label)
+        )
+    if identifier and _RENDERER_IDENTIFIER_PATTERN.fullmatch(value) is None:
+        raise ArticulationRendererBindingError(
+            "{0} contains unsupported identifier characters".format(label)
+        )
+    if any(pattern.search(value) for pattern in _RENDERER_SECRET_PATTERNS):
+        raise ArticulationRendererBindingError(
+            "{0} cannot contain credentials or secret material".format(label)
+        )
+    return value
+
+
+@dataclass(frozen=True)
+class ArticulationRendererBinding:
+    """Immutable, non-secret identity for one text-rendering apparatus."""
+
+    renderer_id: str
+    contract_version: str
+    provider_id: Optional[str] = None
+    model_id: Optional[str] = None
+    instruction_set_id: Optional[str] = None
+    instruction_digest: Optional[str] = None
+    max_output_chars: int = MAX_RENDERED_ARTICULATION_CHARS
+    constraints: Tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "renderer_id",
+            _validate_binding_text(
+                "renderer_id",
+                self.renderer_id,
+                identifier=True,
+                maximum=160,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "contract_version",
+            _validate_binding_text(
+                "contract_version",
+                self.contract_version,
+                identifier=True,
+                maximum=160,
+            ),
+        )
+        for name in (
+            "provider_id",
+            "model_id",
+            "instruction_set_id",
+        ):
+            value = getattr(self, name)
+            if value is not None:
+                object.__setattr__(
+                    self,
+                    name,
+                    _validate_binding_text(
+                        name,
+                        value,
+                        identifier=True,
+                        maximum=160,
+                    ),
+                )
+        digest = self.instruction_digest
+        if digest is not None:
+            if (
+                not isinstance(digest, str)
+                or re.fullmatch(r"[A-Fa-f0-9]{64}", digest) is None
+            ):
+                raise ArticulationRendererBindingError(
+                    "instruction_digest must be a 64-character SHA-256 digest"
+                )
+            object.__setattr__(self, "instruction_digest", digest.lower())
+        if self.instruction_set_id is None and self.instruction_digest is None:
+            raise ArticulationRendererBindingError(
+                "renderer binding requires an instruction-set ID or digest"
+            )
+        if (
+            type(self.max_output_chars) is not int
+            or self.max_output_chars < 1
+            or self.max_output_chars > MAX_RENDERED_ARTICULATION_CHARS
+        ):
+            raise ArticulationRendererBindingError(
+                "max_output_chars must be between 1 and {0}".format(
+                    MAX_RENDERED_ARTICULATION_CHARS
+                )
+            )
+        if not isinstance(self.constraints, (list, tuple)):
+            raise ArticulationRendererBindingError(
+                "constraints must be a finite sequence of strings"
+            )
+        raw_constraints = tuple(self.constraints)
+        if len(raw_constraints) > 16:
+            raise ArticulationRendererBindingError(
+                "renderer binding supports at most 16 constraints"
+            )
+        normalized_constraints = tuple(
+            sorted(
+                _validate_binding_text(
+                    "constraint",
+                    value,
+                    identifier=False,
+                    maximum=256,
+                )
+                for value in raw_constraints
+            )
+        )
+        if len(normalized_constraints) != len(set(normalized_constraints)):
+            raise ArticulationRendererBindingError(
+                "renderer binding constraints must be unique"
+            )
+        object.__setattr__(self, "constraints", normalized_constraints)
+
+    def apparatus_material(self) -> Dict[str, Tuple[str, ...]]:
+        """Return the canonical descriptors carried by apparatus facets."""
+        prompts = []
+        if self.instruction_set_id is not None:
+            prompts.append(
+                "cbra.renderer.instruction={0}".format(
+                    self.instruction_set_id
+                )
+            )
+        if self.instruction_digest is not None:
+            prompts.append(
+                "cbra.renderer.instruction.sha256={0}".format(
+                    self.instruction_digest
+                )
+            )
+        tools = [
+            "cbra.renderer.id={0}".format(self.renderer_id),
+            "cbra.renderer.contract={0}".format(self.contract_version),
+        ]
+        if self.provider_id is not None:
+            tools.append(
+                "cbra.renderer.provider={0}".format(self.provider_id)
+            )
+        models = []
+        if self.model_id is not None:
+            models.append(
+                "cbra.renderer.model={0}".format(self.model_id)
+            )
+        constraints = [
+            "cbra.renderer.max_output_chars={0}".format(
+                self.max_output_chars
+            )
+        ]
+        constraints.extend(
+            "cbra.renderer.constraint={0}".format(value)
+            for value in self.constraints
+        )
+        return {
+            "models": tuple(sorted(models)),
+            "prompts": tuple(sorted(prompts)),
+            "tools": tuple(sorted(tools)),
+            "constraints": tuple(sorted(constraints)),
+        }
+
+
+def _apparatus_renderer_material(
+    apparatus: Apparatus,
+) -> Dict[str, Tuple[str, ...]]:
+    return {
+        facet: tuple(
+            sorted(
+                value
+                for value in getattr(apparatus, facet)
+                if value.startswith(_RENDERER_MATERIAL_PREFIX)
+            )
+        )
+        for facet in _RENDERER_MATERIAL_FACETS
+    }
+
+
+def materialize_renderer_binding(
+    apparatus: Optional[Apparatus],
+    binding: Optional[ArticulationRendererBinding],
+) -> Apparatus:
+    """Copy an apparatus and install one canonical renderer binding."""
+    if (
+        binding is not None
+        and type(binding) is not ArticulationRendererBinding
+    ):
+        raise TypeError(
+            "renderer_binding must be an ArticulationRendererBinding"
+        )
+    resolved = deepcopy(apparatus or Apparatus())
+    actual = _apparatus_renderer_material(resolved)
+    expected = (
+        binding.apparatus_material()
+        if binding is not None
+        else {
+            facet: ()
+            for facet in _RENDERER_MATERIAL_FACETS
+        }
+    )
+    if any(actual.values()) and actual != expected:
+        raise ArticulationRendererBindingError(
+            "apparatus already contains a different renderer binding"
+        )
+    if not any(actual.values()):
+        for facet, values in expected.items():
+            getattr(resolved, facet).extend(values)
+    return resolved
+
+
+def validate_renderer_configuration(
+    renderer: Optional[ArticulationRenderer],
+    binding: Optional[ArticulationRendererBinding],
+) -> None:
+    """Reject invisible custom renderers and false native-template claims."""
+    if (
+        binding is not None
+        and type(binding) is not ArticulationRendererBinding
+    ):
+        raise TypeError(
+            "renderer_binding must be an ArticulationRendererBinding"
+        )
+    if (
+        renderer is not None
+        and not callable(getattr(renderer, "render", None))
+    ):
+        raise TypeError("renderer must provide a callable render method")
+    native_template = (
+        renderer is None
+        or type(renderer) is NativeTemplateArticulationRenderer
+    )
+    if native_template and binding is not None:
+        raise ArticulationRendererBindingError(
+            "the native template renderer uses the default apparatus"
+        )
+    if not native_template and binding is None:
+        raise ArticulationRendererBindingError(
+            "a custom renderer requires an explicit apparatus binding"
+        )
+
+
+def assert_renderer_binding(
+    apparatus: Apparatus,
+    renderer: Optional[ArticulationRenderer],
+    binding: Optional[ArticulationRendererBinding],
+) -> None:
+    """Require the live renderer to match the field's durable apparatus."""
+    validate_renderer_configuration(renderer, binding)
+    actual = _apparatus_renderer_material(apparatus)
+    expected = (
+        binding.apparatus_material()
+        if binding is not None
+        else {
+            facet: ()
+            for facet in _RENDERER_MATERIAL_FACETS
+        }
+    )
+    if actual != expected:
+        raise ArticulationRendererBindingError(
+            "live renderer binding does not match the durable apparatus"
+        )
 
 
 def _stable_id(prefix: str, *parts: str) -> str:
@@ -438,7 +762,10 @@ def _render_formation(
     return " ".join(sentences)
 
 
-def _validated_rendered_text(value: object) -> str:
+def _validated_rendered_text(
+    value: object,
+    maximum: int = MAX_RENDERED_ARTICULATION_CHARS,
+) -> str:
     if not isinstance(value, str):
         raise ArticulationRendererError(
             "articulation renderer must return text"
@@ -447,10 +774,10 @@ def _validated_rendered_text(value: object) -> str:
         raise ArticulationRendererError(
             "articulation renderer returned empty text"
         )
-    if len(value) > MAX_RENDERED_ARTICULATION_CHARS:
+    if len(value) > maximum:
         raise ArticulationRendererError(
             "articulation renderer text exceeds {0} characters".format(
-                MAX_RENDERED_ARTICULATION_CHARS
+                maximum
             )
         )
     if any(
@@ -475,8 +802,14 @@ def form_articulation_candidate(
     cut: Optional[ProvisionalCut] = None,
     hypotheses: Optional[RuntimeHypotheses] = None,
     renderer: Optional[ArticulationRenderer] = None,
+    renderer_binding: Optional[ArticulationRendererBinding] = None,
 ) -> Optional[ArticulationCandidate]:
     hypotheses = hypotheses or RuntimeHypotheses()
+    assert_renderer_binding(
+        state.apparatus,
+        renderer,
+        renderer_binding,
+    )
     basis = build_articulation_basis(state, cut)
     if basis is None or not basis.formations:
         return None
@@ -486,9 +819,15 @@ def form_articulation_candidate(
         else NativeTemplateArticulationRenderer(hypotheses)
     )
     render = getattr(resolved_renderer, "render", None)
-    if not callable(render):
-        raise TypeError("renderer must provide a callable render method")
-    text = _validated_rendered_text(render(deepcopy(basis)))
+    maximum = (
+        renderer_binding.max_output_chars
+        if renderer_binding is not None
+        else MAX_RENDERED_ARTICULATION_CHARS
+    )
+    text = _validated_rendered_text(
+        render(deepcopy(basis)),
+        maximum,
+    )
     candidate_id = _stable_id(
         "candidate",
         state.field_id,

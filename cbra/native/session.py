@@ -8,7 +8,12 @@ from copy import deepcopy
 from typing import Dict, Optional, Sequence, Tuple
 from uuid import uuid4
 
-from .articulation import ArticulationRenderer
+from .articulation import (
+    ArticulationRenderer,
+    ArticulationRendererBinding,
+    assert_renderer_binding,
+    materialize_renderer_binding,
+)
 from .hypotheses import RuntimeHypotheses
 from .models import Apparatus, FieldState, Stream
 from .runtime import (
@@ -153,6 +158,7 @@ def create_session(
     initial_streams: Sequence[Stream] = (),
     apparatus: Optional[Apparatus] = None,
     hypotheses: Optional[RuntimeHypotheses] = None,
+    renderer_binding: Optional[ArticulationRendererBinding] = None,
 ) -> NativeSession:
     """Create one native field whose ownership is fixed to a thread."""
     resolved_thread_id = thread_id or "thread:{0}".format(uuid4().hex)
@@ -161,7 +167,10 @@ def create_session(
     field_id = _owned_field_id(resolved_thread_id)
     field = initialize_field(
         initial_streams,
-        apparatus=apparatus,
+        apparatus=materialize_renderer_binding(
+            apparatus,
+            renderer_binding,
+        ),
         field_id=field_id,
         hypotheses=hypotheses,
     )
@@ -183,6 +192,7 @@ def submit_turn(
     max_cycles: int = DEFAULT_MAX_CYCLES,
     hypotheses: Optional[RuntimeHypotheses] = None,
     renderer: Optional[ArticulationRenderer] = None,
+    renderer_binding: Optional[ArticulationRendererBinding] = None,
 ) -> Tuple[NativeSession, TurnOutcome]:
     """Append material once and expose the field's bounded truthful outcome."""
     assert_session_invariants(session)
@@ -237,6 +247,11 @@ def submit_turn(
             )
         )
     digest = _material_digest(user_text, material)
+    assert_renderer_binding(
+        session.field.apparatus,
+        renderer,
+        renderer_binding,
+    )
 
     working = deepcopy(session)
     user_stream_id = _turn_stream_id(
@@ -286,7 +301,12 @@ def submit_turn(
         if renderer is None:
             result = run_cycle(working.field, hypotheses)
         else:
-            result = run_cycle(working.field, hypotheses, renderer)
+            result = run_cycle(
+                working.field,
+                hypotheses,
+                renderer,
+                renderer_binding,
+            )
         if result.articulation is not None:
             kind = TurnOutcomeKind.ACCEPTED_ARTICULATION
             break

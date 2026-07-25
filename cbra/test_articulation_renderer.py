@@ -11,6 +11,7 @@ from cbra.application import NativeApplicationService
 from cbra.native import (
     MAX_RENDERED_ARTICULATION_CHARS,
     Apparatus,
+    ArticulationRendererBinding,
     ArticulationRendererError,
     DriftKind,
     NativeTemplateArticulationRenderer,
@@ -23,6 +24,7 @@ from cbra.native import (
     form_articulation_candidate,
     form_provisional_cut,
     initialize_field,
+    materialize_renderer_binding,
     update_field,
 )
 from cbra.store import NativeSessionRepository
@@ -51,6 +53,15 @@ BASELINE_NATIVE_TEXT = (
     "ember waits. It stays available without being forced into resolution."
     "\n\nThis orientation is temporary: it can change as these relations and "
     "the conditions around them change."
+)
+CUSTOM_BINDING = ArticulationRendererBinding(
+    renderer_id="renderer:static",
+    contract_version="1",
+    provider_id="provider:test",
+    model_id="model:test",
+    instruction_set_id="instruction:test",
+    max_output_chars=MAX_RENDERED_ARTICULATION_CHARS,
+    constraints=("text only",),
 )
 
 
@@ -124,7 +135,15 @@ class NativeArticulationRendererTests(unittest.TestCase):
             ),
         ]
 
-    def renderable_field(self):
+    def renderable_field(self, renderer_binding=None):
+        apparatus = materialize_renderer_binding(
+            Apparatus(
+                apparatus_id="apparatus:renderer",
+                framing="shared inquiry",
+                medium="text_chat",
+            ),
+            renderer_binding,
+        )
         state = initialize_field(
             self.relational_material()
             + [
@@ -136,11 +155,7 @@ class NativeArticulationRendererTests(unittest.TestCase):
                     payload={"text": "lantern ember waits"},
                 )
             ],
-            apparatus=Apparatus(
-                apparatus_id="apparatus:renderer",
-                framing="shared inquiry",
-                medium="text_chat",
-            ),
+            apparatus=apparatus,
             field_id="field:renderer",
             hypotheses=self.hypotheses,
         )
@@ -149,12 +164,18 @@ class NativeArticulationRendererTests(unittest.TestCase):
         self.assertIsNotNone(cut)
         return state, cut
 
-    def service(self, renderer=None, max_cycles=2):
+    def service(
+        self,
+        renderer=None,
+        max_cycles=2,
+        renderer_binding=None,
+    ):
         return NativeApplicationService(
             NativeSessionRepository(self.root),
             max_cycles=max_cycles,
             hypotheses=self.hypotheses,
             renderer=renderer,
+            renderer_binding=renderer_binding,
         )
 
     def test_default_renderer_preserves_candidate_text_and_identity(self):
@@ -186,7 +207,7 @@ class NativeArticulationRendererTests(unittest.TestCase):
         )
 
     def test_renderer_receives_an_isolated_basis(self):
-        state, cut = self.renderable_field()
+        state, cut = self.renderable_field(CUSTOM_BINDING)
         authoritative = build_articulation_basis(state, cut)
 
         class MutatingRenderer:
@@ -207,6 +228,7 @@ class NativeArticulationRendererTests(unittest.TestCase):
             cut,
             self.hypotheses,
             renderer,
+            CUSTOM_BINDING,
         )
         renderer.retained_basis.relation_ids.append(
             "relation:later-mutation"
@@ -233,20 +255,24 @@ class NativeArticulationRendererTests(unittest.TestCase):
         )
         for value in invalid_results:
             with self.subTest(value_type=type(value).__name__):
-                state, cut = self.renderable_field()
+                state, cut = self.renderable_field(CUSTOM_BINDING)
                 with self.assertRaises(ArticulationRendererError):
                     form_articulation_candidate(
                         state,
                         cut,
                         self.hypotheses,
                         StaticRenderer(value),
+                        CUSTOM_BINDING,
                     )
                 self.assertFalse(state.articulation_candidates)
                 self.assertIsNone(state.current_candidate_id)
 
     def test_custom_text_persists_projects_and_replays_without_rendering(self):
         renderer = StaticRenderer(CUSTOM_TEXT)
-        service = self.service(renderer)
+        service = self.service(
+            renderer,
+            renderer_binding=CUSTOM_BINDING,
+        )
         result = service.create_thread(
             "thread:custom-renderer",
             "How do cedar soil and river stone remain distinct?",
@@ -265,8 +291,7 @@ class NativeArticulationRendererTests(unittest.TestCase):
         )
         self.assertEqual(projection.turns[0].text, CUSTOM_TEXT)
 
-        failing = FailingRenderer()
-        restarted = self.service(failing)
+        restarted = self.service()
         replay = restarted.create_thread(
             "thread:custom-renderer",
             "How do cedar soil and river stone remain distinct?",
@@ -275,7 +300,6 @@ class NativeArticulationRendererTests(unittest.TestCase):
         )
         self.assertTrue(replay.replayed)
         self.assertEqual(replay.outcome.text, CUSTOM_TEXT)
-        self.assertEqual(failing.calls, 0)
 
     def test_preflight_and_sparse_turns_do_not_render(self):
         sparse_renderer = StaticRenderer(CUSTOM_TEXT)
@@ -283,6 +307,7 @@ class NativeArticulationRendererTests(unittest.TestCase):
             NativeSessionRepository(self.root),
             max_cycles=3,
             renderer=sparse_renderer,
+            renderer_binding=CUSTOM_BINDING,
         )
         sparse.create_thread(
             "thread:sparse-renderer",
@@ -292,7 +317,10 @@ class NativeArticulationRendererTests(unittest.TestCase):
         self.assertEqual(sparse_renderer.calls, 0)
 
         renderer = StaticRenderer(CUSTOM_TEXT)
-        service = self.service(renderer)
+        service = self.service(
+            renderer,
+            renderer_binding=CUSTOM_BINDING,
+        )
         created = service.create_thread(
             "thread:renderer-preflight",
             "How do cedar soil and river stone remain distinct?",
@@ -328,7 +356,10 @@ class NativeArticulationRendererTests(unittest.TestCase):
         renderer = StaticRenderer(CUSTOM_TEXT)
 
         def create():
-            return self.service(renderer).create_thread(
+            return self.service(
+                renderer,
+                renderer_binding=CUSTOM_BINDING,
+            ).create_thread(
                 "thread:concurrent-renderer",
                 "How do cedar soil and river stone remain distinct?",
                 turn_id="turn:first",
@@ -349,7 +380,11 @@ class NativeArticulationRendererTests(unittest.TestCase):
         )
 
     def test_concurrent_identical_continuation_renders_once(self):
-        self.service().create_thread(
+        setup_renderer = StaticRenderer(CUSTOM_TEXT)
+        self.service(
+            setup_renderer,
+            renderer_binding=CUSTOM_BINDING,
+        ).create_thread(
             "thread:concurrent-renderer-continuation",
             FIRST_STRAND,
             turn_id="turn:first",
@@ -357,7 +392,10 @@ class NativeArticulationRendererTests(unittest.TestCase):
         renderer = StaticRenderer(CUSTOM_TEXT)
 
         def submit():
-            return self.service(renderer).submit_thread_turn(
+            return self.service(
+                renderer,
+                renderer_binding=CUSTOM_BINDING,
+            ).submit_thread_turn(
                 "thread:concurrent-renderer-continuation",
                 RELATED_STRAND,
                 turn_id="turn:second",
@@ -379,7 +417,10 @@ class NativeArticulationRendererTests(unittest.TestCase):
 
     def test_renderer_failure_and_invalid_text_roll_back_cleanly(self):
         failing = FailingRenderer()
-        service = self.service(failing)
+        service = self.service(
+            failing,
+            renderer_binding=CUSTOM_BINDING,
+        )
         with self.assertRaises(RuntimeError):
             service.create_thread(
                 "thread:renderer-failure",
@@ -391,7 +432,10 @@ class NativeArticulationRendererTests(unittest.TestCase):
         repository = NativeSessionRepository(self.root)
         self.assertFalse(repository.exists("thread:renderer-failure"))
         self.assertFalse(list(self.root.glob(".*.tmp")))
-        retry = self.service(StaticRenderer(CUSTOM_TEXT)).create_thread(
+        retry = self.service(
+            StaticRenderer(CUSTOM_TEXT),
+            renderer_binding=CUSTOM_BINDING,
+        ).create_thread(
             "thread:renderer-failure",
             "How do cedar soil and river stone remain distinct?",
             turn_id="turn:first",
@@ -401,7 +445,10 @@ class NativeArticulationRendererTests(unittest.TestCase):
 
         invalid = StaticRenderer("")
         with self.assertRaises(ArticulationRendererError):
-            self.service(invalid).create_thread(
+            self.service(
+                invalid,
+                renderer_binding=CUSTOM_BINDING,
+            ).create_thread(
                 "thread:invalid-render",
                 "How do cedar soil and river stone remain distinct?",
                 turn_id="turn:first",
@@ -410,7 +457,11 @@ class NativeArticulationRendererTests(unittest.TestCase):
         self.assertFalse(repository.exists("thread:invalid-render"))
 
     def test_continuation_failure_preserves_prior_revision_for_retry(self):
-        self.service().create_thread(
+        setup_renderer = StaticRenderer(CUSTOM_TEXT)
+        self.service(
+            setup_renderer,
+            renderer_binding=CUSTOM_BINDING,
+        ).create_thread(
             "thread:renderer-continuation-failure",
             FIRST_STRAND,
             turn_id="turn:first",
@@ -423,7 +474,10 @@ class NativeArticulationRendererTests(unittest.TestCase):
         failing = FailingRenderer()
 
         with self.assertRaises(RuntimeError):
-            self.service(failing).submit_thread_turn(
+            self.service(
+                failing,
+                renderer_binding=CUSTOM_BINDING,
+            ).submit_thread_turn(
                 "thread:renderer-continuation-failure",
                 RELATED_STRAND,
                 turn_id="turn:second",
@@ -438,7 +492,10 @@ class NativeArticulationRendererTests(unittest.TestCase):
             ).revision,
             1,
         )
-        retry = self.service(StaticRenderer(CUSTOM_TEXT)).submit_thread_turn(
+        retry = self.service(
+            StaticRenderer(CUSTOM_TEXT),
+            renderer_binding=CUSTOM_BINDING,
+        ).submit_thread_turn(
             "thread:renderer-continuation-failure",
             RELATED_STRAND,
             turn_id="turn:second",
@@ -450,7 +507,10 @@ class NativeArticulationRendererTests(unittest.TestCase):
 
     def test_drifting_text_uses_native_evaluation_and_reintegration(self):
         renderer = StaticRenderer(DRIFTING_TEXT)
-        service = self.service(renderer)
+        service = self.service(
+            renderer,
+            renderer_binding=CUSTOM_BINDING,
+        )
         result = service.create_thread(
             "thread:renderer-drift",
             "How do cedar soil and river stone remain distinct?",
@@ -486,7 +546,10 @@ class NativeArticulationRendererTests(unittest.TestCase):
         renderer = BarrierRenderer()
 
         def create(thread_id):
-            return self.service(renderer).create_thread(
+            return self.service(
+                renderer,
+                renderer_binding=CUSTOM_BINDING,
+            ).create_thread(
                 thread_id,
                 "How do cedar soil and river stone remain distinct?",
                 turn_id="turn:first",

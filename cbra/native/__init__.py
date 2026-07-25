@@ -9,15 +9,20 @@ concerns are allowed to shape the core.
 from .articulation import (
     MAX_RENDERED_ARTICULATION_CHARS,
     ArticulationRenderer,
+    ArticulationRendererBinding,
+    ArticulationRendererBindingError,
     ArticulationRendererError,
     NativeTemplateArticulationRenderer,
     accept_articulation,
+    assert_renderer_binding,
     articulate,
     build_articulation_basis,
     evaluate_articulation_candidate,
     form_articulation_candidate,
     form_provisional_cut,
+    materialize_renderer_binding,
     reinsert_articulation,
+    validate_renderer_configuration,
 )
 from .emergence import emerge_phenomena
 from .hypotheses import RuntimeHypotheses
@@ -97,6 +102,8 @@ from .session_models import (
 __all__ = [
     "Apparatus",
     "ArticulationRenderer",
+    "ArticulationRendererBinding",
+    "ArticulationRendererBindingError",
     "ArticulationRendererError",
     "Articulation",
     "ArticulationBasis",
@@ -142,6 +149,7 @@ __all__ = [
     "TurnRecord",
     "UnsupportedSchemaVersionError",
     "accept_articulation",
+    "assert_renderer_binding",
     "articulate",
     "assert_session_invariants",
     "build_articulation_basis",
@@ -149,6 +157,7 @@ __all__ = [
     "form_provisional_cut",
     "form_articulation_candidate",
     "initialize_field",
+    "materialize_renderer_binding",
     "create_session",
     "load_checkpoint",
     "load_session",
@@ -170,4 +179,5 @@ __all__ = [
     "restore_trace",
     "submit_turn",
     "update_field",
+    "validate_renderer_configuration",
 ]

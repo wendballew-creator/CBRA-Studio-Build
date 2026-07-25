@@ -8,7 +8,9 @@ from uuid import uuid4
 
 from .articulation import (
     ArticulationRenderer,
+    ArticulationRendererBinding,
     accept_articulation,
+    assert_renderer_binding,
     evaluate_articulation_candidate,
     form_articulation_candidate,
     form_provisional_cut,
@@ -709,8 +711,14 @@ def run_cycle(
     state: FieldState,
     hypotheses: Optional[RuntimeHypotheses] = None,
     renderer: Optional[ArticulationRenderer] = None,
+    renderer_binding: Optional[ArticulationRendererBinding] = None,
 ) -> CycleResult:
     hypotheses = hypotheses or RuntimeHypotheses()
+    assert_renderer_binding(
+        state.apparatus,
+        renderer,
+        renderer_binding,
+    )
     before = snapshot_field(state)
     (
         trace,
@@ -746,6 +754,7 @@ def run_cycle(
                     cut,
                     hypotheses,
                     renderer,
+                    renderer_binding,
                 )
         if candidate is not None:
             evaluation = evaluate_articulation_candidate(

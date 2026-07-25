@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional, Sequence, Tuple
 
@@ -9,6 +10,7 @@ from cbra.corpus import CanonicalCorpusSnapshot
 from cbra.native import (
     DEFAULT_MAX_CYCLES,
     ArticulationRenderer,
+    ArticulationRendererBinding,
     NativeSession,
     NativeSessionError,
     RuntimeHypotheses,
@@ -17,6 +19,7 @@ from cbra.native import (
     TurnOutcomeKind,
     create_session,
     submit_turn,
+    validate_renderer_configuration,
 )
 from cbra.store import (
     NativeSessionRepository,
@@ -82,6 +85,7 @@ class NativeApplicationService:
         hypotheses: Optional[RuntimeHypotheses] = None,
         canonical_corpus: Optional[CanonicalCorpusSnapshot] = None,
         renderer: Optional[ArticulationRenderer] = None,
+        renderer_binding: Optional[ArticulationRendererBinding] = None,
     ) -> None:
         if type(max_cycles) is not int or max_cycles < 1:
             raise ValueError("max_cycles must be a positive integer")
@@ -89,14 +93,9 @@ class NativeApplicationService:
         self.max_cycles = max_cycles
         self.hypotheses = hypotheses
         self.canonical_corpus = canonical_corpus
-        if (
-            renderer is not None
-            and not callable(getattr(renderer, "render", None))
-        ):
-            raise TypeError(
-                "renderer must provide a callable render method"
-            )
+        validate_renderer_configuration(renderer, renderer_binding)
         self.renderer = renderer
+        self.renderer_binding = deepcopy(renderer_binding)
 
     def create_thread(
         self,
@@ -133,6 +132,7 @@ class NativeApplicationService:
                     max_cycles=self.max_cycles,
                     hypotheses=self.hypotheses,
                     renderer=self.renderer,
+                    renderer_binding=self.renderer_binding,
                 )
                 return updated, ApplicationTurnResult(
                     outcome=outcome,
@@ -142,6 +142,7 @@ class NativeApplicationService:
             session = create_session(
                 thread_id=thread_id,
                 initial_streams=initial_streams,
+                renderer_binding=self.renderer_binding,
             )
             updated, outcome = submit_turn(
                 session,
@@ -152,6 +153,7 @@ class NativeApplicationService:
                 max_cycles=self.max_cycles,
                 hypotheses=self.hypotheses,
                 renderer=self.renderer,
+                renderer_binding=self.renderer_binding,
             )
             return updated, ApplicationTurnResult(
                 outcome=outcome,
@@ -185,6 +187,7 @@ class NativeApplicationService:
                 max_cycles=self.max_cycles,
                 hypotheses=self.hypotheses,
                 renderer=self.renderer,
+                renderer_binding=self.renderer_binding,
             )
             return updated, ApplicationTurnResult(
                 outcome=outcome,
