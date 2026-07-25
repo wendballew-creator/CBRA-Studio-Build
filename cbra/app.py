@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 import os
 from pathlib import Path
 from typing import List, Optional, Union
@@ -53,6 +54,10 @@ from cbra.native import (
     SessionOwnershipError,
     StaleRevisionError,
     TurnConflictError,
+)
+from cbra.providers.application_activation import (
+    ApplicationRendererActivation,
+    application_renderer_from_environment,
 )
 from cbra.store import (
     NativeSessionRepository,
@@ -156,41 +161,61 @@ def create_app(
         raise ValueError(
             "A supplied service already owns its canonical corpus snapshot"
         )
-    resolved_attachment_limits = (
-        attachment_limits
-        if attachment_limits is not None
-        else AttachmentLimits.from_environment()
-    )
 
+    renderer_activation = ApplicationRendererActivation()
     if service is None:
-        resolved_corpus_root = Path(
-            corpus_root if corpus_root is not None
-            else _default_corpus_root()
+        renderer_activation = application_renderer_from_environment()
+    try:
+        resolved_attachment_limits = (
+            attachment_limits
+            if attachment_limits is not None
+            else AttachmentLimits.from_environment()
         )
-        canonical_corpus = load_canonical_snapshot(
-            resolved_corpus_root,
-            limits=(
-                corpus_limits
-                if corpus_limits is not None
-                else CorpusLimits.from_environment()
-            ),
-        )
-        if repository is None:
-            resolved_root = Path(
-                session_root if session_root is not None
-                else _default_session_root()
+        if service is None:
+            resolved_corpus_root = Path(
+                corpus_root if corpus_root is not None
+                else _default_corpus_root()
             )
-            resolved_root.mkdir(parents=True, exist_ok=True)
-            repository = NativeSessionRepository(
-                resolved_root,
-                compress=compress,
+            canonical_corpus = load_canonical_snapshot(
+                resolved_corpus_root,
+                limits=(
+                    corpus_limits
+                    if corpus_limits is not None
+                    else CorpusLimits.from_environment()
+                ),
             )
-        service = NativeApplicationService(
-            repository,
-            canonical_corpus=canonical_corpus,
-        )
+            if repository is None:
+                resolved_root = Path(
+                    session_root if session_root is not None
+                    else _default_session_root()
+                )
+                resolved_root.mkdir(parents=True, exist_ok=True)
+                repository = NativeSessionRepository(
+                    resolved_root,
+                    compress=compress,
+                )
+            service = NativeApplicationService(
+                repository,
+                canonical_corpus=canonical_corpus,
+                renderer=renderer_activation.renderer,
+                renderer_binding=renderer_activation.renderer_binding,
+            )
+    except Exception:
+        renderer_activation.close()
+        raise
 
-    application = FastAPI(title=APP_TITLE, version=APP_VERSION)
+    @asynccontextmanager
+    async def lifespan(application_instance: FastAPI):
+        try:
+            yield
+        finally:
+            renderer_activation.close()
+
+    application = FastAPI(
+        title=APP_TITLE,
+        version=APP_VERSION,
+        lifespan=lifespan,
+    )
     application.state.native_service = service
     application.state.attachment_limits = resolved_attachment_limits
 
