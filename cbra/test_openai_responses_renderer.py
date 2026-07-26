@@ -11,6 +11,7 @@ import httpx
 from openai import OpenAI
 
 from cbra.application import NativeApplicationService
+from cbra.corpus import load_canonical_snapshot
 from cbra.native import (
     ArticulationBasis,
     ArticulationFormation,
@@ -34,14 +35,35 @@ from cbra.store import NativeSessionRepository
 
 
 ACCEPTED_TEXT = (
-    "One formation keeps cedar roots and sheltering soil in relation.\n\n"
-    "Another formation keeps river current, stone, and silt perceptible.\n\n"
-    "Other material remains held open while the relation stays revisable."
+    "Cedar roots shelter soil and help it hold moisture, while river current "
+    "reshapes stone and carries silt. The processes are related through "
+    "material change without becoming interchangeable.\n\n"
+    "The lantern ember remains a separate uncertainty rather than evidence "
+    "for either account."
 )
 DRIFTING_TEXT = (
     "One formation says you should accept the right answer. "
     "Another formation remains perceptible. "
     "Other material remains held open. This settles the matter."
+)
+LEGACY_THEORY_TEXT = (
+    "One formation treats canonical accounts as the primary material.\n\n"
+    "Another formation acknowledges the practical situation without acting "
+    "on it. The remaining material is held open."
+)
+PRACTICAL_PROMPT = (
+    "A six-person volunteer team has two hours on Saturday to prepare a room "
+    "for a free community workshop. The room needs twenty chairs, a welcome "
+    "table, signs, water, and an accessible clear path. Two volunteers will "
+    "arrive thirty minutes late."
+)
+PRACTICAL_RESPONSE = (
+    "1. The four on-time volunteers first mark and protect the accessible "
+    "clear path, then place the twenty chairs around it.\n"
+    "2. Two of those volunteers set the welcome table, water, and entrance "
+    "signs while the other two finish room signs and check the route.\n"
+    "3. When the two late volunteers arrive, assign them the final supply, "
+    "signage, and accessibility check so the initial setup keeps moving."
 )
 TEST_API_KEY = "sk-test-secret-that-must-not-persist"
 
@@ -75,6 +97,8 @@ def expressive_basis():
                         text="cedar roots shelter soil",
                         source_stream_ids=["source:must-not-leave"],
                         provenance={
+                            "source": "canonical_corpus",
+                            "immutable_snapshot": True,
                             "private": "provenance-must-not-leave",
                         },
                     ),
@@ -83,7 +107,7 @@ def expressive_basis():
                         kind="user_input",
                         text=source_instruction,
                         source_stream_ids=[],
-                        provenance={},
+                        provenance={"revision": 2},
                     ),
                 ],
                 relation_ids=["relation:must-not-leave"],
@@ -98,6 +122,13 @@ def expressive_basis():
             ArticulationFormation(
                 phenomenon_id="phenomenon:second-private",
                 materials=[
+                    ArticulationMaterial(
+                        stream_id="stream:prior-user-private",
+                        kind="user_input",
+                        text="An earlier conversational turn.",
+                        source_stream_ids=[],
+                        provenance={"revision": 1},
+                    ),
                     ArticulationMaterial(
                         stream_id="stream:river-private",
                         kind="environment",
@@ -318,7 +349,7 @@ class OpenAIResponsesRendererTests(unittest.TestCase):
         self.assertEqual(binding.provider_id, "openai")
         self.assertEqual(binding.model_id, "gpt-test-snapshot")
         self.assertEqual(binding.instruction_set_id, INSTRUCTION_SET_ID)
-        self.assertIn("basis_projection=cbra-expressive-basis-v1", material)
+        self.assertIn("basis_projection=cbra-expressive-basis-v2", material)
         self.assertIn("reasoning_effort=low", material)
         self.assertIn("text_verbosity=medium", material)
         self.assertIn("max_input_chars=20000", material)
@@ -347,7 +378,7 @@ class OpenAIResponsesRendererTests(unittest.TestCase):
         )
         self.assertEqual(renderer.binding.model_id, "gpt-test-snapshot")
 
-    def test_canonical_projection_is_stable_expressive_and_non_authoritative(self):
+    def test_canonical_projection_is_stable_expressive_and_role_bounded(self):
         first = canonical_articulation_basis_json(expressive_basis())
         second = canonical_articulation_basis_json(expressive_basis())
         projected = json.loads(first)
@@ -357,6 +388,7 @@ class OpenAIResponsesRendererTests(unittest.TestCase):
             projected["contract_version"],
             BASIS_PROJECTION_CONTRACT_VERSION,
         )
+        self.assertTrue(projected["current_user_input_present"])
         self.assertEqual(
             [item["order"] for item in projected["formations"]],
             [1, 2],
@@ -368,6 +400,20 @@ class OpenAIResponsesRendererTests(unittest.TestCase):
                 "play_variation": True,
                 "prior_articulation": True,
             },
+        )
+        self.assertEqual(
+            [
+                item["role"]
+                for item in projected["formations"][0]["materials"]
+            ],
+            ["canonical_orientation", "current_user_input"],
+        )
+        self.assertEqual(
+            [
+                item["role"]
+                for item in projected["formations"][1]["materials"]
+            ],
+            ["prior_user_input", "field_material"],
         )
         for text in (
             "cedar roots shelter soil",
@@ -394,6 +440,28 @@ class OpenAIResponsesRendererTests(unittest.TestCase):
         with self.assertRaises(OpenAIResponsesRendererError) as captured:
             canonical_articulation_basis_json(invalid)
         self.assertIsNone(captured.exception.__cause__)
+
+    def test_instructions_center_the_user_and_keep_orientation_implicit(self):
+        self.assertIn(
+            '"current_user_input" is the response focus',
+            FIXED_ARTICULATION_INSTRUCTIONS,
+        )
+        self.assertIn(
+            "prioritized, usable action",
+            FIXED_ARTICULATION_INSTRUCTIONS,
+        )
+        self.assertIn(
+            '"canonical_orientation" supplies the',
+            FIXED_ARTICULATION_INSTRUCTIONS,
+        )
+        self.assertNotIn(
+            'Begin the first formation paragraph with "One formation"',
+            FIXED_ARTICULATION_INSTRUCTIONS,
+        )
+        self.assertNotIn(
+            'include a separate passage containing the words "held open"',
+            FIXED_ARTICULATION_INSTRUCTIONS,
+        )
 
     def test_request_uses_stateless_single_response_contract(self):
         mock, renderer = self.renderer(
@@ -673,6 +741,103 @@ class OpenAIResponsesRendererTests(unittest.TestCase):
                     0
                 ].drift_signals
             },
+        )
+
+    def test_legacy_theory_performance_is_reintegrated(self):
+        mock, renderer = self.renderer(
+            lambda _: httpx.Response(
+                200,
+                json=response_payload(text=LEGACY_THEORY_TEXT),
+            )
+        )
+        result = self.create_renderable_thread(
+            self.service(renderer),
+            "thread:openai-theory-performance",
+        )
+
+        self.assertEqual(len(mock.requests), 1)
+        self.assertEqual(
+            result.outcome.kind,
+            TurnOutcomeKind.REINTEGRATION_PENDING,
+        )
+        session = NativeSessionRepository(self.root).load(
+            "thread:openai-theory-performance"
+        )
+        signals = session.field.articulation_evaluations[
+            0
+        ].drift_signals
+        self.assertIn(
+            DriftKind.PROCEDURAL_BYPASS,
+            {signal.kind for signal in signals},
+        )
+        self.assertTrue(
+            any(
+                "performs renderer formations" in evidence
+                for signal in signals
+                for evidence in signal.evidence
+            )
+        )
+
+    def test_case_one_keeps_full_prompt_foreground_and_corpus_implicit(self):
+        mock, renderer = self.renderer(
+            lambda _: httpx.Response(
+                200,
+                json=response_payload(text=PRACTICAL_RESPONSE),
+            )
+        )
+        service = NativeApplicationService(
+            NativeSessionRepository(self.root),
+            max_cycles=2,
+            hypotheses=self.hypotheses,
+            canonical_corpus=load_canonical_snapshot(
+                Path(__file__).resolve().parents[1] / "corpus"
+            ),
+            renderer=renderer,
+            renderer_binding=renderer.binding,
+        )
+        result = service.create_thread(
+            "thread:case-one-regression",
+            PRACTICAL_PROMPT,
+            turn_id="turn:first",
+        )
+
+        self.assertEqual(
+            result.outcome.kind,
+            TurnOutcomeKind.ACCEPTED_ARTICULATION,
+        )
+        self.assertEqual(result.outcome.text, PRACTICAL_RESPONSE)
+        self.assertEqual(len(mock.requests), 1)
+        projected = json.loads(mock.requests[0]["body"]["input"])
+        materials = [
+            material
+            for formation in projected["formations"]
+            for material in formation["materials"]
+        ] + list(projected["held_open_materials"])
+        current = [
+            item
+            for item in materials
+            if item["role"] == "current_user_input"
+        ]
+        orientation = [
+            item
+            for item in materials
+            if item["role"] == "canonical_orientation"
+        ]
+
+        self.assertEqual(
+            [item["text"] for item in current],
+            [PRACTICAL_PROMPT],
+        )
+        self.assertEqual(len(orientation), 4)
+        self.assertTrue(
+            any(
+                "Situated Relevance Selection" in item["text"]
+                for item in orientation
+            )
+        )
+        self.assertLessEqual(
+            len(mock.requests[0]["body"]["input"]),
+            renderer.configuration.max_input_chars,
         )
 
     def test_concurrent_identical_turn_makes_one_external_request(self):

@@ -31,9 +31,9 @@ from scripts.validate_openai_live import (
 
 TEST_API_KEY = "sk-live-validation-secret-that-must-never-persist"
 ACCEPTED_TEXT = (
-    "One formation keeps cedar roots and sheltering soil in relation.\n\n"
-    "Another formation keeps river current, stone, and silt perceptible.\n\n"
-    "Other material remains held open while the relation stays revisable."
+    "Cedar roots shelter soil and help it hold moisture. The changing soil "
+    "also alters what the roots can retain, so the relation remains mutual "
+    "without making roots and soil interchangeable."
 )
 REJECTED_TEXT = "Everything is one final and certain answer."
 

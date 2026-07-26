@@ -11,6 +11,10 @@ remaining limitations, and
 [`OPENAI_LIVE_VALIDATION.md`](OPENAI_LIVE_VALIDATION.md) for the bounded
 validation evidence.
 
+That controlled run used response-boundary version 1. It remains transport and
+replay evidence, not live behavioral evidence for the repaired version-2
+projection and instructions.
+
 The retained live-validation harness is not a routine regression command and
 does not need to be rerun to establish the current build state.
 
@@ -20,6 +24,13 @@ external session root, a fixed non-sensitive interaction set, and an
 observation record that keeps behavioral evidence separate from the
 historical route-oriented interaction log. Preparing the apparatus does not
 establish that the behavioral cases have passed.
+
+The first live Case 1 response failed by performing the architecture instead
+of engaging the practical request. The set stopped after one turn, the server
+was stopped, and the temporary key was revoked. The evidence and offline
+version-2 corpus-to-response repair are recorded in
+[`BEHAVIORAL_EVALUATION_CASE_1.md`](BEHAVIORAL_EVALUATION_CASE_1.md). The
+repair has not yet passed a fresh live behavioral check.
 
 ## Articulation renderer activation
 
@@ -56,6 +67,11 @@ settings can continue a bound thread. Starting a new turn with different
 renderer settings is rejected before provider work or persistence. Use a
 separate `CBRA_SESSION_ROOT` when beginning OpenAI-rendered threads unless the
 existing threads already carry the same binding.
+
+The response-boundary repair advances both the expressive projection and
+OpenAI instruction set to version 2. Version-1 OpenAI sessions cannot be
+continued under this binding; begin repaired evaluation in a fresh session
+root.
 
 ## Controlled live-provider validation
 

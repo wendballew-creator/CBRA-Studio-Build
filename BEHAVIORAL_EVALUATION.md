@@ -1,5 +1,26 @@
 # CBRA Live Behavioral Evaluation
 
+## First attempt and repair boundary
+
+The first live attempt stopped after Case 1, Turn 1 on 2026-07-25. At
+evaluation baseline `67ac1b9`, the provider completed one request and the
+native lifecycle recorded `accepted_articulation`, but the visible response
+performed the canonical architecture instead of helping the volunteer team.
+It foregrounded formations and apparatus material, displaced the practical
+situation into unresolved material, and offered no usable room-preparation
+movement.
+
+That isolated failure was serious enough to stop the set. The server was
+stopped, the restricted key was revoked, and no second turn was submitted.
+The evidence and the resulting repair boundary are recorded in
+[`BEHAVIORAL_EVALUATION_CASE_1.md`](BEHAVIORAL_EVALUATION_CASE_1.md).
+
+The repaired renderer uses a new durable apparatus binding. Do not resume the
+old evaluation root with the repaired branch. The next live step is a fresh
+Case 1, Turn 1 on a new external evaluation root. Read and record that response
+before deciding whether Turn 2 is justified. The offline repair does not
+itself establish a live behavioral pass.
+
 ## Evaluation boundary
 
 This phase observes the architecture-native/OpenAI application as a user
@@ -20,7 +41,9 @@ failed the relevant commitment. A first formative turn that produces
 failure. `reintegration_pending` is also evidence and should not be converted
 into a provider rerun.
 
-Do not change the runtime until the complete first set has been observed.
+Do not change the runtime while evidence is still being gathered unless one
+response independently creates a serious failure that makes continued
+spending or observation irresponsible. Record that stop before repairing.
 
 ## Fixed apparatus
 
@@ -89,6 +112,10 @@ form, and no displacement into theoretical explanation.
 Turn 1:
 
 > A six-person volunteer team has two hours on Saturday to prepare a room for a free community workshop. The room needs twenty chairs, a welcome table, signs, water, and an accessible clear path. Two volunteers will arrive thirty minutes late.
+
+Read and record the response before submitting Turn 2. If the answer performs
+the architecture, loses the stated constraints, or does not engage the
+practical situation, stop the set without retrying.
 
 Turn 2:
 

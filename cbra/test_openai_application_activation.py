@@ -24,9 +24,9 @@ from cbra.store import NativeSessionRepository
 
 TEST_API_KEY = "sk-activation-secret-that-must-not-persist"
 ACCEPTED_TEXT = (
-    "One formation keeps cedar roots and sheltering soil in relation.\n\n"
-    "Another formation keeps river current, stone, and silt perceptible.\n\n"
-    "Other material remains held open while the relation stays revisable."
+    "Cedar roots shelter soil and help it hold moisture. The changing soil "
+    "also alters what the roots can retain, so the relation remains mutual "
+    "without making roots and soil interchangeable."
 )
 FIRST_STRAND = "Cedar roots shelter soil and hold moisture."
 RELATED_STRAND = "Cedar soil holds water around the roots."

@@ -2,8 +2,8 @@
 
 Status date: 2026-07-25
 
-Status boundary: `agent/live-behavioral-evaluation-baseline`, based directly
-on `aabd20e` (`Record provider validation closure`)
+Status boundary: `agent/corpus-response-boundary-repair`, based directly on
+`67ac1b9` (`Prepare live behavioral evaluation`)
 
 ## Closure conclusion
 
@@ -19,9 +19,23 @@ The real provider boundary completed its controlled synthetic validation on
 across an application restart without another provider request. The temporary
 restricted key was revoked after the run.
 
+That run used expressive-basis and OpenAI instruction-set version 1. It
+validates the transport, rollback, replay, and client-lifetime path at that
+commit; it is not live evidence for the repaired version-2 response behavior.
+The version-2 repair changes projection roles, bounded material thickness,
+instructions, and native acceptance—not endpoint, retry, storage, or
+credential handling.
+
 This closes provider-boundary construction and validation. It does not close
 behavioral evaluation, deployment, security hardening for public access, or
 product operations.
+
+The first behavioral attempt then exposed a serious corpus-to-response
+failure. Case 1, Turn 1 performed architecture language instead of engaging
+the practical request, so the set stopped after one submitted turn. The
+server was stopped and the restricted key was revoked. The stop evidence is
+recorded in
+[`BEHAVIORAL_EVALUATION_CASE_1.md`](BEHAVIORAL_EVALUATION_CASE_1.md).
 
 The sanitized evidence and the limits of the validation claim are recorded in
 [`OPENAI_LIVE_VALIDATION.md`](OPENAI_LIVE_VALIDATION.md).
@@ -101,6 +115,15 @@ The sanitized evidence and the limits of the validation claim are recorded in
 - The renderer sends a canonical expressive-basis projection, not native
   authority or provenance identifiers, through one stateless Responses
   request with `store=false`, zero automatic retries, and a finite timeout.
+- Expressive-basis version 2 preserves bounded source text and marks the
+  latest user turn as response focus, prior turns as context, attachments as
+  source material, and canonical sources as silent reasoning orientation.
+- OpenAI instruction-set version 2 permits situated relevance, prioritization,
+  recommendations, drafting, and concrete action while continuing to reject
+  moral closure, unsupported diagnosis, overclaiming, and procedural leakage.
+- The repaired OpenAI acceptance boundary no longer requires visible
+  formation or held-open phrases. A return to that legacy ritual is treated as
+  procedural bypass and reintegrated.
 - The durable renderer binding records all effective non-secret apparatus
   settings. The API key is not part of the binding or session.
 - Exact replay, restart replay, health checks, UI reads, transcript reads, and
@@ -152,6 +175,17 @@ The older stack emits existing HTTPX test-client deprecation warnings and
 AnyIO memory-stream resource warnings. They are not test failures, but should
 be resolved if that compatibility stack remains a release target.
 
+The corpus-to-response repair then ran the expanded 205-test suite in both
+maintained compatibility stacks:
+
+| Stack | Result |
+|---|---|
+| Pydantic 1.10.26, OpenAI 2.47.0, HTTPX 0.27.2 | 205 passed |
+| Pydantic 2.13.4, OpenAI 2.48.0, HTTPX 0.28.1 | 205 passed |
+
+These are offline results. The OpenAI adapter tests use local mock transport;
+the repair verification made no live provider request.
+
 The live-provider result validates the real OpenAI transport and application
 path only for the fixed synthetic apparatus recorded in
 `OPENAI_LIVE_VALIDATION.md`. It is not evidence of general response quality.
@@ -179,10 +213,20 @@ path only for the fixed synthetic apparatus recorded in
 - The live validation used one model and one fixed synthetic two-turn
   contract. It did not test model portability, load, long-running sessions,
   real attachments, personal material, or provider outage behavior live.
-- Behavioral quality in the current native/OpenAI stack has not yet been
-  evaluated systematically. Earlier interaction logs and route-oriented demo
-  documents predate the architecture-native runtime and are historical
-  evidence, not current acceptance criteria.
+- Behavioral quality has not been evaluated across the complete first set.
+  One Case 1 response at `67ac1b9` failed seriously enough to stop the set;
+  the resulting version-2 repair has offline regression evidence but no live
+  behavioral result yet.
+- Expressive material is bounded rather than retrieved semantically. Current
+  user turns, canonical sources, attachments, and other field material have
+  separate finite projection limits; sufficiently long or dense formations
+  can still exceed the configured provider-input limit and roll back the turn.
+- Version-1 OpenAI-rendered sessions cannot silently continue under the
+  version-2 renderer binding. A repaired live evaluation must use a fresh
+  external session root.
+- Earlier interaction logs and route-oriented demo documents predate the
+  architecture-native runtime and are historical evidence, not current
+  acceptance criteria.
 - Historical compatibility modules, backup directories, archives, and
   pre-native operator artifacts remain tracked in the repository. They are
   not the active application path and still need a separate repository-hygiene
@@ -193,21 +237,22 @@ path only for the fixed synthetic apparatus recorded in
 
 ## Next phase
 
-The next engineering phase is live behavioral evaluation through the native
-browser interface, using deliberately selected non-sensitive interactions.
-That phase should evaluate response quality without repeating transport
-validation.
+The next evidence-producing phase is a fresh live rerun of Case 1, Turn 1
+through the native browser interface. It should use the fixed non-sensitive
+prompt, the version-2 apparatus, and a new external session root. The response
+must be read and recorded before authorizing Turn 2.
 
-The first-set apparatus is now specified in
+The first-set apparatus remains specified in
 [`BEHAVIORAL_EVALUATION.md`](BEHAVIORAL_EVALUATION.md), with a clean
 observation template in
 [`BEHAVIORAL_EVALUATION_LOG.md`](BEHAVIORAL_EVALUATION_LOG.md) and one
-synthetic attachment fixture. The apparatus is ready for live use, but no
-behavioral result is claimed until the complete set is observed and recorded.
+synthetic attachment fixture. The stopped attempt and repair boundary are
+recorded separately in
+[`BEHAVIORAL_EVALUATION_CASE_1.md`](BEHAVIORAL_EVALUATION_CASE_1.md).
 
-The apparatus pass adds nine offline launcher contracts. The full suite now
-contains 202 tests in each maintained compatibility stack; both stacks pass.
-No live provider request was made while preparing or verifying the apparatus.
+No live provider request was made while implementing or verifying the repair.
+The earlier controlled provider-validation result does not need to be
+repeated.
 
 The first evaluation set should examine:
 
@@ -220,8 +265,9 @@ The first evaluation set should examine:
 - whether accepted provider text preserves CBRA terminology and ontological
   commitments.
 
-Observed failures should be recorded as behavioral evidence before changing
-the runtime. A new provider-validation request is not part of that phase.
+The repaired Case 1 must not be described as a pass until a fresh live
+response supports that claim. A new provider-transport validation request is
+not part of this phase.
 
 ## Operator baseline
 

@@ -27,10 +27,6 @@ from .models import (
 
 
 MORALIZATION_PATTERNS = (
-    r"\byou should\b",
-    r"\byou must\b",
-    r"\byou need to\b",
-    r"\byou have to\b",
     r"\bought to\b",
     r"\bthe right (?:answer|choice|way)\b",
     r"\bthe wrong (?:answer|choice|way)\b",
@@ -39,11 +35,9 @@ MORALIZATION_PATTERNS = (
 )
 
 CLOSURE_PATTERNS = (
-    r"\bthe answer is\b",
     r"\bthere is no alternative\b",
     r"\bthis settles\b",
-    r"\bmust be resolved\b",
-    r"\bfinal account\b",
+    r"\bfinal(?: and [a-z]+){0,2} (?:answer|account)\b",
 )
 
 NARRATIVE_DOMINANCE_PATTERNS = (
@@ -69,9 +63,19 @@ PROCEDURAL_PATTERNS = (
     r"\btext_chat apparatus\b",
     r"\b(?:coherence|resonance|difference|permeability|mutuality)"
     r"\s+(?:is\s+)?0\.\d+",
+    r"\bcurrent_user_input\b",
+    r"\bprior_user_input\b",
+    r"\bcanonical_orientation\b",
+    r"\bfield_material\b",
+    r"\buser_attachment\b",
+    r"\bresponse focus\b",
 )
 
 MAX_RENDERED_ARTICULATION_CHARS = 32768
+MAX_USER_MATERIAL_CHARS = 4096
+MAX_CANONICAL_ORIENTATION_CHARS = 3000
+MAX_ATTACHMENT_MATERIAL_CHARS = 4096
+MAX_FIELD_MATERIAL_CHARS = 1200
 _RENDERER_MATERIAL_PREFIX = "cbra.renderer."
 _RENDERER_MATERIAL_FACETS = (
     "models",
@@ -137,7 +141,9 @@ class NativeTemplateArticulationRenderer:
             for index, formation in enumerate(basis.formations)
         ]
         held_fragments = [
-            item.text for item in basis.held_open_materials if item.text
+            _descriptive_fragment(item.text)
+            for item in basis.held_open_materials
+            if item.text
         ]
         if basis.held_open_materials:
             if held_fragments:
@@ -561,6 +567,36 @@ def _descriptive_fragment(text: str, limit: int = 180) -> str:
     return text
 
 
+def _bounded_source_text(text: str, limit: int) -> str:
+    """Keep source meaning and question form within an explicit boundary."""
+    text = _clean_text(text)
+    if len(text) > limit:
+        text = text[: limit - 1].rstrip() + "…"
+    return text
+
+
+def _material_text(stream: Stream, text: str) -> str:
+    if stream.kind == "user_input":
+        return _bounded_source_text(text, MAX_USER_MATERIAL_CHARS)
+    if (
+        stream.provenance.get("source") == "canonical_corpus"
+        and stream.provenance.get("immutable_snapshot") is True
+    ):
+        return _bounded_source_text(
+            text,
+            MAX_CANONICAL_ORIENTATION_CHARS,
+        )
+    if (
+        stream.kind == "attachment"
+        or stream.provenance.get("source") == "user_attachment"
+    ):
+        return _bounded_source_text(
+            text,
+            MAX_ATTACHMENT_MATERIAL_CHARS,
+        )
+    return _bounded_source_text(text, MAX_FIELD_MATERIAL_CHARS)
+
+
 def _stream_source_ids(stream: Stream) -> List[str]:
     source_ids = set()
     keys = (
@@ -618,7 +654,7 @@ def _stream_material(stream: Stream) -> ArticulationMaterial:
     return ArticulationMaterial(
         stream_id=stream.stream_id,
         kind=stream.kind,
-        text=_descriptive_fragment(text),
+        text=_material_text(stream, text),
         source_stream_ids=_stream_source_ids(stream),
         provenance=deepcopy(stream.provenance),
     )
@@ -730,7 +766,9 @@ def _render_formation(
 ) -> str:
     label = "One formation" if index == 0 else "Another formation"
     fragments = [
-        item.text for item in formation.materials if item.text
+        _descriptive_fragment(item.text)
+        for item in formation.materials
+        if item.text
     ]
     if fragments:
         opening = "{0} brings these strands into relation: {1}.".format(
@@ -895,6 +933,33 @@ def _question_echo_evidence(
     return evidence
 
 
+def _theory_performance_evidence(
+    state: FieldState,
+    candidate: ArticulationCandidate,
+) -> List[str]:
+    """Detect a bound renderer exposing the old formation ritual."""
+    if (
+        "cbra.renderer.instruction=cbra-openai-articulation-v2"
+        not in state.apparatus.prompts
+    ):
+        return []
+    formation_labels = re.findall(
+        r"(?m)^(?:One|Another) formation\b",
+        candidate.text,
+    )
+    if len(formation_labels) < 2:
+        return []
+    evidence = [
+        "candidate performs renderer formations instead of keeping them "
+        "implicit"
+    ]
+    if "held open" in candidate.text.lower():
+        evidence.append(
+            "candidate exposes held-open lifecycle language"
+        )
+    return evidence
+
+
 def evaluate_articulation_candidate(
     state: FieldState,
     candidate: ArticulationCandidate,
@@ -909,10 +974,6 @@ def evaluate_articulation_candidate(
         text,
         MORALIZATION_PATTERNS + CLOSURE_PATTERNS,
     )
-    if candidate.basis.held_open_materials and "held open" not in text.lower():
-        moralization.append(
-            "candidate closes material that the provisional boundary holds open"
-        )
     if moralization:
         intensity = _signal_intensity(
             hypotheses.post_articulation_moralization_intensity,
@@ -931,16 +992,6 @@ def evaluate_articulation_candidate(
             )
 
     narrative = _pattern_evidence(text, NARRATIVE_DOMINANCE_PATTERNS)
-    formation_count = len(
-        re.findall(
-            r"(?m)^(?:One|Another) formation\b",
-            text,
-        )
-    )
-    if formation_count < len(candidate.basis.formations):
-        narrative.append(
-            "candidate does not keep every current formation perceptible"
-        )
     narrative.extend(_question_echo_evidence(state, candidate))
     if narrative:
         intensity = _signal_intensity(
@@ -960,6 +1011,9 @@ def evaluate_articulation_candidate(
             )
 
     procedural = _pattern_evidence(text, PROCEDURAL_PATTERNS)
+    procedural.extend(
+        _theory_performance_evidence(state, candidate)
+    )
     if procedural:
         intensity = _signal_intensity(
             hypotheses.post_articulation_procedural_intensity,
