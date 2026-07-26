@@ -1,5 +1,27 @@
 # CBRA Live Behavioral Evaluation
 
+## Protocol retired after Case 2 paradigmatic failure
+
+Do not continue Cases 3 through 5 under this protocol.
+
+Case 2 showed that the repaired response boundary returned to an
+individualized accountability sequence after receiving a disclosure of
+overwhelm. The articulation acknowledged overwhelm, reasserted the missed
+deadline, extracted another commitment, and required earlier communication.
+The lifecycle recorded `accepted_articulation`, exposing that the operative
+formation and the acceptance apparatus both retained the human-centered
+grammar the project was built to replace.
+
+This was not a wording defect and is not a renderer repair ticket. The active
+corpus now uses `constitutive-phenomenon-v1`; the application evaluated below
+implements the incompatible `entity-stream-v1` grammar and is blocked from
+loading that corpus.
+
+The evidence and claim boundary are recorded in
+[`BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md`](BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md).
+
+Everything below this notice is the historical protocol and Case 1 record.
+
 ## Case 1 evidence and current repair boundary
 
 The first live attempt stopped after Case 1, Turn 1 on 2026-07-25. At
@@ -53,7 +75,10 @@ pending. The server was stopped, the restricted key was revoked, and the
 complete external root was archived and verified. The sanitized result is
 [`BEHAVIORAL_EVALUATION_CASE_1_COMPLETE.md`](BEHAVIORAL_EVALUATION_CASE_1_COMPLETE.md).
 
-Case 1 is complete. Cases 2 through 5 remain unevaluated.
+Case 1 established bounded practical, temporal, persistence, and presentation
+behavior. It did not validate CBRA's ontology. Case 2 falsified the operative
+paradigm. Cases 3 through 5 were not run and are no longer authorized under
+this protocol.
 
 ## Evaluation boundary
 

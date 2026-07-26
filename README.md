@@ -3,6 +3,27 @@ Building a posthuman reasoning LLM architechure for personal use and then public
 
 ## Current state
 
+The prior operative build is stopped at a paradigmatic boundary.
+
+Case 2 showed that it still formed a bounded individual, personal failure,
+contextual explanation, accountability demand, and new commitment, then
+recorded the result as `accepted_articulation`. The active corpus has now been
+redesigned around apparatus-enacted phenomena and traceable provisional cuts.
+It declares `constitutive-phenomenon-v1`.
+
+The retained entity/stream application implements `entity-stream-v1` and now
+fails closed when paired with the active corpus. It cannot silently treat the
+new canon as contextual material while continuing the old execution grammar.
+
+`cbra/constitutive/` contains the first executable replacement boundary and
+focused overwhelm/deadline falsification probe. It is not yet a complete
+application or evidence of a completed paradigm shift. See
+[`BUILD_STATUS.md`](BUILD_STATUS.md) and
+[`CONSTITUTIVE_PHENOMENON_REDESIGN.md`](CONSTITUTIVE_PHENOMENON_REDESIGN.md).
+
+The material below records the prior application's engineering and validation
+history. Its activation instructions do not apply to the active corpus.
+
 The architecture-native application and its explicit OpenAI Responses
 boundary have completed one controlled synthetic live validation. The
 temporary restricted key used for that run was revoked. See
@@ -50,7 +71,8 @@ relative timing, practical constraint retention, and follow-up continuity
 held together, and both turns persisted as `accepted_articulation` without
 reintegration pending. The sanitized completion record is
 [`BEHAVIORAL_EVALUATION_CASE_1_COMPLETE.md`](BEHAVIORAL_EVALUATION_CASE_1_COMPLETE.md).
-Cases 2 through 5 remain unevaluated.
+Case 2 produced the paradigmatic failure that stopped this application path.
+Cases 3 through 5 are retired under the prior protocol.
 
 ## Articulation renderer activation
 

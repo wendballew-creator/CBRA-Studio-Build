@@ -2,10 +2,70 @@
 
 Status date: 2026-07-26
 
-Status boundary: `agent/case-1-completion-record`, based directly on `7cc2f33`
-(`Repair ordered list continuation`)
+Status boundary: `agent/constitutive-phenomenon-redesign`, based on the
+Case 2 paradigmatic falsification and the posthuman architecture diagnostic.
 
-## Closure conclusion
+## Current conclusion
+
+The prior operative build failed its central paradigmatic purpose.
+
+Case 2 showed that the public articulation remained organized by a bounded
+individual, personal failure, contextual explanation, accountability, and a
+new commitment. The runtime then recorded `accepted_articulation`. That
+lifecycle result established technical completion only; it had no
+ontological validity.
+
+The active canonical corpus now declares execution grammar
+`constitutive-phenomenon-v1` and replaces:
+
+- field as context container;
+- the input-to-output staged loop;
+- neutral noticing;
+- bidirectional influence as intra-action;
+- hidden relevance selection;
+- articulation as a representation;
+- drift reset;
+- acceptance as a lifecycle claim.
+
+The legacy `entity-stream-v1` runtime is retained as historical engineering
+material. It is not allowed to start with the active corpus. Startup raises
+`RuntimeCorpusIncompatibilityError` before the new canon can be loaded as
+context into the old substrate.
+
+The first executable constitutive slice is in `cbra/constitutive/`. It:
+
+- retains ingress as provenance-bearing contributions without assigning
+  `actor`, `event`, `kind`, `role`, or `intent`;
+- requires operative subjects and events to reference traceable agential cuts;
+- requires accountable noticings to expose apparatus participation and
+  consequential absences;
+- makes care, play, consequence, capacity, and bounded follow-up part of
+  release review;
+- stops release when a humanist reassertion remains unresolved;
+- uses `intervention_ready_for_response`, never `accepted_articulation`;
+- reinserts articulation and observed effects as participation in a newly
+  formed encounter.
+
+This is a contract and falsification boundary, not yet an activated
+replacement application. The general semantic phenomenon former, movement
+former, renderer integration, durable constitutive session model, API
+projection, and live UX remain unbuilt.
+
+Eight focused offline tests currently exercise the new boundary. Passing them
+shows only that the recorded contracts behave as stated. It does not certify
+the slice or architecture as posthuman.
+
+The dependency-free compatibility run completed 114 tests successfully,
+including the eight constitutive tests. The full FastAPI/HTTPX/OpenAI suite
+was not runnable in this workspace because those optional test dependencies
+are not installed here. No provider request was made.
+
+See
+[`CONSTITUTIVE_PHENOMENON_REDESIGN.md`](CONSTITUTIVE_PHENOMENON_REDESIGN.md)
+and
+[`BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md`](BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md).
+
+## Historical engineering record
 
 The architecture-native application path is assembled through the browser,
 FastAPI boundary, durable native session runtime, canonical corpus bootstrap,
@@ -70,7 +130,7 @@ The sanitized evidence is recorded in
 The sanitized evidence and the limits of the validation claim are recorded in
 [`OPENAI_LIVE_VALIDATION.md`](OPENAI_LIVE_VALIDATION.md).
 
-## Active architecture
+## Legacy architecture retained in the repository
 
 ### Application and browser boundary
 
@@ -89,23 +149,23 @@ The sanitized evidence and the limits of the validation claim are recorded in
   native field state, canonical source text, attachment text, renderer
   instructions, credentials, or provider error bodies.
 
-### Canonical corpus bootstrap
+### Historical canonical corpus bootstrap
 
-- `cbra/corpus.py` loads `corpus/CBRA_Corpus_Index.md` and the four active
-  canonical sources named by that manifest.
+- `cbra/corpus.py` loads `corpus/CBRA_Corpus_Index.md` and the five active
+  constitutive sources named by that manifest.
 - Startup fails closed on missing, malformed, unsafe, duplicated, oversized,
   or unmapped corpus material.
 - A process holds one immutable, content-addressed corpus snapshot.
-- Each new thread receives the canonical streams once. Existing sessions keep
-  their durable material across restart.
+- The legacy runtime no longer receives the active canonical sources as
+  streams. Its startup is blocked by the execution-grammar boundary.
 
-### Architecture-native field runtime
+### Legacy entity/stream runtime
 
-- `cbra/native/` owns the active field models, schemas, operators, emergence,
+- `cbra/native/` owns the prior field models, schemas, operators, emergence,
   cycle execution, articulation, reintegration, session ledger, and lossless
   persistence contracts.
-- Intra-action, play, diffraction, creative becoming, and care operate as
-  coactive field transformations rather than response-route dispatch.
+- Its stream/edge primitives, scalar operators, and response boundary are
+  incompatible with the active constitutive canon.
 - Articulation is provisional. A candidate is formed from bounded expressive
   material, evaluated by the native runtime, and either accepted or returned
   to reintegration.
@@ -171,7 +231,7 @@ The sanitized evidence and the limits of the validation claim are recorded in
   binding mismatch rolls the attempted turn back without persisting partial
   provider work.
 
-## Public HTTP surface
+## Historical public HTTP surface
 
 | Method | Route | Current purpose |
 |---|---|---|

@@ -6,7 +6,10 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional, Sequence, Tuple
 
-from cbra.corpus import CanonicalCorpusSnapshot
+from cbra.corpus import (
+    LEGACY_EXECUTION_GRAMMAR,
+    CanonicalCorpusSnapshot,
+)
 from cbra.native import (
     DEFAULT_MAX_CYCLES,
     ArticulationRenderer,
@@ -74,8 +77,30 @@ class TurnProjectionPaginationError(ValueError):
     """A transcript cursor cannot name a valid bounded session page."""
 
 
+class RuntimeCorpusIncompatibilityError(RuntimeError):
+    """The selected runtime would misrepresent the active canonical grammar."""
+
+
 class NativeApplicationService:
     """Coordinate native turn ingress with atomic durable ownership."""
+
+    @staticmethod
+    def assert_corpus_compatibility(
+        canonical_corpus: Optional[CanonicalCorpusSnapshot],
+    ) -> None:
+        if (
+            canonical_corpus is not None
+            and canonical_corpus.execution_grammar
+            != LEGACY_EXECUTION_GRAMMAR
+        ):
+            raise RuntimeCorpusIncompatibilityError(
+                "The native stream/edge runtime implements {0}; the active "
+                "corpus requires {1}. Startup stopped before the legacy "
+                "runtime could represent the new canon as context.".format(
+                    LEGACY_EXECUTION_GRAMMAR,
+                    canonical_corpus.execution_grammar,
+                )
+            )
 
     def __init__(
         self,
@@ -92,6 +117,7 @@ class NativeApplicationService:
         self.repository = repository
         self.max_cycles = max_cycles
         self.hypotheses = hypotheses
+        self.assert_corpus_compatibility(canonical_corpus)
         self.canonical_corpus = canonical_corpus
         validate_renderer_configuration(renderer, renderer_binding)
         self.renderer = renderer

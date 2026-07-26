@@ -11,11 +11,15 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from cbra.app import PROJECT_ROOT, create_app
-from cbra.application import NativeApplicationService
+from cbra.application import (
+    NativeApplicationService,
+    RuntimeCorpusIncompatibilityError,
+)
 from cbra.corpus import (
     ACTIVE_SECTION,
     CANONICAL_MANIFEST,
     CANONICAL_ROLE_MAP,
+    CONSTITUTIVE_EXECUTION_GRAMMAR,
     CanonicalCorpusError,
     CorpusLimits,
     load_canonical_snapshot,
@@ -28,6 +32,13 @@ FILENAMES = (
     "CBRA_Loops_Core.md",
     "Drift_Constraints.md",
     "CBRA_Kernel_v10_2.md",
+)
+REPOSITORY_FILENAMES = (
+    "CBRA_Kernel_v11.md",
+    "CBRA_Phenomenon_Formation_Core_v1.md",
+    "CBRA_Glossary_v4.md",
+    "Drift_Constraints_v2.md",
+    "CBRA_Paradigmatic_Invariants_v1.md",
 )
 THREAD_A = "thread:{0}".format("a" * 32)
 THREAD_B = "thread:{0}".format("b" * 32)
@@ -94,10 +105,14 @@ class CanonicalCorpusSnapshotTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(source.filename for source in first.sources),
-            FILENAMES,
+            REPOSITORY_FILENAMES,
         )
         self.assertEqual(first, second)
-        self.assertEqual(len(first.sources), 4)
+        self.assertEqual(
+            first.execution_grammar,
+            CONSTITUTIVE_EXECUTION_GRAMMAR,
+        )
+        self.assertEqual(len(first.sources), 5)
         self.assertEqual(len(first.manifest_digest), 64)
         self.assertEqual(len(first.corpus_digest), 64)
 
@@ -397,22 +412,18 @@ class CanonicalSessionBootstrapTests(unittest.TestCase):
             for filename in FILENAMES:
                 self.assertNotIn(filename, response.text)
 
-    def test_unconfigured_application_uses_repository_corpus(self):
+    def test_unconfigured_legacy_application_rejects_repository_corpus(self):
         with patch.dict(os.environ, {}, clear=False):
             configured = os.environ.pop("CBRA_CORPUS_ROOT", None)
             try:
-                app = create_app(
-                    session_root=self.root / "default-sessions"
-                )
+                with self.assertRaises(RuntimeCorpusIncompatibilityError):
+                    create_app(
+                        session_root=self.root / "default-sessions"
+                    )
             finally:
                 if configured is not None:
                     os.environ["CBRA_CORPUS_ROOT"] = configured
-        snapshot = app.state.native_service.canonical_corpus
-        self.assertEqual(Path(snapshot.root), (PROJECT_ROOT / "corpus").resolve())
-        self.assertEqual(
-            tuple(source.filename for source in snapshot.sources),
-            FILENAMES,
-        )
+        self.assertFalse((self.root / "default-sessions").exists())
 
     def test_concurrent_identical_creation_converges_with_one_snapshot(
         self,

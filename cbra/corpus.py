@@ -15,6 +15,9 @@ from cbra.native.models import Stream
 
 CANONICAL_MANIFEST = "CBRA_Corpus_Index.md"
 ACTIVE_SECTION = "## Canonical Files (Active)"
+EXECUTION_GRAMMAR_PREFIX = "Execution grammar:"
+LEGACY_EXECUTION_GRAMMAR = "entity-stream-v1"
+CONSTITUTIVE_EXECUTION_GRAMMAR = "constitutive-phenomenon-v1"
 DEFAULT_MAX_FILES = 32
 DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024
 DEFAULT_MAX_TOTAL_BYTES = 8 * 1024 * 1024
@@ -22,6 +25,11 @@ CANONICAL_PARTICIPATION = 0.74
 CANONICAL_PERSISTENCE = 0.90
 
 CANONICAL_ROLE_MAP = {
+    "CBRA_Kernel_v11.md": "constitutive_ground",
+    "CBRA_Phenomenon_Formation_Core_v1.md": "formation_contract",
+    "CBRA_Glossary_v4.md": "constitutive_reference",
+    "Drift_Constraints_v2.md": "disturbance_contract",
+    "CBRA_Paradigmatic_Invariants_v1.md": "falsification_boundary",
     "CBRA_Kernel_v10_2.md": "ground_anchor",
     "CBRA_Loops_Core.md": "ground_anchor",
     "Drift_Constraints.md": "constraint_anchor",
@@ -95,6 +103,7 @@ class CanonicalSource:
     def to_stream(
         self,
         *,
+        execution_grammar: str,
         manifest_digest: str,
         corpus_digest: str,
     ) -> Stream:
@@ -102,6 +111,7 @@ class CanonicalSource:
         metadata = {
             "filename": self.filename,
             "canonical_role": self.role,
+            "execution_grammar": execution_grammar,
             "content_digest": self.content_digest,
             "manifest_digest": manifest_digest,
             "corpus_digest": corpus_digest,
@@ -129,6 +139,7 @@ class CanonicalCorpusSnapshot:
     """Ordered canonical material loaded exactly once for a process."""
 
     root: str
+    execution_grammar: str
     manifest_digest: str
     corpus_digest: str
     sources: Tuple[CanonicalSource, ...]
@@ -137,11 +148,36 @@ class CanonicalCorpusSnapshot:
         """Return new stream objects without exposing mutable snapshot state."""
         return tuple(
             source.to_stream(
+                execution_grammar=self.execution_grammar,
                 manifest_digest=self.manifest_digest,
                 corpus_digest=self.corpus_digest,
             )
             for source in self.sources
         )
+
+
+def _execution_grammar(manifest_text: str) -> str:
+    """Return one explicit grammar or the historical legacy default."""
+    values = []
+    for line in manifest_text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith(EXECUTION_GRAMMAR_PREFIX):
+            continue
+        values.append(
+            stripped[len(EXECUTION_GRAMMAR_PREFIX) :].strip()
+        )
+    if not values:
+        return LEGACY_EXECUTION_GRAMMAR
+    if len(values) != 1:
+        raise CanonicalCorpusError(
+            "canonical manifest must declare at most one execution grammar"
+        )
+    value = values[0]
+    if re.fullmatch(r"[a-z][a-z0-9-]{0,63}", value) is None:
+        raise CanonicalCorpusError(
+            "canonical manifest execution grammar is invalid"
+        )
+    return value
 
 
 def _environment_limit(
@@ -318,6 +354,7 @@ def load_canonical_snapshot(
         manifest_bytes,
         label="canonical manifest",
     )
+    execution_grammar = _execution_grammar(manifest_text)
     filenames = _active_filenames(manifest_text)
     if len(filenames) > resolved_limits.max_files:
         raise CanonicalCorpusError(
@@ -408,8 +445,12 @@ def load_canonical_snapshot(
 
     return CanonicalCorpusSnapshot(
         root=str(root),
+        execution_grammar=execution_grammar,
         manifest_digest=_canonical_digest(
-            {"active_files": normalized}
+            {
+                "active_files": normalized,
+                "execution_grammar": execution_grammar,
+            }
         ),
         corpus_digest=_canonical_digest(digest_entries),
         sources=tuple(sources),

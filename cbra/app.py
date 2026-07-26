@@ -42,6 +42,7 @@ from cbra.attachments import (
 )
 from cbra.application import (
     NativeApplicationService,
+    RuntimeCorpusIncompatibilityError,
     TurnProjectionPaginationError,
 )
 from cbra.corpus import (
@@ -188,6 +189,9 @@ def create_app(
                     if corpus_limits is not None
                     else CorpusLimits.from_environment()
                 ),
+            )
+            NativeApplicationService.assert_corpus_compatibility(
+                canonical_corpus
             )
             if repository is None:
                 resolved_root = Path(
@@ -628,4 +632,26 @@ def create_app(
     return application
 
 
-app = create_app()
+def _blocked_default_application(
+    error: RuntimeCorpusIncompatibilityError,
+) -> FastAPI:
+    """Remain importable while making default ASGI startup fail explicitly."""
+
+    @asynccontextmanager
+    async def blocked_lifespan(_: FastAPI):
+        raise RuntimeCorpusIncompatibilityError(str(error))
+        yield  # pragma: no cover
+
+    blocked = FastAPI(
+        title=APP_TITLE,
+        version=APP_VERSION,
+        lifespan=blocked_lifespan,
+    )
+    blocked.state.startup_block = str(error)
+    return blocked
+
+
+try:
+    app = create_app()
+except RuntimeCorpusIncompatibilityError as startup_error:
+    app = _blocked_default_application(startup_error)
