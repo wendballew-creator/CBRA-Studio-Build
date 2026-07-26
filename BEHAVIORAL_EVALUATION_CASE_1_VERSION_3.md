@@ -92,3 +92,8 @@ apparatus record. Because this UI-only repair changes that commit, it must not
 resume the archived `ac0d468` root under the repair commit through
 `--resume`. A later provider-backed continuation from the repaired commit must
 start with a fresh external evaluation root.
+
+That fresh two-turn run was subsequently completed at `7cc2f33`. Its
+sequential ordered-list rendering and Case 1 continuity evidence are recorded
+in
+[`BEHAVIORAL_EVALUATION_CASE_1_COMPLETE.md`](BEHAVIORAL_EVALUATION_CASE_1_COMPLETE.md).

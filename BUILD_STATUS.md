@@ -2,8 +2,8 @@
 
 Status date: 2026-07-26
 
-Status boundary: `agent/ordered-list-continuation-repair`, based directly on
-`ac0d468` (`Repair temporal grounding and Markdown rendering`)
+Status boundary: `agent/case-1-completion-record`, based directly on `7cc2f33`
+(`Repair ordered list continuation`)
 
 ## Closure conclusion
 
@@ -55,6 +55,17 @@ ordered sequence around supporting bullet lists. The server was stopped, the
 restricted key was revoked, and the external evaluation root was archived and
 verified. The sanitized evidence is recorded in
 [`BEHAVIORAL_EVALUATION_CASE_1_VERSION_3.md`](BEHAVIORAL_EVALUATION_CASE_1_VERSION_3.md).
+
+The ordered-list repair at `7cc2f33` then received a fresh two-turn Case 1
+verification. Turn 1 retained the six volunteers, late arrivals, requested
+room elements, accessible path, and relative time while ordered material
+rendered sequentially. Turn 2 produced the requested three practical next
+actions with a named starter for each. Both turns persisted as
+`accepted_articulation`; the durable thread reached revision 2 without
+reintegration pending. The server was stopped, the restricted key was
+revoked, and the complete external evaluation root was archived and verified.
+The sanitized evidence is recorded in
+[`BEHAVIORAL_EVALUATION_CASE_1_COMPLETE.md`](BEHAVIORAL_EVALUATION_CASE_1_COMPLETE.md).
 
 The sanitized evidence and the limits of the validation claim are recorded in
 [`OPENAI_LIVE_VALIDATION.md`](OPENAI_LIVE_VALIDATION.md).
@@ -274,8 +285,8 @@ path only for the fixed synthetic apparatus recorded in
   engaged the practical request but exposed constraint-invention and
   presentation tensions. Its version-3 verification at `ac0d468` held the
   temporal and safe-Markdown targets but exposed a bounded ordered-list
-  presentation tension. Case 1, Turn 2 and Cases 2 through 5 remain
-  unevaluated.
+  presentation tension. The fresh two-turn run at `7cc2f33` held the repaired
+  Case 1 boundary. Cases 2 through 5 remain unevaluated.
 - Expressive material is bounded rather than retrieved semantically. Current
   user turns, canonical sources, attachments, and other field material have
   separate finite projection limits; sufficiently long or dense formations
@@ -296,14 +307,16 @@ path only for the fixed synthetic apparatus recorded in
   decision.
 ## Next phase
 
-The immediate verification step is an offline re-render of the archived
-version-3 Case 1 response through the repaired browser parser. It requires no
-API key or provider request and may not submit a turn.
+Record this Case 1 completion checkpoint on a branch above `7cc2f33` without
+placing the raw durable archive in the repository. Because the guarded
+apparatus binds the exact commit, do not resume the completed `7cc2f33` root
+under the documentation-only checkpoint commit.
 
-After the repaired branch is integrated, the next provider-backed phase must
-start Case 1 in a fresh external root because the guarded apparatus binds the
-exact commit. Read the fresh Turn 1 response before deciding whether Turn 2 is
-justified.
+After the checkpoint branch is integrated, the next provider-backed phase is
+Case 2 in a new thread and a fresh external evaluation root. Read each visible
+response before continuing. The correction turn must name one concrete
+problem actually observed in Turn 2, so its final prompt cannot be fixed in
+advance.
 
 The first-set apparatus remains specified in
 [`BEHAVIORAL_EVALUATION.md`](BEHAVIORAL_EVALUATION.md), with a clean

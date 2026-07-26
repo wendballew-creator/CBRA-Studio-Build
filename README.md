@@ -39,13 +39,18 @@ remained relative, and headings, bold text, and bullets rendered without raw
 Markdown markers. The response was practical and persisted as
 `accepted_articulation`. One deterministic presentation tension remained:
 three assignments each displayed as `1` because supporting bullet lists split
-the ordered sequence into separate browser elements. The sanitized evidence
-is recorded in
+the ordered sequence into separate browser elements. That intermediate
+evidence is recorded in
 [`BEHAVIORAL_EVALUATION_CASE_1_VERSION_3.md`](BEHAVIORAL_EVALUATION_CASE_1_VERSION_3.md).
 
-The current offline browser repair preserves ordered-list continuation across
-blank lines and indented supporting lists while retaining HTML-as-text safety.
-It does not change the response apparatus or require another provider request.
+The ordered-list continuation repair preserves numbering across blank lines
+and indented supporting lists while retaining HTML-as-text safety. A fresh
+two-turn run at `7cc2f33` then completed Case 1: sequential list rendering,
+relative timing, practical constraint retention, and follow-up continuity
+held together, and both turns persisted as `accepted_articulation` without
+reintegration pending. The sanitized completion record is
+[`BEHAVIORAL_EVALUATION_CASE_1_COMPLETE.md`](BEHAVIORAL_EVALUATION_CASE_1_COMPLETE.md).
+Cases 2 through 5 remain unevaluated.
 
 ## Articulation renderer activation
 

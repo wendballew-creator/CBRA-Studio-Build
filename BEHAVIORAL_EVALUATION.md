@@ -43,6 +43,18 @@ repository commit, a later provider-backed continuation from the repair
 commit must nevertheless begin with a fresh external root rather than resume
 the `ac0d468` apparatus.
 
+A fresh two-turn Case 1 run at the repaired commit `7cc2f33` then held the
+focused boundaries together. The practical response retained the volunteer,
+late-arrival, room-element, access, and relative-time constraints; the browser
+rendered ordered material sequentially; and the follow-up produced three
+ordered next actions with a named starter for each. Both turns persisted as
+`accepted_articulation`; the thread reached revision 2 without reintegration
+pending. The server was stopped, the restricted key was revoked, and the
+complete external root was archived and verified. The sanitized result is
+[`BEHAVIORAL_EVALUATION_CASE_1_COMPLETE.md`](BEHAVIORAL_EVALUATION_CASE_1_COMPLETE.md).
+
+Case 1 is complete. Cases 2 through 5 remain unevaluated.
+
 ## Evaluation boundary
 
 This phase observes the architecture-native/OpenAI application as a user
