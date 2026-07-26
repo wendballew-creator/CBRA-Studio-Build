@@ -68,7 +68,7 @@ from cbra.store import (
 
 
 APP_TITLE = "CBRA Writing Support"
-APP_VERSION = "0.8.0-native-browser-attachments"
+APP_VERSION = "0.9.0-temporal-markdown"
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
@@ -77,6 +77,11 @@ if not UI_INDEX.exists():
     fallback_ui = BASE_DIR / "ui" / "index.html"
     if fallback_ui.exists():
         UI_INDEX = fallback_ui
+UI_MARKDOWN = PROJECT_ROOT / "ui" / "markdown.js"
+if not UI_MARKDOWN.exists():
+    fallback_markdown = BASE_DIR / "ui" / "markdown.js"
+    if fallback_markdown.exists():
+        UI_MARKDOWN = fallback_markdown
 
 PathLike = Union[str, os.PathLike]
 
@@ -376,6 +381,22 @@ def create_app(
             )
         return HTMLResponse(
             UI_INDEX.read_text(encoding="utf-8", errors="replace")
+        )
+
+    @application.get("/ui/markdown.js")
+    def ui_markdown() -> Response:
+        if not UI_MARKDOWN.exists():
+            return Response(
+                content="Markdown renderer not found.",
+                status_code=404,
+                media_type="text/plain",
+            )
+        return Response(
+            content=UI_MARKDOWN.read_text(
+                encoding="utf-8",
+                errors="replace",
+            ),
+            media_type="application/javascript",
         )
 
     @application.get("/health", response_model=HealthResponse)

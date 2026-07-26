@@ -12,8 +12,8 @@ remaining limitations, and
 validation evidence.
 
 That controlled run used response-boundary version 1. It remains transport and
-replay evidence, not live behavioral evidence for the repaired version-2
-projection and instructions.
+replay evidence, not live behavioral evidence for the current projection and
+instructions.
 
 The retained live-validation harness is not a routine regression command and
 does not need to be rerun to establish the current build state.
@@ -26,11 +26,17 @@ historical route-oriented interaction log. Preparing the apparatus does not
 establish that the behavioral cases have passed.
 
 The first live Case 1 response failed by performing the architecture instead
-of engaging the practical request. The set stopped after one turn, the server
-was stopped, and the temporary key was revoked. The evidence and offline
-version-2 corpus-to-response repair are recorded in
-[`BEHAVIORAL_EVALUATION_CASE_1.md`](BEHAVIORAL_EVALUATION_CASE_1.md). The
-repair has not yet passed a fresh live behavioral check.
+of engaging the practical request. The version-2 repair then passed that
+focused live boundary in one fresh turn: the response engaged the room setup
+without exposing CBRA theory. It also invented an unsupported clock interval
+and the browser displayed raw Markdown. The two observations and their claim
+boundaries are recorded in
+[`BEHAVIORAL_EVALUATION_CASE_1.md`](BEHAVIORAL_EVALUATION_CASE_1.md) and
+[`BEHAVIORAL_EVALUATION_CASE_1_RECHECK.md`](BEHAVIORAL_EVALUATION_CASE_1_RECHECK.md).
+
+The current offline version-3 repair grounds clock times in supplied material,
+returns unsupported absolute schedules to reintegration, and renders a safe
+Markdown subset in the browser. It has not yet passed a fresh live check.
 
 ## Articulation renderer activation
 
@@ -68,10 +74,10 @@ renderer settings is rejected before provider work or persistence. Use a
 separate `CBRA_SESSION_ROOT` when beginning OpenAI-rendered threads unless the
 existing threads already carry the same binding.
 
-The response-boundary repair advances both the expressive projection and
-OpenAI instruction set to version 2. Version-1 OpenAI sessions cannot be
-continued under this binding; begin repaired evaluation in a fresh session
-root.
+The expressive projection remains at version 2. The temporal-grounding repair
+advances the OpenAI instruction set and renderer binding to version 3.
+Version-1 and version-2 OpenAI sessions cannot be continued under this
+binding; begin version-3 evaluation in a fresh session root.
 
 ## Controlled live-provider validation
 

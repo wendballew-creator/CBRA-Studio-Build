@@ -71,6 +71,35 @@ PROCEDURAL_PATTERNS = (
     r"\bresponse focus\b",
 )
 
+_CLOCK_TIME_PATTERN = re.compile(
+    r"(?<![\w:])"
+    r"(?:"
+    r"(?:[01]?\d|2[0-3]):[0-5]\d"
+    r"(?:\s*(?:a\.?m\.?|p\.?m\.?))?"
+    r"|"
+    r"(?:1[0-2]|[1-9])\s*(?:a\.?m\.?|p\.?m\.?)"
+    r")"
+    r"(?![\w:])",
+    re.IGNORECASE,
+)
+_DURATION_PATTERN = re.compile(
+    r"\b"
+    r"(?:"
+    r"\d+(?:\.\d+)?"
+    r"|one|two|three|four|five|six|seven|eight|nine|ten"
+    r"|fifteen|twenty|thirty|forty|forty-five|sixty|ninety"
+    r"|half|quarter"
+    r")"
+    r"(?:\s+|-)"
+    r"(?:seconds?|minutes?|hours?)"
+    r"\b",
+    re.IGNORECASE,
+)
+_USER_FACING_OPENAI_INSTRUCTION_IDS = (
+    "cbra-openai-articulation-v2",
+    "cbra-openai-articulation-v3",
+)
+
 MAX_RENDERED_ARTICULATION_CHARS = 32768
 MAX_USER_MATERIAL_CHARS = 4096
 MAX_CANONICAL_ORIENTATION_CHARS = 3000
@@ -938,9 +967,10 @@ def _theory_performance_evidence(
     candidate: ArticulationCandidate,
 ) -> List[str]:
     """Detect a bound renderer exposing the old formation ritual."""
-    if (
-        "cbra.renderer.instruction=cbra-openai-articulation-v2"
-        not in state.apparatus.prompts
+    if not any(
+        "cbra.renderer.instruction={0}".format(instruction_id)
+        in state.apparatus.prompts
+        for instruction_id in _USER_FACING_OPENAI_INSTRUCTION_IDS
     ):
         return []
     formation_labels = re.findall(
@@ -958,6 +988,43 @@ def _theory_performance_evidence(
             "candidate exposes held-open lifecycle language"
         )
     return evidence
+
+
+def _unsupported_clock_time_evidence(
+    state: FieldState,
+    candidate: ArticulationCandidate,
+) -> List[str]:
+    """Reject absolute schedules when version 3 received no clock anchor."""
+    if (
+        "cbra.renderer.instruction=cbra-openai-articulation-v3"
+        not in state.apparatus.prompts
+    ):
+        return []
+    if _CLOCK_TIME_PATTERN.search(candidate.text) is None:
+        return []
+
+    materials = [
+        material
+        for formation in candidate.basis.formations
+        for material in formation.materials
+    ] + list(candidate.basis.held_open_materials)
+    duration_supplied = False
+    for material in materials:
+        if (
+            material.provenance.get("source") == "canonical_corpus"
+            and material.provenance.get("immutable_snapshot") is True
+        ):
+            continue
+        if _CLOCK_TIME_PATTERN.search(material.text) is not None:
+            return []
+        if _DURATION_PATTERN.search(material.text) is not None:
+            duration_supplied = True
+    if not duration_supplied:
+        return []
+    return [
+        "candidate introduces an absolute clock time without a supplied "
+        "clock anchor"
+    ]
 
 
 def evaluate_articulation_candidate(
@@ -993,6 +1060,9 @@ def evaluate_articulation_candidate(
 
     narrative = _pattern_evidence(text, NARRATIVE_DOMINANCE_PATTERNS)
     narrative.extend(_question_echo_evidence(state, candidate))
+    narrative.extend(
+        _unsupported_clock_time_evidence(state, candidate)
+    )
     if narrative:
         intensity = _signal_intensity(
             hypotheses.post_articulation_narrative_intensity,

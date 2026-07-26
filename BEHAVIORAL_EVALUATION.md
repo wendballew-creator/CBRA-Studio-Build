@@ -1,6 +1,6 @@
 # CBRA Live Behavioral Evaluation
 
-## First attempt and repair boundary
+## Case 1 evidence and current repair boundary
 
 The first live attempt stopped after Case 1, Turn 1 on 2026-07-25. At
 evaluation baseline `67ac1b9`, the provider completed one request and the
@@ -15,11 +15,20 @@ stopped, the restricted key was revoked, and no second turn was submitted.
 The evidence and the resulting repair boundary are recorded in
 [`BEHAVIORAL_EVALUATION_CASE_1.md`](BEHAVIORAL_EVALUATION_CASE_1.md).
 
-The repaired renderer uses a new durable apparatus binding. Do not resume the
-old evaluation root with the repaired branch. The next live step is a fresh
-Case 1, Turn 1 on a new external evaluation root. Read and record that response
-before deciding whether Turn 2 is justified. The offline repair does not
-itself establish a live behavioral pass.
+The version-2 live recheck at `bdbf0ac` then engaged the practical situation,
+used the six volunteers and late-arrival constraint, covered the requested
+room elements, and did not expose the architecture. It also invented
+`1:30–2:00` without a supplied start time, while the browser displayed its
+Markdown markers literally. The server was stopped, the key was revoked, and
+the external evaluation root was archived and verified. The sanitized record
+is
+[`BEHAVIORAL_EVALUATION_CASE_1_RECHECK.md`](BEHAVIORAL_EVALUATION_CASE_1_RECHECK.md).
+
+The temporal and presentation repair uses a version-3 renderer binding. Do not
+resume either earlier evaluation root. The next live step remains one fresh
+Case 1, Turn 1 on a new external root. Read and record that response before
+deciding whether Turn 2 is justified. Offline verification does not establish
+a live version-3 behavioral pass.
 
 ## Evaluation boundary
 

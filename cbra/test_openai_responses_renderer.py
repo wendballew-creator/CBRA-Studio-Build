@@ -65,6 +65,27 @@ PRACTICAL_RESPONSE = (
     "3. When the two late volunteers arrive, assign them the final supply, "
     "signage, and accessibility check so the initial setup keeps moving."
 )
+UNSUPPORTED_CLOCK_RESPONSE = (
+    "#### Setup plan\n\n"
+    "The four on-time volunteers arrange the accessible path, chairs, "
+    "welcome table, water, and signs.\n\n"
+    "#### Final check: 1:30–2:00\n\n"
+    "All six volunteers complete the accessibility and supply walkthrough."
+)
+ANCHORED_PRACTICAL_PROMPT = (
+    PRACTICAL_PROMPT + " Setup begins at 1:00 p.m."
+)
+ANCHORED_PRACTICAL_RESPONSE = (
+    "From 1:00–1:30 p.m., the four on-time volunteers protect the accessible "
+    "path and begin placing chairs. From 1:30–2:30 p.m., all six volunteers "
+    "finish the welcome table, signs, water, and final walkthrough."
+)
+CLOCK_EXAMPLE_PROMPT = (
+    "Give one example of a value that matches an HH:MM validation pattern."
+)
+CLOCK_EXAMPLE_RESPONSE = (
+    "For example, `09:30` matches a 24-hour HH:MM pattern."
+)
 TEST_API_KEY = "sk-test-secret-that-must-not-persist"
 
 
@@ -346,6 +367,7 @@ class OpenAIResponsesRendererTests(unittest.TestCase):
         )
 
         self.assertEqual(binding.renderer_id, "openai-responses")
+        self.assertEqual(binding.contract_version, "3")
         self.assertEqual(binding.provider_id, "openai")
         self.assertEqual(binding.model_id, "gpt-test-snapshot")
         self.assertEqual(binding.instruction_set_id, INSTRUCTION_SET_ID)
@@ -448,6 +470,14 @@ class OpenAIResponsesRendererTests(unittest.TestCase):
         )
         self.assertIn(
             "prioritized, usable action",
+            FIXED_ARTICULATION_INSTRUCTIONS,
+        )
+        self.assertIn(
+            "duration without a starting clock time",
+            FIXED_ARTICULATION_INSTRUCTIONS,
+        )
+        self.assertIn(
+            "do not manufacture an absolute schedule",
             FIXED_ARTICULATION_INSTRUCTIONS,
         )
         self.assertIn(
@@ -839,6 +869,116 @@ class OpenAIResponsesRendererTests(unittest.TestCase):
             len(mock.requests[0]["body"]["input"]),
             renderer.configuration.max_input_chars,
         )
+
+    def test_case_one_reintegrates_unsupported_absolute_clock_times(self):
+        mock, renderer = self.renderer(
+            lambda _: httpx.Response(
+                200,
+                json=response_payload(text=UNSUPPORTED_CLOCK_RESPONSE),
+            )
+        )
+        service = NativeApplicationService(
+            NativeSessionRepository(self.root),
+            max_cycles=2,
+            hypotheses=self.hypotheses,
+            canonical_corpus=load_canonical_snapshot(
+                Path(__file__).resolve().parents[1] / "corpus"
+            ),
+            renderer=renderer,
+            renderer_binding=renderer.binding,
+        )
+        result = service.create_thread(
+            "thread:case-one-clock-invention",
+            PRACTICAL_PROMPT,
+            turn_id="turn:first",
+        )
+
+        self.assertEqual(len(mock.requests), 1)
+        self.assertEqual(
+            result.outcome.kind,
+            TurnOutcomeKind.REINTEGRATION_PENDING,
+        )
+        session = NativeSessionRepository(self.root).load(
+            "thread:case-one-clock-invention"
+        )
+        signals = session.field.articulation_evaluations[
+            0
+        ].drift_signals
+        self.assertIn(
+            DriftKind.NARRATIVE_DOMINANCE,
+            {signal.kind for signal in signals},
+        )
+        self.assertTrue(
+            any(
+                "absolute clock time without a supplied clock anchor"
+                in evidence
+                for signal in signals
+                for evidence in signal.evidence
+            )
+        )
+
+    def test_supplied_clock_anchor_permits_an_absolute_schedule(self):
+        mock, renderer = self.renderer(
+            lambda _: httpx.Response(
+                200,
+                json=response_payload(text=ANCHORED_PRACTICAL_RESPONSE),
+            )
+        )
+        service = NativeApplicationService(
+            NativeSessionRepository(self.root),
+            max_cycles=2,
+            hypotheses=self.hypotheses,
+            canonical_corpus=load_canonical_snapshot(
+                Path(__file__).resolve().parents[1] / "corpus"
+            ),
+            renderer=renderer,
+            renderer_binding=renderer.binding,
+        )
+        result = service.create_thread(
+            "thread:case-one-clock-anchor",
+            ANCHORED_PRACTICAL_PROMPT,
+            turn_id="turn:first",
+        )
+
+        self.assertEqual(len(mock.requests), 1)
+        self.assertEqual(
+            result.outcome.kind,
+            TurnOutcomeKind.ACCEPTED_ARTICULATION,
+        )
+        self.assertEqual(
+            result.outcome.text,
+            ANCHORED_PRACTICAL_RESPONSE,
+        )
+
+    def test_requested_clock_example_is_not_treated_as_schedule_invention(self):
+        mock, renderer = self.renderer(
+            lambda _: httpx.Response(
+                200,
+                json=response_payload(text=CLOCK_EXAMPLE_RESPONSE),
+            )
+        )
+        service = NativeApplicationService(
+            NativeSessionRepository(self.root),
+            max_cycles=2,
+            hypotheses=self.hypotheses,
+            canonical_corpus=load_canonical_snapshot(
+                Path(__file__).resolve().parents[1] / "corpus"
+            ),
+            renderer=renderer,
+            renderer_binding=renderer.binding,
+        )
+        result = service.create_thread(
+            "thread:clock-format-example",
+            CLOCK_EXAMPLE_PROMPT,
+            turn_id="turn:first",
+        )
+
+        self.assertEqual(len(mock.requests), 1)
+        self.assertEqual(
+            result.outcome.kind,
+            TurnOutcomeKind.ACCEPTED_ARTICULATION,
+        )
+        self.assertEqual(result.outcome.text, CLOCK_EXAMPLE_RESPONSE)
 
     def test_concurrent_identical_turn_makes_one_external_request(self):
         mock, renderer = self.renderer(

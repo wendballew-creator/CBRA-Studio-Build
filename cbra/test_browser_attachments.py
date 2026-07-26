@@ -117,7 +117,7 @@ class BrowserAttachmentHandoffTests(unittest.TestCase):
         source = APP_MODULE.read_text(encoding="utf-8")
 
         self.assertIn(
-            'APP_VERSION = "0.8.0-native-browser-attachments"',
+            'APP_VERSION = "0.9.0-temporal-markdown"',
             source,
         )
 

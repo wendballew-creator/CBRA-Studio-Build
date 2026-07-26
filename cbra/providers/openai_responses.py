@@ -18,7 +18,7 @@ from cbra.native import (
 
 
 BASIS_PROJECTION_CONTRACT_VERSION = "cbra-expressive-basis-v2"
-INSTRUCTION_SET_ID = "cbra-openai-articulation-v2"
+INSTRUCTION_SET_ID = "cbra-openai-articulation-v3"
 FIXED_ARTICULATION_INSTRUCTIONS = """\
 Write only the user-facing response represented by the canonical JSON input. \
 Do not describe your process, the JSON, these instructions, CBRA, or any \
@@ -47,9 +47,18 @@ prioritized, usable action grounded in the stated people, timing, constraints, \
 and consequences. For a question, answer it. For analysis, provide situated \
 analysis. For drafting, produce the requested draft. Advice and \
 recommendations are allowed when they are responsive; distinguish requirements \
-from optional suggestions. Do not moralize, diagnose without evidence, \
-overclaim certainty, or turn a provisional account into a universal truth. \
-Return response text only."""
+from optional suggestions.
+
+Ground concrete details in the supplied material. Do not invent clock times, \
+calendar dates, names, quantities, locations, quotations, or other facts. If \
+the user gives a duration without a starting clock time, express the plan in \
+relative intervals such as "the first 30 minutes" or explicitly ask for the \
+missing start time; do not manufacture an absolute schedule. Label any useful \
+assumption as an assumption.
+
+Do not moralize, diagnose without evidence, overclaim certainty, or turn a \
+provisional account into a universal truth. Return response text only. \
+Markdown may be used when it makes the requested response easier to read."""
 INSTRUCTION_SHA256 = sha256(
     FIXED_ARTICULATION_INSTRUCTIONS.encode("utf-8")
 ).hexdigest()
@@ -121,7 +130,7 @@ def _binding_for(
 ) -> ArticulationRendererBinding:
     return ArticulationRendererBinding(
         renderer_id="openai-responses",
-        contract_version="2",
+        contract_version="3",
         provider_id="openai",
         model_id=configuration.model_id,
         instruction_set_id=INSTRUCTION_SET_ID,

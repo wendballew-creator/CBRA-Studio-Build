@@ -80,7 +80,8 @@ the legacy theory-performing response is rejected.
 
 ## Remaining claim boundary
 
-The repair is verified offline only. It does not establish that a live model
-will answer Case 1 well, that later turns hold continuity, or that Cases 2
-through 5 pass. The next evidence-producing action is one fresh live Case 1,
-Turn 1 using the repaired apparatus and a new external evaluation root.
+This was the evidence boundary when the version-2 repair was committed. The
+subsequent live recheck at `bdbf0ac` engaged the practical request and did not
+repeat the architecture-performance failure. That later response and its two
+narrower defects are recorded separately in
+[`BEHAVIORAL_EVALUATION_CASE_1_RECHECK.md`](BEHAVIORAL_EVALUATION_CASE_1_RECHECK.md).

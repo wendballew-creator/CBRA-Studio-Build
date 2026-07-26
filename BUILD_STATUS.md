@@ -1,9 +1,9 @@
 # CBRA Current Build Status
 
-Status date: 2026-07-25
+Status date: 2026-07-26
 
-Status boundary: `agent/corpus-response-boundary-repair`, based directly on
-`67ac1b9` (`Prepare live behavioral evaluation`)
+Status boundary: `agent/temporal-markdown-repair`, based directly on
+`bdbf0ac` (`Repair corpus response boundary`)
 
 ## Closure conclusion
 
@@ -21,10 +21,10 @@ restricted key was revoked after the run.
 
 That run used expressive-basis and OpenAI instruction-set version 1. It
 validates the transport, rollback, replay, and client-lifetime path at that
-commit; it is not live evidence for the repaired version-2 response behavior.
-The version-2 repair changes projection roles, bounded material thickness,
-instructions, and native acceptance—not endpoint, retry, storage, or
-credential handling.
+commit; it is not live evidence for the current response behavior. The later
+response repairs change projection roles, bounded material thickness,
+instructions, native acceptance, and browser presentation—not endpoint,
+retry, storage, or credential handling.
 
 This closes provider-boundary construction and validation. It does not close
 behavioral evaluation, deployment, security hardening for public access, or
@@ -36,6 +36,15 @@ the practical request, so the set stopped after one submitted turn. The
 server was stopped and the restricted key was revoked. The stop evidence is
 recorded in
 [`BEHAVIORAL_EVALUATION_CASE_1.md`](BEHAVIORAL_EVALUATION_CASE_1.md).
+
+A fresh version-2 recheck at `bdbf0ac` then engaged the practical request,
+organized all six volunteers, used the late-arrival constraint, and addressed
+the requested room elements without exposing CBRA architecture. It also
+invented `1:30–2:00` without a supplied start time, and the browser displayed
+Markdown syntax literally. The server was stopped, the restricted key was
+revoked, and the external evaluation root was archived and verified. The
+sanitized evidence is recorded in
+[`BEHAVIORAL_EVALUATION_CASE_1_RECHECK.md`](BEHAVIORAL_EVALUATION_CASE_1_RECHECK.md).
 
 The sanitized evidence and the limits of the validation claim are recorded in
 [`OPENAI_LIVE_VALIDATION.md`](OPENAI_LIVE_VALIDATION.md).
@@ -49,6 +58,9 @@ The sanitized evidence and the limits of the validation claim are recorded in
 - The browser creates stable thread and turn claims, reconciles interrupted
   turns, paginates the durable transcript, and submits text or multipart
   attachment turns through the native public API.
+- Assistant responses render through a local, HTML-inert Markdown subset for
+  headings, lists, emphasis, and code. User messages and formatter fallback
+  remain plain text.
 - The API returns bounded summaries and turn projections. It does not expose
   native field state, canonical source text, attachment text, renderer
   instructions, credentials, or provider error bodies.
@@ -118,9 +130,12 @@ The sanitized evidence and the limits of the validation claim are recorded in
 - Expressive-basis version 2 preserves bounded source text and marks the
   latest user turn as response focus, prior turns as context, attachments as
   source material, and canonical sources as silent reasoning orientation.
-- OpenAI instruction-set version 2 permits situated relevance, prioritization,
-  recommendations, drafting, and concrete action while continuing to reject
-  moral closure, unsupported diagnosis, overclaiming, and procedural leakage.
+- OpenAI instruction-set version 3 permits situated relevance, prioritization,
+  recommendations, drafting, and concrete action while requiring concrete
+  details to remain grounded in supplied material.
+- When no non-canonical projected source supplies a clock anchor, an absolute
+  clock time is unsupported and the candidate returns to reintegration.
+  Supplied start times still permit absolute schedules.
 - The repaired OpenAI acceptance boundary no longer requires visible
   formation or held-open phrases. A return to that legacy ritual is treated as
   procedural bypass and reintegrated.
@@ -137,6 +152,7 @@ The sanitized evidence and the limits of the validation claim are recorded in
 | Method | Route | Current purpose |
 |---|---|---|
 | `GET` | `/` and `/ui` | Serve the native browser client |
+| `GET` | `/ui/markdown.js` | Serve the local HTML-inert Markdown renderer |
 | `GET` | `/health` | Return bounded application health metadata |
 | `POST` | `/generate` | Claim a thread with its first text turn |
 | `POST` | `/generate/attachments` | Claim a thread with text and attachments |
@@ -186,6 +202,19 @@ maintained compatibility stacks:
 These are offline results. The OpenAI adapter tests use local mock transport;
 the repair verification made no live provider request.
 
+The temporal-grounding and Markdown repair expands that suite to 214 tests:
+
+| Stack | Result |
+|---|---|
+| Pydantic 1.10.26, OpenAI 2.47.0, HTTPX 0.27.2 | 214 passed |
+| Pydantic 2.13.4, OpenAI 2.48.0, HTTPX 0.28.1 | 214 passed |
+
+The added contracts cover the exact unsupported `1:30–2:00` behavior,
+acceptance when a real clock anchor is supplied, version-3 apparatus binding,
+non-schedule clock examples, safe Markdown structure, HTML-as-text handling,
+browser asset delivery, and JavaScript syntax. No provider request or API key
+was used.
+
 The live-provider result validates the real OpenAI transport and application
 path only for the fixed synthetic apparatus recorded in
 `OPENAI_LIVE_VALIDATION.md`. It is not evidence of general response quality.
@@ -214,16 +243,16 @@ path only for the fixed synthetic apparatus recorded in
   contract. It did not test model portability, load, long-running sessions,
   real attachments, personal material, or provider outage behavior live.
 - Behavioral quality has not been evaluated across the complete first set.
-  One Case 1 response at `67ac1b9` failed seriously enough to stop the set;
-  the resulting version-2 repair has offline regression evidence but no live
-  behavioral result yet.
+  Case 1 at `67ac1b9` failed seriously; its version-2 recheck at `bdbf0ac`
+  engaged the practical request but exposed constraint-invention and
+  presentation tensions. Cases 2 through 5 remain unevaluated.
 - Expressive material is bounded rather than retrieved semantically. Current
   user turns, canonical sources, attachments, and other field material have
   separate finite projection limits; sufficiently long or dense formations
   can still exceed the configured provider-input limit and roll back the turn.
-- Version-1 OpenAI-rendered sessions cannot silently continue under the
-  version-2 renderer binding. A repaired live evaluation must use a fresh
-  external session root.
+- Version-1 and version-2 OpenAI-rendered sessions cannot silently continue
+  under the version-3 renderer binding. A fresh external session root is
+  required for the next live evaluation.
 - Earlier interaction logs and route-oriented demo documents predate the
   architecture-native runtime and are historical evidence, not current
   acceptance criteria.
@@ -231,15 +260,11 @@ path only for the fixed synthetic apparatus recorded in
   pre-native operator artifacts remain tracked in the repository. They are
   not the active application path and still need a separate repository-hygiene
   decision.
-- The application version label still names the browser-attachment pass and
-  has not yet been advanced to describe the complete provider-validated
-  boundary.
-
 ## Next phase
 
 The next evidence-producing phase is a fresh live rerun of Case 1, Turn 1
 through the native browser interface. It should use the fixed non-sensitive
-prompt, the version-2 apparatus, and a new external session root. The response
+prompt, the version-3 apparatus, and a new external session root. The response
 must be read and recorded before authorizing Turn 2.
 
 The first-set apparatus remains specified in
@@ -247,8 +272,7 @@ The first-set apparatus remains specified in
 observation template in
 [`BEHAVIORAL_EVALUATION_LOG.md`](BEHAVIORAL_EVALUATION_LOG.md) and one
 synthetic attachment fixture. The stopped attempt and repair boundary are
-recorded separately in
-[`BEHAVIORAL_EVALUATION_CASE_1.md`](BEHAVIORAL_EVALUATION_CASE_1.md).
+recorded separately in the two Case 1 evidence records.
 
 No live provider request was made while implementing or verifying the repair.
 The earlier controlled provider-validation result does not need to be
@@ -265,9 +289,9 @@ The first evaluation set should examine:
 - whether accepted provider text preserves CBRA terminology and ontological
   commitments.
 
-The repaired Case 1 must not be described as a pass until a fresh live
-response supports that claim. A new provider-transport validation request is
-not part of this phase.
+The temporal and formatting repair must not be described as a live pass until
+a fresh response supports that claim. A new provider-transport validation
+request is not part of this phase.
 
 ## Operator baseline
 
