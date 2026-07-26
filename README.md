@@ -1,6 +1,19 @@
 # CBRA-Studio-Build
 Building a posthuman reasoning LLM architechure for personal use and then public launch
 
+## Current state
+
+The architecture-native application and its explicit OpenAI Responses
+boundary have completed one controlled synthetic live validation. The
+temporary restricted key used for that run was revoked. See
+[`BUILD_STATUS.md`](BUILD_STATUS.md) for the actual current architecture and
+remaining limitations, and
+[`OPENAI_LIVE_VALIDATION.md`](OPENAI_LIVE_VALIDATION.md) for the bounded
+validation evidence.
+
+The retained live-validation harness is not a routine regression command and
+does not need to be rerun to establish the current build state.
+
 ## Articulation renderer activation
 
 CBRA continues to use its native-template articulation renderer when

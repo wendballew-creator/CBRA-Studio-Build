@@ -1,130 +1,231 @@
-# CBRA API Build Status
+# CBRA Current Build Status
 
-## Current branch
-`feat/staged-diffractive-map`
+Status date: 2026-07-25
 
-## Build state
-Stabilized runtime build after:
-- compression enforcement audit
-- drift event persistence alignment
-- final schema hygiene pass
+Status boundary: `agent/post-validation-closure`, based directly on
+`7322e40` (`Repair controlled OpenAI validation`)
 
-## Live runtime files
-- `main.py`
-- `cbra_engine.py`
-- `cbra/models.py`
-- `cbra/store.py`
-- `cbra/compression.py`
+## Closure conclusion
 
-## Verified behaviors
-- `/thread/{thread_id}` auto-creates a thread and returns thread payload
-- `/chat/{thread_id}` appends messages, persists loop cycles, and emits drift events when drift is detected
-- `selected_elements` is enforced and mirrored
-- `LoopCycle.selected_elements` persists
-- `LoopCycle.notes` persists
-- `FieldArtifact.selected_elements` persists
-- `FieldArtifact.notes` persists
-- `DriftEvent` aligns with `LoopCycle.notes`
-- duplicate drift events are suppressed only when:
-  - `kind`
-  - `detected_at_stage`
-  - `reintegration_target`
-  - `reintegration_stage`
-  all match the most recent drift event exactly
+The architecture-native application path is assembled through the browser,
+FastAPI boundary, durable native session runtime, canonical corpus bootstrap,
+attachment ingress, renderer apparatus, and explicit OpenAI Responses
+activation.
 
-## Current data model guarantees
+The real provider boundary completed its controlled synthetic validation on
+2026-07-25. The run made exactly one request from a clean checkout at
+`7322e40`, returned HTTP 200 from `gpt-5.6-luna`, produced
+`application_result: full_pass`, and replayed the resulting durable state
+across an application restart without another provider request. The temporary
+restricted key was revoked after the run.
 
-### FieldArtifact
-Persists:
-- `field_signature`
-- `noticing_register`
-- `relational_map`
-- `diffractive_map`
-- `relevance_gradient`
-- `selected_elements`
-- `notes`
+This closes provider-boundary construction and validation. It does not close
+behavioral evaluation, deployment, security hardening for public access, or
+product operations.
 
-### LoopCycle
-Persists:
-- `field_id`
-- `field_signature`
-- `noticing_register`
-- `relational_map`
-- `diffractive_map`
-- `relevance_gradient`
-- `selected_elements`
-- `notes`
-- `articulation_output`
-- `action_vector`
-- `drift_detected`
-- `reintegration_stage`
+The sanitized evidence and the limits of the validation claim are recorded in
+[`OPENAI_LIVE_VALIDATION.md`](OPENAI_LIVE_VALIDATION.md).
 
-### DriftEvent
-Persists:
-- `kind`
-- `severity`
-- `reintegration_target`
-- `detected_at_stage`
-- `reintegration_stage`
-- `notes`
+## Active architecture
 
-## Known limitations
-- Store is in-memory only; thread data resets when uvicorn restarts
-- Reintegration stage may vary across identical prompts because model output varies
-- File route schema block was cleaned, but a dedicated live uploaded-file test should still be run later
-- Local backup files were deleted and are ignored by `.gitignore`
+### Application and browser boundary
 
-## Minimum verification commands
+- `cbra/app.py` is the active FastAPI adapter.
+- `ui/index.html` is the active browser client served at `/` and `/ui`.
+- The browser creates stable thread and turn claims, reconciles interrupted
+  turns, paginates the durable transcript, and submits text or multipart
+  attachment turns through the native public API.
+- The API returns bounded summaries and turn projections. It does not expose
+  native field state, canonical source text, attachment text, renderer
+  instructions, credentials, or provider error bodies.
 
-### Compile
+### Canonical corpus bootstrap
+
+- `cbra/corpus.py` loads `corpus/CBRA_Corpus_Index.md` and the four active
+  canonical sources named by that manifest.
+- Startup fails closed on missing, malformed, unsafe, duplicated, oversized,
+  or unmapped corpus material.
+- A process holds one immutable, content-addressed corpus snapshot.
+- Each new thread receives the canonical streams once. Existing sessions keep
+  their durable material across restart.
+
+### Architecture-native field runtime
+
+- `cbra/native/` owns the active field models, schemas, operators, emergence,
+  cycle execution, articulation, reintegration, session ledger, and lossless
+  persistence contracts.
+- Intra-action, play, diffraction, creative becoming, and care operate as
+  coactive field transformations rather than response-route dispatch.
+- Articulation is provisional. A candidate is formed from bounded expressive
+  material, evaluated by the native runtime, and either accepted or returned
+  to reintegration.
+- Drift and reintegration remain explicit durable lifecycle material.
+- A sparse turn can truthfully produce `no_articulation`; the application does
+  not fabricate fallback response text.
+
+### Durable session boundary
+
+- `cbra/store.py` owns one compressed native session file per hashed thread
+  identity under `CBRA_SESSION_ROOT` or `.cbra-runtime/sessions`.
+- Writes use schema-validated, integrity-checked serialization and atomic file
+  replacement.
+- Repository transactions use per-thread file locks and advance at most one
+  revision.
+- Turn IDs are idempotent claims: an exact retry replays, changed material
+  conflicts, and a stale expected revision fails before field execution.
+- The turn ledger is append-only. Public transcript pages are derived from the
+  ledger and remain read-only.
+- Accepted articulation, pending reintegration, renderer binding, history, and
+  trace state survive restart without semantic loss.
+
+### Attachment ingress
+
+- Text, Markdown, DOCX, and text-bearing PDF uploads are supported.
+- Raw and extracted sizes, file count, PDF pages, DOCX members, and DOCX
+  expansion are finitely bounded and configurable.
+- Filenames, media types, archive members, package structure, UTF-8 text, and
+  client attachment claims are validated before field mutation.
+- Raw uploaded bytes are not stored by the ingress boundary. Extracted text
+  enters private native streams and is not returned by public transcript
+  projection.
+- Attachment turns share the same idempotency, revision, transaction, replay,
+  and rollback guarantees as text-only turns.
+
+### Articulation renderers
+
+- `native-template` is the default renderer. Merely setting
+  `OPENAI_API_KEY` does not activate network work.
+- `openai-responses` is an explicit process-start selection. Every
+  non-secret model, reasoning, verbosity, input, output, and timeout setting
+  is required; there are no implicit live-mode defaults.
+- The renderer sends a canonical expressive-basis projection, not native
+  authority or provenance identifiers, through one stateless Responses
+  request with `store=false`, zero automatic retries, and a finite timeout.
+- The durable renderer binding records all effective non-secret apparatus
+  settings. The API key is not part of the binding or session.
+- Exact replay, restart replay, health checks, UI reads, transcript reads, and
+  non-renderable turns require no provider request.
+- Provider failure, incomplete response, malformed text, oversized text, or
+  binding mismatch rolls the attempted turn back without persisting partial
+  provider work.
+
+## Public HTTP surface
+
+| Method | Route | Current purpose |
+|---|---|---|
+| `GET` | `/` and `/ui` | Serve the native browser client |
+| `GET` | `/health` | Return bounded application health metadata |
+| `POST` | `/generate` | Claim a thread with its first text turn |
+| `POST` | `/generate/attachments` | Claim a thread with text and attachments |
+| `POST` | `/chat/{thread_id}` | Submit a revision-bound text turn |
+| `POST` | `/chat/{thread_id}/attachments` | Submit a revision-bound attachment turn |
+| `GET` | `/thread/{thread_id}` | Return a bounded durable-session summary |
+| `GET` | `/thread/{thread_id}/turns` | Return a bounded transcript page |
+
+There is no public route for deleting, replacing, or directly editing durable
+thread state.
+
+## Verification boundary
+
+The completed build sequence includes offline contracts for:
+
+- native field dynamics and reintegration;
+- strict schemas and lossless checkpoint, trace, and session restoration;
+- session ownership, idempotency, stale revisions, concurrency, and restart;
+- canonical corpus safety and immutable bootstrap;
+- FastAPI request, response, error, projection, and OpenAPI contracts;
+- browser transcript and attachment behavior;
+- bounded attachment extraction and transactional ingress;
+- renderer isolation, binding durability, rollback, and concurrency;
+- OpenAI activation, sanitized failures, client lifetime, and replay;
+- one-request live-validation safety and sanitized reporting.
+
+The closure pass reran all 193 tests successfully in each maintained
+compatibility stack:
+
+| Stack | Result |
+|---|---|
+| Pydantic 1.10.26, OpenAI 2.47.0, HTTPX 0.27.2 | 193 passed |
+| Pydantic 2.12.5, OpenAI 2.48.0, HTTPX 0.28.1 | 193 passed |
+
+The older stack emits existing HTTPX test-client deprecation warnings and
+AnyIO memory-stream resource warnings. They are not test failures, but should
+be resolved if that compatibility stack remains a release target.
+
+The live-provider result validates the real OpenAI transport and application
+path only for the fixed synthetic apparatus recorded in
+`OPENAI_LIVE_VALIDATION.md`. It is not evidence of general response quality.
+
+## Current limitations and non-claims
+
+- No active API key is retained. OpenAI mode cannot run again unless a new key
+  is deliberately provisioned and configured.
+- The application has no user authentication, authorization, account
+  isolation, rate limiting, or public-network deployment boundary. It should
+  remain local or otherwise externally protected.
+- Durable sessions use the local filesystem. There is no external database,
+  multi-host coordination, backup policy, recovery interface, retention
+  policy, or migration service.
+- The repository uses Unix file locking (`fcntl`); the durable store is
+  currently a macOS/Linux implementation, not a Windows-portable one.
+- Attachment ingress is text extraction, not general multimodality. It does
+  not process images, audio, video, OCR-only PDFs, spreadsheets, or
+  presentations.
+- The browser has no thread list, rename, delete, export, account, or
+  administration interface.
+- Provider activation is environment-driven and manually operated. There is
+  no secret manager integration, deployment configuration, automatic key
+  rotation, or usage dashboard inside CBRA.
+- The live validation used one model and one fixed synthetic two-turn
+  contract. It did not test model portability, load, long-running sessions,
+  real attachments, personal material, or provider outage behavior live.
+- Behavioral quality in the current native/OpenAI stack has not yet been
+  evaluated systematically. Earlier interaction logs and route-oriented demo
+  documents predate the architecture-native runtime and are historical
+  evidence, not current acceptance criteria.
+- Historical compatibility modules, backup directories, archives, and
+  pre-native operator artifacts remain tracked in the repository. They are
+  not the active application path and still need a separate repository-hygiene
+  decision.
+- The application version label still names the browser-attachment pass and
+  has not yet been advanced to describe the complete provider-validated
+  boundary.
+
+## Next phase
+
+The next engineering phase is live behavioral evaluation through the native
+browser interface, using deliberately selected non-sensitive interactions.
+That phase should evaluate response quality without repeating transport
+validation.
+
+The first evaluation set should examine:
+
+- whether practical requests produce usable action without losing the field;
+- whether correction produces direct accountability before explanation;
+- whether articulation stays grounded instead of performing theory;
+- whether care holds difference without therapeutic slippage or moral closure;
+- whether continuity, attachment participation, and reintegration remain
+  perceptible across turns;
+- whether accepted provider text preserves CBRA terminology and ontological
+  commitments.
+
+Observed failures should be recorded as behavioral evidence before changing
+the runtime. A new provider-validation request is not part of that phase.
+
+## Operator baseline
+
+Run the application locally with:
+
 ```bash
-python -m compileall -q .
-curl -sS "http://127.0.0.1:8000/thread/build-status-check" | python -m json.tool
-curl -sS -X POST "http://127.0.0.1:8000/chat/build-status-check" \
-  -H "Content-Type: application/json" \
-  -d '{"user_text":"build status verification turn","mode":"production"}' \
-  | python -m json.tool
-curl -sS "http://127.0.0.1:8000/thread/build-status-check" | python -m json.tool
+python -m uvicorn cbra.app:app --host 127.0.0.1 --port 8000
 ```
 
-## Turn-state definition
+Run the complete offline Python suite with:
 
-### Aligned turn-state
-A turn produces one aligned turn-state.
+```bash
+python -m unittest discover -s cbra -p 'test_*.py'
+```
 
-This aligned turn-state is the shared persisted formation for that turn.
-
-FieldArtifact and LoopCycle derive from the same aligned turn-state.
-
-Articulation is generated from the aligned turn-state.
-
-Drift metadata is carried in the aligned turn-state.
-
-`selected_elements` must match across:
-- top-level `selected_elements`
-- `relevance_gradient.selected_elements`
-
-within the same turn-state.
-
-The system should not persist two differently shaped versions of the same turn.
-
-### Role definitions
-
-#### FieldArtifact
-FieldArtifact is the canonical persisted field-state for the turn.
-
-#### LoopCycle
-LoopCycle is the persisted cycle snapshot derived from that same aligned turn-state.
-
-#### Articulation
-Articulation is generated from the aligned turn-state rather than from a differently shaped pre-alignment version.
-
-## Next recommended build task
-Build-stage handoff is complete after this file is committed.
-
-Next recommended technical task:
-- structural audit of runtime timing:
-  - field update timing
-  - loopcycle construction timing
-  - compression timing
-  - drift emission timing
+The live-validation harness is retained for controlled future diagnostics,
+not as a routine regression command. It must not be rerun merely to establish
+the state documented here.
