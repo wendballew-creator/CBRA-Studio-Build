@@ -2,8 +2,8 @@
 
 Status date: 2026-07-25
 
-Status boundary: `agent/post-validation-closure`, based directly on
-`7322e40` (`Repair controlled OpenAI validation`)
+Status boundary: `agent/live-behavioral-evaluation-baseline`, based directly
+on `aabd20e` (`Record provider validation closure`)
 
 ## Closure conclusion
 
@@ -197,6 +197,17 @@ The next engineering phase is live behavioral evaluation through the native
 browser interface, using deliberately selected non-sensitive interactions.
 That phase should evaluate response quality without repeating transport
 validation.
+
+The first-set apparatus is now specified in
+[`BEHAVIORAL_EVALUATION.md`](BEHAVIORAL_EVALUATION.md), with a clean
+observation template in
+[`BEHAVIORAL_EVALUATION_LOG.md`](BEHAVIORAL_EVALUATION_LOG.md) and one
+synthetic attachment fixture. The apparatus is ready for live use, but no
+behavioral result is claimed until the complete set is observed and recorded.
+
+The apparatus pass adds nine offline launcher contracts. The full suite now
+contains 202 tests in each maintained compatibility stack; both stacks pass.
+No live provider request was made while preparing or verifying the apparatus.
 
 The first evaluation set should examine:
 

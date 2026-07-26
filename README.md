@@ -14,6 +14,13 @@ validation evidence.
 The retained live-validation harness is not a routine regression command and
 does not need to be rerun to establish the current build state.
 
+The first architecture-native behavioral-evaluation apparatus is defined in
+[`BEHAVIORAL_EVALUATION.md`](BEHAVIORAL_EVALUATION.md). It uses a fresh
+external session root, a fixed non-sensitive interaction set, and an
+observation record that keeps behavioral evidence separate from the
+historical route-oriented interaction log. Preparing the apparatus does not
+establish that the behavioral cases have passed.
+
 ## Articulation renderer activation
 
 CBRA continues to use its native-template articulation renderer when
