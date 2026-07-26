@@ -34,9 +34,18 @@ boundaries are recorded in
 [`BEHAVIORAL_EVALUATION_CASE_1.md`](BEHAVIORAL_EVALUATION_CASE_1.md) and
 [`BEHAVIORAL_EVALUATION_CASE_1_RECHECK.md`](BEHAVIORAL_EVALUATION_CASE_1_RECHECK.md).
 
-The current offline version-3 repair grounds clock times in supplied material,
-returns unsupported absolute schedules to reintegration, and renders a safe
-Markdown subset in the browser. It has not yet passed a fresh live check.
+A fresh version-3 verification then held both targeted repairs: timing
+remained relative, and headings, bold text, and bullets rendered without raw
+Markdown markers. The response was practical and persisted as
+`accepted_articulation`. One deterministic presentation tension remained:
+three assignments each displayed as `1` because supporting bullet lists split
+the ordered sequence into separate browser elements. The sanitized evidence
+is recorded in
+[`BEHAVIORAL_EVALUATION_CASE_1_VERSION_3.md`](BEHAVIORAL_EVALUATION_CASE_1_VERSION_3.md).
+
+The current offline browser repair preserves ordered-list continuation across
+blank lines and indented supporting lists while retaining HTML-as-text safety.
+It does not change the response apparatus or require another provider request.
 
 ## Articulation renderer activation
 

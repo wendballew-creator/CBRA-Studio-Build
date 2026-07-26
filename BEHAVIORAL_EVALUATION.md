@@ -25,10 +25,23 @@ is
 [`BEHAVIORAL_EVALUATION_CASE_1_RECHECK.md`](BEHAVIORAL_EVALUATION_CASE_1_RECHECK.md).
 
 The temporal and presentation repair uses a version-3 renderer binding. Do not
-resume either earlier evaluation root. The next live step remains one fresh
-Case 1, Turn 1 on a new external root. Read and record that response before
-deciding whether Turn 2 is justified. Offline verification does not establish
-a live version-3 behavioral pass.
+resume either earlier evaluation root.
+
+A fresh version-3 Case 1, Turn 1 at `ac0d468` then engaged the practical
+situation, remained entirely relative in time, rendered headings, bold text,
+and bullets, and persisted as `accepted_articulation` without reintegration
+pending. Its three initial assignments each displayed as `1` because the
+browser restarted ordered numbering around supporting bullet lists. The
+server was stopped, the key was revoked, and the external root was archived
+and verified. The sanitized record is
+[`BEHAVIORAL_EVALUATION_CASE_1_VERSION_3.md`](BEHAVIORAL_EVALUATION_CASE_1_VERSION_3.md).
+
+The ordered-list continuation repair changes only the deterministic browser
+parser. Re-rendering the archived durable response through that parser
+requires no provider request. Because the guarded launcher records the exact
+repository commit, a later provider-backed continuation from the repair
+commit must nevertheless begin with a fresh external root rather than resume
+the `ac0d468` apparatus.
 
 ## Evaluation boundary
 

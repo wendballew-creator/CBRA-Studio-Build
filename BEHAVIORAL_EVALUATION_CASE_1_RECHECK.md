@@ -80,3 +80,7 @@ The version-3 repair is offline evidence only. A fresh live Case 1, Turn 1 is
 still required before continuing to Turn 2. Version-1 and version-2
 OpenAI-rendered evaluation roots must not be resumed under the version-3
 binding. Cases 2 through 5 remain unevaluated.
+
+That fresh version-3 verification was subsequently completed at `ac0d468`.
+Its result and narrower ordered-list presentation tension are recorded in
+[`BEHAVIORAL_EVALUATION_CASE_1_VERSION_3.md`](BEHAVIORAL_EVALUATION_CASE_1_VERSION_3.md).

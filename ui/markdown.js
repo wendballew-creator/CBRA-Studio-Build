@@ -79,6 +79,51 @@
       return tokens.length ? tokens : [textToken("")];
     }
 
+    function listIndent(value) {
+      return value.replace(/\t/g, "    ").length;
+    }
+
+    function orderedStart(value) {
+      const parsed = Number(value);
+      return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 1;
+    }
+
+    function applyOrderedContinuations(blocks) {
+      const sequences = new Map();
+      for (const block of blocks) {
+        if (
+          block.type !== "unordered_list" &&
+          block.type !== "ordered_list"
+        ) {
+          sequences.clear();
+          continue;
+        }
+
+        for (const indent of Array.from(sequences.keys())) {
+          if (indent > block.indent) {
+            sequences.delete(indent);
+          }
+        }
+
+        const previous = sequences.get(block.indent);
+        if (block.type === "ordered_list") {
+          if (previous && previous.type === "ordered_list") {
+            block.start = previous.next;
+          }
+          sequences.set(block.indent, {
+            type: block.type,
+            next: block.start + block.items.length
+          });
+        } else {
+          sequences.set(block.indent, {
+            type: block.type,
+            next: null
+          });
+        }
+      }
+      return blocks;
+    }
+
     function parse(value) {
       const source = String(value == null ? "" : value).replace(
         /\r\n?/g,
@@ -107,6 +152,8 @@
         }
         blocks.push({
           type: list.type,
+          indent: list.indent,
+          start: list.start,
           items: list.items.map(parseInline)
         });
         list = null;
@@ -156,19 +203,28 @@
           continue;
         }
 
-        const unordered = /^\s*[-+*]\s+(.+)$/.exec(line);
-        const ordered = /^\s*\d+[.)]\s+(.+)$/.exec(line);
+        const unordered = /^(\s*)[-+*]\s+(.+)$/.exec(line);
+        const ordered = /^(\s*)(\d+)[.)]\s+(.+)$/.exec(line);
         const item = unordered || ordered;
         if (item) {
           flushParagraph();
           const type = unordered ? "unordered_list" : "ordered_list";
-          if (list !== null && list.type !== type) {
+          const indent = listIndent(item[1]);
+          if (
+            list !== null &&
+            (list.type !== type || list.indent !== indent)
+          ) {
             flushList();
           }
           if (list === null) {
-            list = { type, items: [] };
+            list = {
+              type,
+              indent,
+              start: ordered ? orderedStart(ordered[2]) : null,
+              items: []
+            };
           }
-          list.items.push(item[1]);
+          list.items.push(unordered ? unordered[2] : ordered[3]);
           continue;
         }
 
@@ -183,7 +239,7 @@
       flushCode();
       flushParagraph();
       flushList();
-      return blocks;
+      return applyOrderedContinuations(blocks);
     }
 
     function appendInlines(parent, inlines, documentObject) {
@@ -225,6 +281,12 @@
           element = documentObject.createElement(
             block.type === "unordered_list" ? "ul" : "ol"
           );
+          if (
+            block.type === "ordered_list" &&
+            block.start !== 1
+          ) {
+            element.start = block.start;
+          }
           for (const item of block.items) {
             const listItem = documentObject.createElement("li");
             appendInlines(listItem, item, documentObject);

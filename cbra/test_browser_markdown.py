@@ -119,6 +119,97 @@ class BrowserMarkdownRenderingTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is unavailable")
+    def test_ordered_items_continue_across_indented_supporting_lists(self):
+        source = (
+            "const renderer = require(process.argv[1]);"
+            "const result = renderer.parse(process.argv[2]);"
+            "process.stdout.write(JSON.stringify(result));"
+        )
+        markdown = (
+            "1. **Room layout and accessible path — 2 people**\n"
+            "\n"
+            "   - Clear the main route.\n"
+            "   - Position twenty chairs.\n"
+            "\n"
+            "1. **Welcome table and water — 1 person**\n"
+            "\n"
+            "   - Keep the entrance route clear.\n"
+            "\n"
+            "1. **Signs and final supply check — 1 person**\n"
+            "\n"
+            "   - Place directional signs."
+        )
+        result = subprocess.run(
+            [
+                "node",
+                "-e",
+                source,
+                str(MARKDOWN_RENDERER),
+                markdown,
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        parsed = json.loads(result.stdout)
+        ordered = [
+            block for block in parsed
+            if block["type"] == "ordered_list"
+        ]
+        self.assertEqual(
+            [block["start"] for block in ordered],
+            [1, 2, 3],
+        )
+        self.assertEqual(
+            [block["items"][0][0]["text"] for block in ordered],
+            [
+                "Room layout and accessible path — 2 people",
+                "Welcome table and water — 1 person",
+                "Signs and final supply check — 1 person",
+            ],
+        )
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is unavailable")
+    def test_paragraph_resets_ordered_list_numbering(self):
+        source = (
+            "const renderer = require(process.argv[1]);"
+            "const result = renderer.parse(process.argv[2]);"
+            "process.stdout.write(JSON.stringify(result));"
+        )
+        markdown = (
+            "1. First sequence\n"
+            "\n"
+            "A separate paragraph.\n"
+            "\n"
+            "1. New sequence"
+        )
+        result = subprocess.run(
+            [
+                "node",
+                "-e",
+                source,
+                str(MARKDOWN_RENDERER),
+                markdown,
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        parsed = json.loads(result.stdout)
+        ordered = [
+            block for block in parsed
+            if block["type"] == "ordered_list"
+        ]
+        self.assertEqual(
+            [block["start"] for block in ordered],
+            [1, 1],
+        )
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is unavailable")
     def test_renderer_builds_expected_dom_without_html_elements(self):
         source = """
 const renderer = require(process.argv[1]);
@@ -191,6 +282,72 @@ process.stdout.write(JSON.stringify(container));
                 if node.get("tag") == "#text"
             ),
         )
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is unavailable")
+    def test_renderer_sets_continuation_start_on_ordered_lists(self):
+        source = """
+const renderer = require(process.argv[1]);
+class Element {
+  constructor(tag, ownerDocument) {
+    this.tag = tag;
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+  }
+  appendChild(child) {
+    this.children.push(child);
+  }
+  replaceChildren(...children) {
+    this.children = children;
+  }
+  set textContent(value) {
+    this.children = [{ tag: "#text", text: String(value) }];
+  }
+}
+const documentObject = {
+  createElement(tag) {
+    return new Element(tag, this);
+  },
+  createTextNode(text) {
+    return { tag: "#text", text: String(text) };
+  }
+};
+const container = new Element("div", documentObject);
+renderer.render(container, process.argv[2]);
+process.stdout.write(JSON.stringify(container));
+"""
+        markdown = (
+            "1. **First assignment**\n"
+            "\n"
+            "   - Supporting action\n"
+            "\n"
+            "1. **Second assignment**\n"
+            "\n"
+            "   - Supporting action\n"
+            "\n"
+            "1. **Third assignment**"
+        )
+        result = subprocess.run(
+            [
+                "node",
+                "-e",
+                source,
+                str(MARKDOWN_RENDERER),
+                markdown,
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rendered = json.loads(result.stdout)
+        ordered = [
+            child for child in rendered["children"]
+            if child["tag"] == "ol"
+        ]
+        self.assertNotIn("start", ordered[0])
+        self.assertEqual(ordered[1]["start"], 2)
+        self.assertEqual(ordered[2]["start"], 3)
 
 
 if __name__ == "__main__":

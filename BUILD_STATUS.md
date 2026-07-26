@@ -2,8 +2,8 @@
 
 Status date: 2026-07-26
 
-Status boundary: `agent/temporal-markdown-repair`, based directly on
-`bdbf0ac` (`Repair corpus response boundary`)
+Status boundary: `agent/ordered-list-continuation-repair`, based directly on
+`ac0d468` (`Repair temporal grounding and Markdown rendering`)
 
 ## Closure conclusion
 
@@ -46,6 +46,16 @@ revoked, and the external evaluation root was archived and verified. The
 sanitized evidence is recorded in
 [`BEHAVIORAL_EVALUATION_CASE_1_RECHECK.md`](BEHAVIORAL_EVALUATION_CASE_1_RECHECK.md).
 
+A fresh version-3 verification at `ac0d468` held both targeted repairs. The
+response remained relative in time, directly organized the requested work,
+and rendered its headings, bold text, and bullets. It persisted as
+`accepted_articulation` without reintegration pending. Three initial
+assignments nevertheless each displayed as `1` because the browser split the
+ordered sequence around supporting bullet lists. The server was stopped, the
+restricted key was revoked, and the external evaluation root was archived and
+verified. The sanitized evidence is recorded in
+[`BEHAVIORAL_EVALUATION_CASE_1_VERSION_3.md`](BEHAVIORAL_EVALUATION_CASE_1_VERSION_3.md).
+
 The sanitized evidence and the limits of the validation claim are recorded in
 [`OPENAI_LIVE_VALIDATION.md`](OPENAI_LIVE_VALIDATION.md).
 
@@ -61,6 +71,9 @@ The sanitized evidence and the limits of the validation claim are recorded in
 - Assistant responses render through a local, HTML-inert Markdown subset for
   headings, lists, emphasis, and code. User messages and formatter fallback
   remain plain text.
+- Ordered lists continue numerically across blank lines and more deeply
+  indented supporting lists. Paragraphs and other real block boundaries still
+  reset a new ordered sequence.
 - The API returns bounded summaries and turn projections. It does not expose
   native field state, canonical source text, attachment text, renderer
   instructions, credentials, or provider error bodies.
@@ -215,6 +228,20 @@ non-schedule clock examples, safe Markdown structure, HTML-as-text handling,
 browser asset delivery, and JavaScript syntax. No provider request or API key
 was used.
 
+The ordered-list continuation repair expands that suite to 217 tests:
+
+| Stack | Result |
+|---|---|
+| Pydantic 1.10.26, OpenAI 2.47.0, HTTPX 0.27.2 | 217 passed |
+| Pydantic 2.13.4, OpenAI 2.48.0, HTTPX 0.28.1 | 217 passed |
+
+The added contracts reproduce the visible three-assignment structure,
+including blank lines and indented supporting bullets, verify continued starts
+`1`, `2`, and `3` in parser and DOM output, and verify that a separate
+paragraph resets a new list to `1`. The repair does not change provider
+transport, expressive projection, instructions, native acceptance, or the
+version-3 renderer binding. No provider request or API key was used.
+
 The live-provider result validates the real OpenAI transport and application
 path only for the fixed synthetic apparatus recorded in
 `OPENAI_LIVE_VALIDATION.md`. It is not evidence of general response quality.
@@ -245,7 +272,10 @@ path only for the fixed synthetic apparatus recorded in
 - Behavioral quality has not been evaluated across the complete first set.
   Case 1 at `67ac1b9` failed seriously; its version-2 recheck at `bdbf0ac`
   engaged the practical request but exposed constraint-invention and
-  presentation tensions. Cases 2 through 5 remain unevaluated.
+  presentation tensions. Its version-3 verification at `ac0d468` held the
+  temporal and safe-Markdown targets but exposed a bounded ordered-list
+  presentation tension. Case 1, Turn 2 and Cases 2 through 5 remain
+  unevaluated.
 - Expressive material is bounded rather than retrieved semantically. Current
   user turns, canonical sources, attachments, and other field material have
   separate finite projection limits; sufficiently long or dense formations
@@ -253,6 +283,10 @@ path only for the fixed synthetic apparatus recorded in
 - Version-1 and version-2 OpenAI-rendered sessions cannot silently continue
   under the version-3 renderer binding. A fresh external session root is
   required for the next live evaluation.
+- The guarded behavioral-evaluation apparatus also records the exact
+  repository commit. The archived `ac0d468` root cannot be resumed through
+  the launcher under the ordered-list repair commit, even though the response
+  binding itself remains version 3.
 - Earlier interaction logs and route-oriented demo documents predate the
   architecture-native runtime and are historical evidence, not current
   acceptance criteria.
@@ -262,17 +296,21 @@ path only for the fixed synthetic apparatus recorded in
   decision.
 ## Next phase
 
-The next evidence-producing phase is a fresh live rerun of Case 1, Turn 1
-through the native browser interface. It should use the fixed non-sensitive
-prompt, the version-3 apparatus, and a new external session root. The response
-must be read and recorded before authorizing Turn 2.
+The immediate verification step is an offline re-render of the archived
+version-3 Case 1 response through the repaired browser parser. It requires no
+API key or provider request and may not submit a turn.
+
+After the repaired branch is integrated, the next provider-backed phase must
+start Case 1 in a fresh external root because the guarded apparatus binds the
+exact commit. Read the fresh Turn 1 response before deciding whether Turn 2 is
+justified.
 
 The first-set apparatus remains specified in
 [`BEHAVIORAL_EVALUATION.md`](BEHAVIORAL_EVALUATION.md), with a clean
 observation template in
 [`BEHAVIORAL_EVALUATION_LOG.md`](BEHAVIORAL_EVALUATION_LOG.md) and one
 synthetic attachment fixture. The stopped attempt and repair boundary are
-recorded separately in the two Case 1 evidence records.
+recorded separately in the three Case 1 evidence records.
 
 No live provider request was made while implementing or verifying the repair.
 The earlier controlled provider-validation result does not need to be
@@ -289,9 +327,9 @@ The first evaluation set should examine:
 - whether accepted provider text preserves CBRA terminology and ontological
   commitments.
 
-The temporal and formatting repair must not be described as a live pass until
-a fresh response supports that claim. A new provider-transport validation
-request is not part of this phase.
+The version-3 temporal and safe-Markdown targets have one bounded live pass.
+That result must not be generalized to later turns or cases. A new
+provider-transport validation request is not part of this phase.
 
 ## Operator baseline
 
