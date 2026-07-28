@@ -1,9 +1,9 @@
 # CBRA Current Build Status
 
-Status date: 2026-07-26
+Status date: 2026-07-27
 
-Status boundary: `agent/constitutive-phenomenon-redesign`, based on the
-Case 2 paradigmatic falsification and the posthuman architecture diagnostic.
+Status boundary: `agent/canonical-redesign`, based on the Case 2 paradigmatic
+falsification and the audit of the failed `f9bcc45` constitutive scaffolding.
 
 ## Current conclusion
 
@@ -15,54 +15,54 @@ new commitment. The runtime then recorded `accepted_articulation`. That
 lifecycle result established technical completion only; it had no
 ontological validity.
 
-The active canonical corpus now declares execution grammar
-`constitutive-phenomenon-v1` and replaces:
+The first redesign did not repair that failure. The
+`constitutive-phenomenon-v1` slice retained immutable contributions,
+encounters, and apparatus accounts before relation; executed a fixed
+former–movement–renderer–reviewer sequence; represented care, play,
+diffraction, and reconfiguration primarily as strings; and released a
+paraphrased form of the known Case 2 burden topology.
 
-- field as context container;
-- the input-to-output staged loop;
-- neutral noticing;
-- bidirectional influence as intra-action;
-- hidden relevance selection;
-- articulation as a representation;
-- drift reset;
-- acceptance as a lifecycle claim.
+The active canonical corpus now declares execution grammar
+`recursive-reconfiguration-v1` and requires:
+
+- a strict boundary between transport inscriptions and semantic cuts;
+- local relata that cannot become global semantic entities;
+- apparatus descriptions that are revised inside the same relations they
+  help make perceptible;
+- dependency-driven reconfiguration rather than a fixed stage sequence;
+- inspectable structural deltas for care, play, diffraction, shifting, and
+  effect participation;
+- model proposals to enter as apparatus material rather than hidden semantic
+  authority;
+- release constraints to participate during intervention formation;
+- paraphrase-resistant structural probes;
+- nonbinary to reopen every gender category rather than become another value;
+- AI to disturb both neutral-tool and sovereign-subject classifications;
+- only bounded lifecycle facts and encounter-specific claims.
 
 The legacy `entity-stream-v1` runtime is retained as historical engineering
 material. It is not allowed to start with the active corpus. Startup raises
 `RuntimeCorpusIncompatibilityError` before the new canon can be loaded as
 context into the old substrate.
 
-The first executable constitutive slice is in `cbra/constitutive/`. It:
+The `cbra/constitutive/` slice and its eight focused tests remain preserved as
+failed scaffolding evidence. They do not implement the active grammar and
+must not be extended as the next runtime substrate.
 
-- retains ingress as provenance-bearing contributions without assigning
-  `actor`, `event`, `kind`, `role`, or `intent`;
-- requires operative subjects and events to reference traceable agential cuts;
-- requires accountable noticings to expose apparatus participation and
-  consequential absences;
-- makes care, play, consequence, capacity, and bounded follow-up part of
-  release review;
-- stops release when a humanist reassertion remains unresolved;
-- uses `intervention_ready_for_response`, never `accepted_articulation`;
-- reinserts articulation and observed effects as participation in a newly
-  formed encounter.
+No operative implementation of `recursive-reconfiguration-v1` exists. The
+current work is canonical redesign only. It changes the active manifest,
+constraint documents, bounded documentation-conformance tests, and runtime
+compatibility boundary. It does not activate a model, renderer, API, browser
+path, persistence model, or live evaluation.
 
-This is a contract and falsification boundary, not yet an activated
-replacement application. The general semantic phenomenon former, movement
-former, renderer integration, durable constitutive session model, API
-projection, and live UX remain unbuilt.
+Nine focused active-canon and compatibility-boundary tests pass. A
+dependency-free regression run passes 103 tests, including historical runtime
+tests. Those results establish bounded technical conformance only. The
+FastAPI-dependent canonical corpus suite cannot import in this workspace
+because FastAPI is unavailable. Python compilation and diff checks pass. No
+provider request was made.
 
-Eight focused offline tests currently exercise the new boundary. Passing them
-shows only that the recorded contracts behave as stated. It does not certify
-the slice or architecture as posthuman.
-
-The dependency-free compatibility run completed 114 tests successfully,
-including the eight constitutive tests. The full FastAPI/HTTPX/OpenAI suite
-was not runnable in this workspace because those optional test dependencies
-are not installed here. No provider request was made.
-
-See
-[`CONSTITUTIVE_PHENOMENON_REDESIGN.md`](CONSTITUTIVE_PHENOMENON_REDESIGN.md)
-and
+See [`CANONICAL_REDESIGN.md`](CANONICAL_REDESIGN.md) and
 [`BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md`](BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md).
 
 ## Historical engineering record
@@ -152,7 +152,7 @@ The sanitized evidence and the limits of the validation claim are recorded in
 ### Historical canonical corpus bootstrap
 
 - `cbra/corpus.py` loads `corpus/CBRA_Corpus_Index.md` and the five active
-  constitutive sources named by that manifest.
+  recursive-reconfiguration constraints named by that manifest.
 - Startup fails closed on missing, malformed, unsafe, duplicated, oversized,
   or unmapped corpus material.
 - A process holds one immutable, content-addressed corpus snapshot.
@@ -165,7 +165,7 @@ The sanitized evidence and the limits of the validation claim are recorded in
   cycle execution, articulation, reintegration, session ledger, and lossless
   persistence contracts.
 - Its stream/edge primitives, scalar operators, and response boundary are
-  incompatible with the active constitutive canon.
+  incompatible with the active recursive-reconfiguration canon.
 - Articulation is provisional. A candidate is formed from bounded expressive
   material, evaluated by the native runtime, and either accepted or returned
   to reintegration.

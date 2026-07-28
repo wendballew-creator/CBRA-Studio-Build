@@ -3,6 +3,23 @@
 Date: 2026-07-26
 Branch: `agent/constitutive-phenomenon-redesign`
 
+## Superseded and Falsified
+
+This document records the claims made by the failed
+`constitutive-phenomenon-v1` scaffolding experiment at `f9bcc45`. A subsequent
+line-by-line and adversarial audit falsified its central claims:
+
+- the runtime remained a fixed former–movement–renderer–reviewer sequence;
+- immutable contributions and encounters preceded relations;
+- care, play, diffraction, and reconfiguration were satisfiable as strings;
+- a paraphrased Case 2 accountability topology passed release review;
+- the effect-reinsertion fixture reported reconfiguration without changing
+  the operative formation.
+
+Nothing below is an active architecture claim. The document and
+`cbra/constitutive/` remain as trace evidence. The active replacement is
+recorded in [`CANONICAL_REDESIGN.md`](CANONICAL_REDESIGN.md).
+
 ## Outcome
 
 The canonical design now relinquishes the representational execution grammar
@@ -18,7 +35,7 @@ Contributions retain provenance before the apparatus stabilizes subjects,
 events, conditions, consequences, or response focus through explicit,
 revisable agential cuts.
 
-## Active canonical artifacts
+## Artifacts claimed active at that commit
 
 | Artifact | Operative change |
 |---|---|
@@ -28,8 +45,8 @@ revisable agential cuts.
 | `Drift_Constraints_v2.md` | Treats human-centered logic as constitutive disturbance capable of changing apparatus and cuts |
 | `CBRA_Paradigmatic_Invariants_v1.md` | Provides falsification boundaries without paradigmatic certification |
 
-The manifest declares `constitutive-phenomenon-v1`. The older corpus files
-remain in the repository as history but are no longer active.
+At that commit, the manifest declared `constitutive-phenomenon-v1`. Those
+files are now historical and inactive.
 
 ## Executable incompatibility boundary
 
@@ -37,7 +54,7 @@ remain in the repository as history but are no longer active.
 grammar. Every canonical contribution carries that grammar in provenance.
 
 `NativeApplicationService` implements the prior `entity-stream-v1` grammar.
-If it receives the active constitutive corpus, it raises
+If it receives that then-active constitutive corpus, it raises
 `RuntimeCorpusIncompatibilityError` before creating a session or representing
 the canon as document streams.
 

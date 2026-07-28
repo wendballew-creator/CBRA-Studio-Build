@@ -1,7 +1,7 @@
 # CBRA Constitutive Disturbance Constraints v2
 Creative Becoming Reasoning Architecture
 Version: 2.0
-Status: Canonical Drift and Reconfiguration Contract
+Status: Historical failed proposal; inactive
 
 ---
 

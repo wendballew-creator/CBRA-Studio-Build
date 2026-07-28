@@ -3,23 +3,34 @@ Building a posthuman reasoning LLM architechure for personal use and then public
 
 ## Current state
 
-The prior operative build is stopped at a paradigmatic boundary.
+The prior operative build and the first constitutive scaffolding experiment
+are stopped at a paradigmatic boundary.
 
 Case 2 showed that it still formed a bounded individual, personal failure,
 contextual explanation, accountability demand, and new commitment, then
-recorded the result as `accepted_articulation`. The active corpus has now been
-redesigned around apparatus-enacted phenomena and traceable provisional cuts.
-It declares `constitutive-phenomenon-v1`.
+recorded the result as `accepted_articulation`.
+
+The first attempted redesign at `f9bcc45` also failed. It renamed the first
+objects and documented constitutive intent, but retained a fixed
+`Encounter → PhenomenonFormer → MovementFormer → Renderer → reviewer`
+sequence. Its tests could be satisfied by populated strings, and a
+paraphrased version of the Case 2 accountability topology passed release.
+
+The active corpus now declares `recursive-reconfiguration-v1`. It separates
+stable transport inscriptions from local semantic cuts, scopes relata to the
+cuts that enact them, requires structural reconfiguration deltas, and treats
+public articulation as a cut inside the continuing configuration. See
+[`CANONICAL_REDESIGN.md`](CANONICAL_REDESIGN.md).
 
 The retained entity/stream application implements `entity-stream-v1` and now
 fails closed when paired with the active corpus. It cannot silently treat the
 new canon as contextual material while continuing the old execution grammar.
 
-`cbra/constitutive/` contains the first executable replacement boundary and
-focused overwhelm/deadline falsification probe. It is not yet a complete
-application or evidence of a completed paradigm shift. See
-[`BUILD_STATUS.md`](BUILD_STATUS.md) and
-[`CONSTITUTIVE_PHENOMENON_REDESIGN.md`](CONSTITUTIVE_PHENOMENON_REDESIGN.md).
+`cbra/constitutive/` and
+[`CONSTITUTIVE_PHENOMENON_REDESIGN.md`](CONSTITUTIVE_PHENOMENON_REDESIGN.md)
+are retained failed-experiment evidence. They do not implement the active
+grammar. No operative runtime currently implements
+`recursive-reconfiguration-v1`. See [`BUILD_STATUS.md`](BUILD_STATUS.md).
 
 The material below records the prior application's engineering and validation
 history. Its activation instructions do not apply to the active corpus.

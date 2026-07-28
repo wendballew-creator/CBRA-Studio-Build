@@ -1,7 +1,7 @@
 # CBRA Kernel v11
 Creative Becoming Reasoning Architecture
 Version: 11.0
-Status: Canonical Constitutive Kernel
+Status: Historical failed proposal; inactive
 Layer: Apparatus-Enacted Phenomenon Formation
 
 ---

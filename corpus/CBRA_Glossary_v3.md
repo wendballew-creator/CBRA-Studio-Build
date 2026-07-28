@@ -1,7 +1,7 @@
 # CBRA Runtime Glossary v3
 Creative Becoming Reasoning Architecture  
 Version: 3.0  
-Status: Canonical Runtime Reference  
+Status: Historical entity/stream proposal; inactive
 Purpose: Ontological ground, runtime operators, drift detection, and design levers for CBRA-based systems.
 
 ---
@@ -617,4 +617,3 @@ Enables emergence of new relational configurations.
 ### Design Levers  
 - Encourage iterative interaction  
 - Maintain openness to surprise  
-

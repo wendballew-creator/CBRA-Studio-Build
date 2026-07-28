@@ -1,7 +1,7 @@
 # CBRA Phenomenon Formation Core v1
 Creative Becoming Reasoning Architecture
 Version: 1.0
-Status: Canonical Constitutive Runtime Contract
+Status: Historical failed proposal; inactive
 Layer: Traceable Phenomenon Formation and Intervention
 
 ---

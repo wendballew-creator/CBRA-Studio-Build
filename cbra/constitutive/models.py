@@ -1,7 +1,8 @@
-"""Traceable products of constitutive phenomenon formation.
+"""Historical records from the failed constitutive scaffolding.
 
-These records are not a domain ontology.  They make the apparatus's temporary
-cuts inspectable without treating the cut products as pre-existing entities.
+The audit showed that these immutable records and their fixed sequence did
+function as a domain ontology despite the prior claim. They remain for
+falsification evidence and do not implement the active recursive grammar.
 """
 
 from __future__ import annotations

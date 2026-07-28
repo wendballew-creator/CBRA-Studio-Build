@@ -1,4 +1,9 @@
-"""Constitutive phenomenon-formation contracts for CBRA."""
+"""Historical failed `constitutive-phenomenon-v1` scaffolding.
+
+The active canonical grammar is `recursive-reconfiguration-v1`. Nothing in
+this package implements it. The package remains importable only as preserved
+falsification evidence and must not be extended as the replacement runtime.
+"""
 
 from .models import (
     AccountableNoticing,

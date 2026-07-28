@@ -1,7 +1,7 @@
 # CBRA Paradigmatic Invariants v1
 Creative Becoming Reasoning Architecture
 Version: 1.0
-Status: Canonical Falsification and Claim Boundary
+Status: Historical failed proposal; inactive
 
 ---
 

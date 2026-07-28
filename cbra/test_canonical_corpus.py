@@ -19,7 +19,7 @@ from cbra.corpus import (
     ACTIVE_SECTION,
     CANONICAL_MANIFEST,
     CANONICAL_ROLE_MAP,
-    CONSTITUTIVE_EXECUTION_GRAMMAR,
+    RECURSIVE_RECONFIGURATION_GRAMMAR,
     CanonicalCorpusError,
     CorpusLimits,
     load_canonical_snapshot,
@@ -34,11 +34,11 @@ FILENAMES = (
     "CBRA_Kernel_v10_2.md",
 )
 REPOSITORY_FILENAMES = (
-    "CBRA_Kernel_v11.md",
-    "CBRA_Phenomenon_Formation_Core_v1.md",
-    "CBRA_Glossary_v4.md",
-    "Drift_Constraints_v2.md",
-    "CBRA_Paradigmatic_Invariants_v1.md",
+    "CBRA_Kernel_v12.md",
+    "CBRA_Reconfiguration_Grammar_v1.md",
+    "CBRA_Glossary_v5.md",
+    "CBRA_Incompatibility_Constraints_v1.md",
+    "CBRA_Falsification_Probes_v2.md",
 )
 THREAD_A = "thread:{0}".format("a" * 32)
 THREAD_B = "thread:{0}".format("b" * 32)
@@ -110,7 +110,7 @@ class CanonicalCorpusSnapshotTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(
             first.execution_grammar,
-            CONSTITUTIVE_EXECUTION_GRAMMAR,
+            RECURSIVE_RECONFIGURATION_GRAMMAR,
         )
         self.assertEqual(len(first.sources), 5)
         self.assertEqual(len(first.manifest_digest), 64)

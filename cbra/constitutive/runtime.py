@@ -1,4 +1,8 @@
-"""Fail-closed constitutive orchestration and bounded release review."""
+"""Historical failed constitutive orchestration and release review.
+
+This fixed former-movement-renderer-reviewer sequence does not implement the
+active `recursive-reconfiguration-v1` grammar.
+"""
 
 from __future__ import annotations
 

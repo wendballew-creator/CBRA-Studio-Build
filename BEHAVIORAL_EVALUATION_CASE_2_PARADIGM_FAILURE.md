@@ -73,5 +73,8 @@ This is a falsification probe, not a fixed response template.
   not Creative Becoming.
 - Cases 3 through 5 are stopped.
 - The old runtime cannot load the redesigned active canon.
-- No live provider evaluation resumes until a constitutive application path
-  exists and passes offline falsification probes.
+- The first `constitutive-phenomenon-v1` scaffolding also failed to repair
+  this grammar and remains historical evidence only.
+- The active `recursive-reconfiguration-v1` canon has no operative runtime.
+- No live provider evaluation resumes until a recursive-reconfiguration
+  application path exists and passes offline falsification probes.

@@ -13,7 +13,7 @@ formation and the acceptance apparatus both retained the human-centered
 grammar the project was built to replace.
 
 This was not a wording defect and is not a renderer repair ticket. The active
-corpus now uses `constitutive-phenomenon-v1`; the application evaluated below
+corpus now uses `recursive-reconfiguration-v1`; the application evaluated below
 implements the incompatible `entity-stream-v1` grammar and is blocked from
 loading that corpus.
 

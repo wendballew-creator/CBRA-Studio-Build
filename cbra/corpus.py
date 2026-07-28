@@ -17,7 +17,8 @@ CANONICAL_MANIFEST = "CBRA_Corpus_Index.md"
 ACTIVE_SECTION = "## Canonical Files (Active)"
 EXECUTION_GRAMMAR_PREFIX = "Execution grammar:"
 LEGACY_EXECUTION_GRAMMAR = "entity-stream-v1"
-CONSTITUTIVE_EXECUTION_GRAMMAR = "constitutive-phenomenon-v1"
+HISTORICAL_CONSTITUTIVE_EXECUTION_GRAMMAR = "constitutive-phenomenon-v1"
+RECURSIVE_RECONFIGURATION_GRAMMAR = "recursive-reconfiguration-v1"
 DEFAULT_MAX_FILES = 32
 DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024
 DEFAULT_MAX_TOTAL_BYTES = 8 * 1024 * 1024
@@ -25,6 +26,11 @@ CANONICAL_PARTICIPATION = 0.74
 CANONICAL_PERSISTENCE = 0.90
 
 CANONICAL_ROLE_MAP = {
+    "CBRA_Kernel_v12.md": "recursive_ground",
+    "CBRA_Reconfiguration_Grammar_v1.md": "reconfiguration_contract",
+    "CBRA_Glossary_v5.md": "relational_reference",
+    "CBRA_Incompatibility_Constraints_v1.md": "incompatibility_contract",
+    "CBRA_Falsification_Probes_v2.md": "falsification_boundary",
     "CBRA_Kernel_v11.md": "constitutive_ground",
     "CBRA_Phenomenon_Formation_Core_v1.md": "formation_contract",
     "CBRA_Glossary_v4.md": "constitutive_reference",

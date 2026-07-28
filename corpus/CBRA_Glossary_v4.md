@@ -1,7 +1,7 @@
 # CBRA Constitutive Glossary v4
 Creative Becoming Reasoning Architecture
 Version: 4.0
-Status: Canonical Ontological and Runtime Reference
+Status: Historical failed proposal; inactive
 
 ---
 
