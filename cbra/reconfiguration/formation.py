@@ -89,6 +89,9 @@ class SituatedFormationBoundary:
                 raise InvalidReconfiguration(
                     "apparatus participation requires a condition and transport basis"
                 )
+            self._require_unique_refs(
+                participation.trace_ids, "apparatus transport basis"
+            )
             if set(participation.trace_ids).difference(transport_ids):
                 raise InvalidReconfiguration(
                     "apparatus participation references unknown transport"
@@ -116,6 +119,11 @@ class SituatedFormationBoundary:
                 raise InvalidReconfiguration(
                     "a noticing cannot be detached from apparatus participation"
                 )
+            self._require_unique_refs(
+                noticing.apparatus_participation_ids,
+                "noticing apparatus participation",
+            )
+            self._require_unique_refs(noticing.evidence, "noticing evidence")
             unknown = set(noticing.apparatus_participation_ids).difference(participations)
             if unknown:
                 raise InvalidReconfiguration(
@@ -168,10 +176,34 @@ class SituatedFormationBoundary:
                 "every local position, and only a local position, requires grounding"
             )
         for grounding in groundings.values():
-            if not grounding.noticing_ids or set(grounding.noticing_ids).difference(noticings):
+            if (
+                not grounding.noticing_ids
+                or len(grounding.noticing_ids) != len(set(grounding.noticing_ids))
+                or set(grounding.noticing_ids).difference(noticings)
+            ):
                 raise InvalidReconfiguration(
-                    "position grounding must reference recorded situated noticings"
+                    "position grounding must reference unique recorded situated noticings"
                 )
+
+        grounded_noticing_ids = {
+            noticing_id
+            for grounding in groundings.values()
+            for noticing_id in grounding.noticing_ids
+        }
+        if grounded_noticing_ids != set(noticings):
+            raise InvalidReconfiguration(
+                "every situated noticing must ground an enacted local position"
+            )
+
+        participating_apparatus_ids = {
+            participation_id
+            for noticing in noticings.values()
+            for participation_id in noticing.apparatus_participation_ids
+        }
+        if participating_apparatus_ids != set(participations):
+            raise InvalidReconfiguration(
+                "every apparatus participation must participate in a grounded noticing"
+            )
 
     @staticmethod
     def _unique_by_id(items: Sequence[object], attribute: str, label: str):
@@ -182,3 +214,8 @@ class SituatedFormationBoundary:
                 raise InvalidReconfiguration(f"{label} ids must be nonempty and unique")
             indexed[identifier] = item
         return indexed
+
+    @staticmethod
+    def _require_unique_refs(items: Sequence[object], label: str) -> None:
+        if len(items) != len(set(items)):
+            raise InvalidReconfiguration(f"{label} references must be unique")

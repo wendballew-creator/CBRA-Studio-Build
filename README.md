@@ -34,11 +34,15 @@ reconfiguration, effect return, feedback-grounded revision, and bounded
 continuity without ranking, confidence, or selection. Its first situated
 formation boundary now grounds proposed local positions in exact arrival
 evidence and explicit apparatus participation, exclusions, and revision
-conditions. It does not yet generate those proposals from language or other
-media, produce public interventions, persist the new grammar, or serve an
+conditions. Its closed grounding graph rejects ornamental noticings, unused
+apparatus accounts, and duplicated support links without treating a greater
+number of grounded noticings as authority. It does not yet generate those
+proposals from language or other media, produce public interventions, persist
+the new grammar, or serve an
 API/browser path. See
-[`RECURSIVE_RECONFIGURATION_CHECKPOINT.md`](RECURSIVE_RECONFIGURATION_CHECKPOINT.md)
-and [`SITUATED_FORMATION_EVIDENCE_SLICE.md`](SITUATED_FORMATION_EVIDENCE_SLICE.md).
+[`RECURSIVE_RECONFIGURATION_CHECKPOINT.md`](RECURSIVE_RECONFIGURATION_CHECKPOINT.md),
+[`SITUATED_FORMATION_EVIDENCE_SLICE.md`](SITUATED_FORMATION_EVIDENCE_SLICE.md),
+and [`SITUATED_FORMATION_GROUNDING_GRAPH_SLICE.md`](SITUATED_FORMATION_GROUNDING_GRAPH_SLICE.md).
 
 `cbra/constitutive/` and
 [`CONSTITUTIVE_PHENOMENON_REDESIGN.md`](CONSTITUTIVE_PHENOMENON_REDESIGN.md)

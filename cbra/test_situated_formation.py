@@ -96,6 +96,86 @@ class SituatedFormationTests(unittest.TestCase):
             replace(proposal, cut=replace(proposal.cut, revision_conditions=())),
         )
 
+    def test_rejects_ornamental_noticing_atomically(self):
+        substrate, proposal = fixture()
+        ornamental = replace(proposal.noticings[0], noticing_id="noticing-ornamental")
+        self.assert_atomic_rejection(
+            substrate,
+            replace(proposal, noticings=proposal.noticings + (ornamental,)),
+        )
+
+    def test_rejects_ornamental_apparatus_atomically(self):
+        substrate, proposal = fixture()
+        ornamental = replace(
+            proposal.apparatus_participations[0],
+            participation_id="apparatus-ornamental",
+        )
+        self.assert_atomic_rejection(
+            substrate,
+            replace(
+                proposal,
+                apparatus_participations=proposal.apparatus_participations
+                + (ornamental,),
+            ),
+        )
+
+    def test_rejects_duplicate_grounding_link_atomically(self):
+        substrate, proposal = fixture()
+        duplicated = replace(
+            proposal.position_groundings[0],
+            noticing_ids=("noticing-1", "noticing-1"),
+        )
+        self.assert_atomic_rejection(
+            substrate,
+            replace(proposal, position_groundings=(duplicated,)),
+        )
+
+    def test_rejects_duplicate_evidence_link_atomically(self):
+        substrate, proposal = fixture()
+        duplicated = replace(
+            proposal.noticings[0],
+            evidence=(proposal.noticings[0].evidence[0],) * 2,
+        )
+        self.assert_atomic_rejection(
+            substrate,
+            replace(proposal, noticings=(duplicated,)),
+        )
+
+    def test_multiple_grounded_noticings_confer_no_order_authority(self):
+        first_substrate, first = fixture()
+        second_noticing = replace(
+            first.noticings[0],
+            noticing_id="noticing-2",
+            became_perceptible="wording remains available under another local noticing",
+        )
+        grounding = replace(
+            first.position_groundings[0],
+            noticing_ids=("noticing-1", "noticing-2"),
+        )
+        first = replace(
+            first,
+            noticings=(first.noticings[0], second_noticing),
+            position_groundings=(grounding,),
+        )
+
+        second_substrate, second = fixture()
+        second = replace(
+            second,
+            noticings=(second_noticing, second.noticings[0]),
+            position_groundings=(
+                replace(grounding, noticing_ids=("noticing-2", "noticing-1")),
+            ),
+        )
+
+        first_delta = SituatedFormationBoundary(first_substrate).enact(
+            first, delta_id="formation-1"
+        )
+        second_delta = SituatedFormationBoundary(second_substrate).enact(
+            second, delta_id="formation-1"
+        )
+        self.assertEqual(first_delta, second_delta)
+        self.assertEqual(first_substrate.state, second_substrate.state)
+
     def assert_atomic_rejection(self, substrate, proposal):
         with self.assertRaises(InvalidReconfiguration):
             SituatedFormationBoundary(substrate).enact(
