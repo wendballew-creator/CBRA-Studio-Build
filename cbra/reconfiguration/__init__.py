@@ -33,6 +33,13 @@ from .alternatives import (
     TracedAlternative,
     retain_competing_alternatives,
 )
+from .diffraction import (
+    ArrangementDependency,
+    ConsequentialDifference,
+    DiffractiveArrangementField,
+    DiffractiveDisturbanceTrace,
+    disturb_through_arrangement_difference,
+)
 from .substrate import (
     InvalidReconfiguration,
     ReconfigurationSubstrate,
@@ -65,4 +72,9 @@ __all__ = [
     "ProhibitedChange",
     "TracedAlternative",
     "retain_competing_alternatives",
+    "ArrangementDependency",
+    "ConsequentialDifference",
+    "DiffractiveArrangementField",
+    "DiffractiveDisturbanceTrace",
+    "disturb_through_arrangement_difference",
 ]
