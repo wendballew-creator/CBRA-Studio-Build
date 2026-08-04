@@ -45,6 +45,7 @@ class RecursivelyRevisedArrangementField:
     revisions: Tuple[ArrangementRevisionTrace, ...]
     reentries: Tuple["RecursiveDiffractiveReentryTrace", ...] = ()
     oscillation_revisions: Tuple["OscillationFieldRevisionTrace", ...] = ()
+    feedback: Tuple["FormationFeedbackTrace", ...] = ()
 
 
 @dataclass(frozen=True)
@@ -93,10 +94,12 @@ def revise_reopened_arrangement(
     existing_revisions: Tuple[ArrangementRevisionTrace, ...] = ()
     existing_reentries: Tuple[RecursiveDiffractiveReentryTrace, ...] = ()
     existing_oscillation_revisions: Tuple[OscillationFieldRevisionTrace, ...] = ()
+    existing_feedback: Tuple["FormationFeedbackTrace", ...] = ()
     if isinstance(field, RecursivelyRevisedArrangementField):
         existing_revisions = field.revisions
         existing_reentries = field.reentries
         existing_oscillation_revisions = field.oscillation_revisions
+        existing_feedback = field.feedback
         field = field.field
 
     disturbance = next(
@@ -209,6 +212,7 @@ def revise_reopened_arrangement(
         existing_revisions + (revision,),
         existing_reentries,
         existing_oscillation_revisions,
+        existing_feedback,
     )
 
 
@@ -384,6 +388,7 @@ def return_oscillation_counter_cut_to_field(
         revisions=field.revisions,
         reentries=field.reentries,
         oscillation_revisions=field.oscillation_revisions + (trace,),
+        feedback=field.feedback,
     )
 
 
@@ -481,6 +486,7 @@ def reenter_recomputed_arrangement_difference(
         revisions=field.revisions,
         reentries=field.reentries + (reentry,),
         oscillation_revisions=field.oscillation_revisions,
+        feedback=field.feedback,
     )
 
 

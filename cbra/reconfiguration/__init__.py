@@ -61,6 +61,12 @@ from .oscillation import (
     OscillationCounterCutTrace,
     counter_cut_from_oscillation,
 )
+from .feedback import (
+    FeedbackDisposition,
+    FormationFeedbackTrace,
+    ObservedDimensionEffect,
+    return_effects_as_feedback,
+)
 from .substrate import (
     InvalidReconfiguration,
     ReconfigurationSubstrate,
@@ -113,4 +119,8 @@ __all__ = [
     "audit_structural_responsiveness",
     "OscillationCounterCutTrace",
     "counter_cut_from_oscillation",
+    "FeedbackDisposition",
+    "FormationFeedbackTrace",
+    "ObservedDimensionEffect",
+    "return_effects_as_feedback",
 ]

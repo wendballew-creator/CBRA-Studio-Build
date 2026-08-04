@@ -20,6 +20,9 @@ from cbra.reconfiguration import (
     TransportTrace,
     audit_structural_responsiveness,
     counter_cut_from_oscillation,
+    FeedbackDisposition,
+    ObservedDimensionEffect,
+    return_effects_as_feedback,
     disturb_through_arrangement_difference,
     reenter_recomputed_arrangement_difference,
     retain_competing_alternatives,
@@ -1453,6 +1456,181 @@ class OscillationFieldReturnTests(unittest.TestCase):
             "protected", "final", "settled", "iteration", "depth", "recency",
         }))
         self.assertFalse(hasattr(returned, "choose"))
+
+
+class PostReturnFeedbackTests(unittest.TestCase):
+    setUp = DiffractiveArrangementTests.setUp
+    difference = DiffractiveArrangementTests.difference
+    disturb = DiffractiveArrangementTests.disturb
+    counter_cut = CounterCutRevisionTests.counter_cut
+    revised_arrangement = CounterCutRevisionTests.revised_arrangement
+    revise = CounterCutRevisionTests.revise
+    witness = StructuralResponsivenessTests.witness
+    proposed_counter_cut = OscillationCounterCutTests.proposed_counter_cut
+    prepared = OscillationFieldReturnTests.prepared
+    recomputed = OscillationFieldReturnTests.recomputed
+    return_to_field = OscillationFieldReturnTests.return_to_field
+    def returned_with_observation(self):
+        returned = self.return_to_field()
+        self.substrate.record_transport(
+            transport("transport:post-return-effect", "Observed effects after field return.")
+        )
+        return returned
+
+    @staticmethod
+    def observed(trace, *, burden_maximum=None):
+        values = []
+        for effect in trace.effects:
+            values.append(ObservedDimensionEffect(
+                dimension=effect.dimension,
+                total=effect.total_after,
+                maximum_local_load=(
+                    burden_maximum
+                    if effect.dimension == StructuralDimension.BURDEN
+                    and burden_maximum is not None
+                    else effect.maximum_after
+                ),
+                occupied_positions=effect.occupied_positions_after,
+            ))
+        return tuple(values)
+
+    def feedback(self, returned, **overrides):
+        trace = returned.field.competing.alternatives[0]
+        values = dict(
+            field=returned,
+            substrate=self.substrate,
+            observation_trace_id="transport:post-return-effect",
+            alternative_id="cut:shared-after-oscillation",
+            observed_effects=self.observed(trace),
+            disposition=FeedbackDisposition.CONFIRMS,
+        )
+        values.update(overrides)
+        return return_effects_as_feedback(**values)
+
+    def test_corresponding_effects_confirm_without_finalizing_or_mutating(self):
+        returned = self.returned_with_observation()
+        before = self.substrate.state
+        updated = self.feedback(returned)
+        result = updated.feedback[-1]
+        self.assertEqual(FeedbackDisposition.CONFIRMS, result.disposition)
+        self.assertEqual((), result.differing_dimensions)
+        self.assertIsNone(result.disturbance_delta)
+        self.assertEqual(before, self.substrate.state)
+        self.assertIn("cut:oscillation-counter", self.substrate.state.active_cut_ids)
+
+    def test_confirmation_cannot_carry_mutation_or_protection_authority(self):
+        returned = self.returned_with_observation()
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "cannot mutate"):
+            self.feedback(
+                returned,
+                affected_cut_id="cut:oscillation-counter",
+                delta_id="delta:confirmation-finality",
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_difference_can_complicate_one_explicit_dependent_formation(self):
+        returned = self.returned_with_observation()
+        self.substrate.enact_cut(
+            dependent_cut(
+                "cut:feedback-dependent",
+                "cut:oscillation-counter",
+                "post-return consequence uptake",
+            ),
+            delta_id="delta:feedback-dependent",
+        )
+        updated = self.feedback(
+            returned,
+            observed_effects=self.observed(
+                returned.field.competing.alternatives[0], burden_maximum=3.0
+            ),
+            disposition=FeedbackDisposition.COMPLICATES,
+            affected_cut_id="cut:feedback-dependent",
+            delta_id="delta:feedback-complication",
+        )
+        result = updated.feedback[-1]
+        self.assertEqual((StructuralDimension.BURDEN,), result.differing_dimensions)
+        self.assertNotIn("cut:feedback-dependent", self.substrate.state.active_cut_ids)
+        self.assertIn("cut:oscillation-counter", self.substrate.state.active_cut_ids)
+
+    def test_difference_can_invalidate_enabling_formation_without_becoming_failure(self):
+        returned = self.returned_with_observation()
+        updated = self.feedback(
+            returned,
+            observed_effects=self.observed(
+                returned.field.competing.alternatives[0], burden_maximum=3.0
+            ),
+            disposition=FeedbackDisposition.INVALIDATES,
+            affected_cut_id="cut:oscillation-counter",
+            delta_id="delta:feedback-invalidation",
+        )
+        result = updated.feedback[-1]
+        self.assertEqual(FeedbackDisposition.INVALIDATES, result.disposition)
+        self.assertNotIn("cut:oscillation-counter", self.substrate.state.active_cut_ids)
+        self.assertFalse(hasattr(result, "failure"))
+
+    def test_mismatch_does_not_automatically_choose_its_scope(self):
+        returned = self.returned_with_observation()
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "explicit affected"):
+            self.feedback(
+                returned,
+                observed_effects=self.observed(
+                    returned.field.competing.alternatives[0], burden_maximum=3.0
+                ),
+                disposition=FeedbackDisposition.INVALIDATES,
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_forged_or_stale_field_recomputation_has_no_feedback_authority(self):
+        returned = self.returned_with_observation()
+        affected = returned.oscillation_revisions[0].affected[0]
+        forged = replace(
+            returned,
+            oscillation_revisions=(replace(
+                returned.oscillation_revisions[0],
+                affected=(replace(affected, prior_alternative_id="cut:forged"),),
+            ),),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "proposal lineage"):
+            self.feedback(forged)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_feedback_record_contains_no_finality_ranking_or_failure_authority(self):
+        returned = self.returned_with_observation()
+        result = self.feedback(returned).feedback[-1]
+        names = {item.name for item in fields(result)}
+        self.assertTrue(names.isdisjoint({
+            "score", "rank", "selected", "preferred", "winner", "final",
+            "settled", "success", "failure", "iteration", "confidence",
+        }))
+
+    def test_same_observation_cannot_manufacture_repeated_feedback(self):
+        returned = self.returned_with_observation()
+        updated = self.feedback(returned)
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "repeated feedback"):
+            self.feedback(updated)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_feedback_history_survives_later_recursive_reentry(self):
+        returned = self.returned_with_observation()
+        updated = self.feedback(returned)
+        reentered = reenter_recomputed_arrangement_difference(
+            field=updated,
+            substrate=self.substrate,
+            difference=ConsequentialDifference(
+                witness_alternative_id="cut:shared-after-oscillation",
+                contrasted_alternative_id="cut:distributed",
+                dimension=StructuralDimension.BURDEN,
+                measure=EffectMeasure.MAXIMUM_LOCAL_LOAD,
+            ),
+            enabling_cut_id="cut:enable-distributed",
+            delta_id="delta:feedback-preserving-reentry",
+            triggering_trace_ids=("transport:disclosure",),
+        )
+        self.assertEqual(updated.feedback, reentered.feedback)
 
 
 class CounterCutRevisionAdditionalValidationTests(unittest.TestCase):
