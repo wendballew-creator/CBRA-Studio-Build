@@ -281,6 +281,12 @@ def revise_field_from_feedback(
             "feedback disturbance must retain its observation provenance"
         )
 
+    _validate_feedback_target_origin(
+        field=field,
+        substrate=substrate,
+        feedback=feedback,
+    )
+
     current = tuple(field.field.competing.alternatives)
     prior_index = next(
         (
@@ -444,6 +450,39 @@ def _validate_feedback_recomputation_lineage(
     ):
         raise InvalidReconfiguration(
             "feedback recomputation requires exact disturbance lineage"
+        )
+
+
+def _validate_feedback_target_origin(
+    *,
+    field: RecursivelyRevisedArrangementField,
+    substrate: ReconfigurationSubstrate,
+    feedback: FormationFeedbackTrace,
+) -> None:
+    """Verify current recomputation provenance without consulting its depth."""
+
+    oscillation_matches = tuple(
+        (revision, affected)
+        for revision in field.oscillation_revisions
+        for affected in revision.affected
+        if affected.recomputed_alternative_id == feedback.alternative_id
+        and affected.recomputed_trace == feedback.expected_trace
+    )
+    feedback_matches = tuple(
+        revision
+        for revision in field.feedback_revisions
+        if revision.recomputed_alternative_id == feedback.alternative_id
+        and revision.recomputed_trace == feedback.expected_trace
+    )
+    if len(oscillation_matches) + len(feedback_matches) != 1:
+        raise InvalidReconfiguration(
+            "feedback revision requires one exact originating recomputation"
+        )
+    if feedback_matches:
+        _validate_feedback_recomputation_lineage(
+            field=field,
+            substrate=substrate,
+            revision=feedback_matches[0],
         )
 
 

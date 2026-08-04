@@ -2159,6 +2159,246 @@ class FeedbackRecomputedProjectionTests(unittest.TestCase):
         }))
 
 
+class RecursiveFeedbackGroundedRevisionTests(unittest.TestCase):
+    """Later effects may revise locally; feedback depth supplies no authority."""
+
+    setUp = DiffractiveArrangementTests.setUp
+    difference = DiffractiveArrangementTests.difference
+    disturb = DiffractiveArrangementTests.disturb
+    counter_cut = CounterCutRevisionTests.counter_cut
+    revised_arrangement = CounterCutRevisionTests.revised_arrangement
+    revise = CounterCutRevisionTests.revise
+    witness = StructuralResponsivenessTests.witness
+    proposed_counter_cut = OscillationCounterCutTests.proposed_counter_cut
+    prepared = OscillationFieldReturnTests.prepared
+    recomputed = OscillationFieldReturnTests.recomputed
+    return_to_field = OscillationFieldReturnTests.return_to_field
+    observed = staticmethod(PostReturnFeedbackTests.observed)
+    feedback_counter_cut = FeedbackGroundedFieldRevisionTests.feedback_counter_cut
+    feedback_recomputed = FeedbackGroundedFieldRevisionTests.feedback_recomputed
+    with_feedback = FeedbackGroundedFieldRevisionTests.with_feedback
+    apply_revision = FeedbackGroundedFieldRevisionTests.apply_revision
+
+    def later_counter_cut(self, reopened_cut_id, **overrides):
+        cut_id = overrides.pop("cut_id", "cut:later-feedback-counter")
+        values = dict(
+            cut_id=cut_id,
+            transport_basis=("transport:later-feedback",),
+            dependency_ids=(self.source.cut_id,),
+            lineage_ids=(reopened_cut_id,),
+            positions=(
+                CutPosition("later-observation", "later observed effect"),
+                CutPosition("local-uptake", "locally revised uptake"),
+            ),
+            relations=(Relation(
+                "later-effect-revises-uptake",
+                local(cut_id, "later-observation"),
+                local(cut_id, "local-uptake"),
+            ),),
+        )
+        values.update(overrides)
+        return CutEnactment(**values)
+
+    def later_recomputed(self, **overrides):
+        prior = self.feedback_recomputed()
+        cut_id = overrides.pop("cut_id", "cut:shared-after-later-feedback")
+        values = dict(
+            cut_id=cut_id,
+            transport_basis=("transport:later-feedback",),
+            dependency_ids=("cut:later-feedback-counter",),
+            lineage_ids=("cut:shared-after-feedback",),
+            positions=prior.positions,
+            relations=tuple(
+                Relation(
+                    item.relation_type,
+                    local(cut_id, item.source.position_key),
+                    local(cut_id, item.target.position_key),
+                )
+                for item in prior.relations
+            ),
+            allocations=tuple(
+                Allocation(
+                    item.dimension,
+                    local(cut_id, item.position.position_key),
+                    item.amount,
+                )
+                for item in prior.allocations
+                if item.dimension != StructuralDimension.BURDEN
+            ) + (
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "disclosure"), 1.4),
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "coordination"), 1.4),
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "affected"), 1.2),
+            ),
+        )
+        values.update(overrides)
+        return CutEnactment(**values)
+
+    def later_feedback(self, disposition=FeedbackDisposition.INVALIDATES, *, confirm=False):
+        revised = self.apply_revision()
+        current = revised.field.competing.alternatives[0]
+        if confirm:
+            self.substrate.record_transport(transport(
+                "transport:later-confirmation", "Situated correspondence observed."
+            ))
+            revised = return_effects_as_feedback(
+                field=revised,
+                substrate=self.substrate,
+                observation_trace_id="transport:later-confirmation",
+                alternative_id="cut:shared-after-feedback",
+                observed_effects=self.observed(current),
+                disposition=FeedbackDisposition.CONFIRMS,
+            )
+        affected_cut_id = "cut:feedback-counter"
+        if disposition == FeedbackDisposition.COMPLICATES:
+            affected_cut_id = "cut:later-feedback-dependent"
+            self.substrate.enact_cut(
+                dependent_cut(
+                    affected_cut_id,
+                    "cut:feedback-counter",
+                    "later feedback-local dependent",
+                ),
+                delta_id="delta:later-feedback-dependent",
+            )
+        self.substrate.record_transport(transport(
+            "transport:later-feedback", "Later effects materially reopen the formation."
+        ))
+        return return_effects_as_feedback(
+            field=revised,
+            substrate=self.substrate,
+            observation_trace_id="transport:later-feedback",
+            alternative_id="cut:shared-after-feedback",
+            observed_effects=self.observed(current, burden_maximum=2.75),
+            disposition=disposition,
+            affected_cut_id=affected_cut_id,
+            delta_id="delta:later-feedback-disturbance",
+        )
+
+    def revise_again(self, disposition=FeedbackDisposition.INVALIDATES, **overrides):
+        field = overrides.pop("field", None)
+        if field is None:
+            field = self.later_feedback(disposition)
+        feedback = next(
+            item for item in field.feedback
+            if item.observation_trace_id == "transport:later-feedback"
+        )
+        values = dict(
+            field=field,
+            substrate=self.substrate,
+            observation_trace_id="transport:later-feedback",
+            counter_cut=self.later_counter_cut(feedback.affected_cut_id),
+            counter_cut_delta_id="delta:later-feedback-counter",
+            recomputed_arrangement=self.later_recomputed(),
+        )
+        values.update(overrides)
+        return revise_field_from_feedback(**values)
+
+    def test_later_invalidation_grounds_fresh_counter_cut_and_recomputation(self):
+        revised = self.revise_again()
+        latest = revised.feedback_revisions[-1]
+        self.assertEqual("cut:feedback-counter", latest.reopened_cut_id)
+        self.assertEqual("cut:later-feedback-counter", latest.counter_cut_id)
+        self.assertEqual("cut:shared-after-later-feedback", latest.recomputed_alternative_id)
+        self.assertEqual(2, len(revised.feedback_revisions))
+        self.assertIn("cut:later-feedback-counter", self.substrate.state.active_cut_ids)
+
+    def test_later_complication_remains_scoped_to_reopened_dependent(self):
+        revised = self.revise_again(FeedbackDisposition.COMPLICATES)
+        latest = revised.feedback_revisions[-1]
+        self.assertEqual("cut:later-feedback-dependent", latest.reopened_cut_id)
+        self.assertIn("cut:feedback-counter", self.substrate.state.active_cut_ids)
+        self.assertIn("cut:later-feedback-counter", self.substrate.state.active_cut_ids)
+
+    def test_confirmation_and_both_disturbances_remain_in_history(self):
+        field = self.later_feedback(confirm=True)
+        revised = self.revise_again(field=field)
+        self.assertEqual(3, len(revised.feedback))
+        self.assertEqual(
+            (
+                FeedbackDisposition.INVALIDATES,
+                FeedbackDisposition.CONFIRMS,
+                FeedbackDisposition.INVALIDATES,
+            ),
+            tuple(item.disposition for item in revised.feedback),
+        )
+        self.assertEqual(2, len(revised.feedback_revisions))
+        self.assertEqual(
+            "cut:shared-after-feedback",
+            revised.feedback_revisions[-1].prior_alternative_id,
+        )
+
+    def test_confirmation_cannot_substitute_for_later_disturbance(self):
+        revised = self.apply_revision()
+        current = revised.field.competing.alternatives[0]
+        self.substrate.record_transport(transport(
+            "transport:later-feedback", "Correspondence alone."
+        ))
+        confirmed = return_effects_as_feedback(
+            field=revised,
+            substrate=self.substrate,
+            observation_trace_id="transport:later-feedback",
+            alternative_id="cut:shared-after-feedback",
+            observed_effects=self.observed(current),
+            disposition=FeedbackDisposition.CONFIRMS,
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "cannot authorize"):
+            self.revise_again(field=confirmed)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_missing_prior_feedback_revision_cannot_be_replaced_by_history_depth(self):
+        field = self.later_feedback(confirm=True)
+        forged = replace(field, feedback_revisions=())
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "originating recomputation"):
+            self.revise_again(field=forged)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_forged_prior_revision_lineage_cannot_ground_another_counter_cut(self):
+        field = self.later_feedback()
+        forged_prior = replace(
+            field.feedback_revisions[-1],
+            reopened_cut_id="cut:enable-distributed",
+        )
+        forged = replace(field, feedback_revisions=(forged_prior,))
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "exact disturbance lineage"):
+            self.revise_again(field=forged)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_later_cosmetic_recomputation_fails_atomically(self):
+        field = self.later_feedback()
+        prior = field.field.competing.alternatives[0].replacement
+        cosmetic = replace(
+            self.later_recomputed(),
+            allocations=tuple(
+                Allocation(
+                    item.dimension,
+                    local("cut:shared-after-later-feedback", item.position.position_key),
+                    item.amount,
+                )
+                for item in prior.allocations
+            ),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "freshly change"):
+            self.revise_again(field=field, recomputed_arrangement=cosmetic)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_recursive_feedback_records_contain_no_depth_or_ranking_authority(self):
+        revised = self.revise_again()
+        names = {
+            item.name
+            for record in (revised, *revised.feedback_revisions, *revised.feedback)
+            for item in fields(record)
+        }
+        self.assertTrue(names.isdisjoint({
+            "depth", "generation", "iteration", "confidence", "weight", "count",
+            "score", "rank", "selected", "preferred", "winner", "final",
+            "success", "failure",
+        }))
+        self.assertFalse(hasattr(revised, "choose"))
+
+
 class CounterCutRevisionAdditionalValidationTests(unittest.TestCase):
     setUp = DiffractiveArrangementTests.setUp
     difference = DiffractiveArrangementTests.difference
