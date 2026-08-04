@@ -2399,6 +2399,168 @@ class RecursiveFeedbackGroundedRevisionTests(unittest.TestCase):
         self.assertFalse(hasattr(revised, "choose"))
 
 
+class RecursiveFeedbackReentryAndEffectsTests(unittest.TestCase):
+    """Recursive recomputations remain answerable without gaining seniority."""
+
+    setUp = DiffractiveArrangementTests.setUp
+    difference = DiffractiveArrangementTests.difference
+    disturb = DiffractiveArrangementTests.disturb
+    counter_cut = CounterCutRevisionTests.counter_cut
+    revised_arrangement = CounterCutRevisionTests.revised_arrangement
+    revise = CounterCutRevisionTests.revise
+    witness = StructuralResponsivenessTests.witness
+    proposed_counter_cut = OscillationCounterCutTests.proposed_counter_cut
+    prepared = OscillationFieldReturnTests.prepared
+    recomputed = OscillationFieldReturnTests.recomputed
+    return_to_field = OscillationFieldReturnTests.return_to_field
+    observed = staticmethod(PostReturnFeedbackTests.observed)
+    feedback_counter_cut = FeedbackGroundedFieldRevisionTests.feedback_counter_cut
+    feedback_recomputed = FeedbackGroundedFieldRevisionTests.feedback_recomputed
+    with_feedback = FeedbackGroundedFieldRevisionTests.with_feedback
+    apply_revision = FeedbackGroundedFieldRevisionTests.apply_revision
+    later_counter_cut = RecursiveFeedbackGroundedRevisionTests.later_counter_cut
+    later_recomputed = RecursiveFeedbackGroundedRevisionTests.later_recomputed
+    later_feedback = RecursiveFeedbackGroundedRevisionTests.later_feedback
+    revise_again = RecursiveFeedbackGroundedRevisionTests.revise_again
+
+    def reenter_latest(self, field=None, **overrides):
+        if field is None:
+            field = self.revise_again()
+        values = dict(
+            field=field,
+            substrate=self.substrate,
+            difference=ConsequentialDifference(
+                witness_alternative_id="cut:shared-after-later-feedback",
+                contrasted_alternative_id="cut:distributed",
+                dimension=StructuralDimension.BURDEN,
+                measure=EffectMeasure.MAXIMUM_LOCAL_LOAD,
+            ),
+            enabling_cut_id="cut:enable-distributed",
+            delta_id="delta:recursive-feedback-reentry",
+            triggering_trace_ids=("transport:later-feedback",),
+        )
+        values.update(overrides)
+        return reenter_recomputed_arrangement_difference(**values)
+
+    def test_latest_recomputation_reenters_through_its_active_counter_cut(self):
+        reentered = self.reenter_latest()
+        trace = reentered.reentries[-1]
+        self.assertEqual("cut:shared-after-later-feedback", trace.witness_alternative_id)
+        self.assertEqual("cut:later-feedback-counter", trace.witness_counter_cut_id)
+        self.assertNotIn("cut:enable-distributed", self.substrate.state.active_cut_ids)
+
+    def test_latest_recomputation_receives_later_confirming_effects(self):
+        revised = self.revise_again()
+        current = revised.field.competing.alternatives[0]
+        self.substrate.record_transport(transport(
+            "transport:recursive-confirmation", "Situated correspondence observed."
+        ))
+        updated = return_effects_as_feedback(
+            field=revised,
+            substrate=self.substrate,
+            observation_trace_id="transport:recursive-confirmation",
+            alternative_id="cut:shared-after-later-feedback",
+            observed_effects=self.observed(current),
+            disposition=FeedbackDisposition.CONFIRMS,
+        )
+        self.assertEqual(FeedbackDisposition.CONFIRMS, updated.feedback[-1].disposition)
+        self.assertIn("cut:later-feedback-counter", self.substrate.state.active_cut_ids)
+
+    def test_later_complication_preserves_confirmation_and_recursive_history(self):
+        revised = self.revise_again()
+        current = revised.field.competing.alternatives[0]
+        self.substrate.record_transport(transport(
+            "transport:recursive-confirmation", "Situated correspondence observed."
+        ))
+        confirmed = return_effects_as_feedback(
+            field=revised,
+            substrate=self.substrate,
+            observation_trace_id="transport:recursive-confirmation",
+            alternative_id="cut:shared-after-later-feedback",
+            observed_effects=self.observed(current),
+            disposition=FeedbackDisposition.CONFIRMS,
+        )
+        self.substrate.enact_cut(
+            dependent_cut(
+                "cut:recursive-effect-dependent",
+                "cut:later-feedback-counter",
+                "recursive effect-local dependent",
+            ),
+            delta_id="delta:recursive-effect-dependent",
+        )
+        self.substrate.record_transport(transport(
+            "transport:recursive-complication", "Later effects complicate correspondence."
+        ))
+        complicated = return_effects_as_feedback(
+            field=confirmed,
+            substrate=self.substrate,
+            observation_trace_id="transport:recursive-complication",
+            alternative_id="cut:shared-after-later-feedback",
+            observed_effects=self.observed(current, burden_maximum=2.6),
+            disposition=FeedbackDisposition.COMPLICATES,
+            affected_cut_id="cut:recursive-effect-dependent",
+            delta_id="delta:recursive-complication",
+        )
+        self.assertEqual(FeedbackDisposition.CONFIRMS, complicated.feedback[-2].disposition)
+        self.assertEqual(FeedbackDisposition.COMPLICATES, complicated.feedback[-1].disposition)
+        self.assertEqual(2, len(complicated.feedback_revisions))
+        self.assertIn("cut:later-feedback-counter", self.substrate.state.active_cut_ids)
+
+    def test_later_invalidation_reopens_latest_counter_cut_without_failure(self):
+        revised = self.revise_again()
+        current = revised.field.competing.alternatives[0]
+        self.substrate.record_transport(transport(
+            "transport:recursive-invalidation", "Further effects reopen the formation."
+        ))
+        invalidated = return_effects_as_feedback(
+            field=revised,
+            substrate=self.substrate,
+            observation_trace_id="transport:recursive-invalidation",
+            alternative_id="cut:shared-after-later-feedback",
+            observed_effects=self.observed(current, burden_maximum=2.8),
+            disposition=FeedbackDisposition.INVALIDATES,
+            affected_cut_id="cut:later-feedback-counter",
+            delta_id="delta:recursive-invalidation",
+        )
+        self.assertEqual(FeedbackDisposition.INVALIDATES, invalidated.feedback[-1].disposition)
+        self.assertNotIn("cut:later-feedback-counter", self.substrate.state.active_cut_ids)
+        self.assertEqual(2, len(invalidated.feedback_revisions))
+        self.assertFalse(hasattr(invalidated.feedback[-1], "failure"))
+
+    def test_missing_earlier_recomputation_cannot_be_replaced_by_history_length(self):
+        revised = self.revise_again()
+        forged = replace(revised, feedback_revisions=(revised.feedback_revisions[-1],))
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "originating recomputation"):
+            self.reenter_latest(field=forged)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_revision_tuple_order_does_not_confer_reentry_authority(self):
+        revised = self.revise_again()
+        reordered = replace(
+            revised,
+            feedback_revisions=tuple(reversed(revised.feedback_revisions)),
+        )
+        reentered = self.reenter_latest(field=reordered)
+        self.assertEqual(
+            "cut:later-feedback-counter",
+            reentered.reentries[-1].witness_counter_cut_id,
+        )
+
+    def test_recursive_records_expose_no_maturity_or_authority_accumulator(self):
+        revised = self.revise_again()
+        names = {
+            item.name
+            for record in (revised, *revised.feedback_revisions, *revised.feedback)
+            for item in fields(record)
+        }
+        self.assertTrue(names.isdisjoint({
+            "maturity", "seniority", "depth", "generation", "iteration",
+            "confidence", "weight", "count", "score", "rank", "authority",
+            "selected", "preferred", "winner", "final", "success", "failure",
+        }))
+
+
 class CounterCutRevisionAdditionalValidationTests(unittest.TestCase):
     setUp = DiffractiveArrangementTests.setUp
     difference = DiffractiveArrangementTests.difference

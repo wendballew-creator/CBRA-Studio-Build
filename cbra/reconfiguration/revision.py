@@ -469,7 +469,7 @@ def reenter_recomputed_arrangement_difference(
     else:
         feedback_revision = feedback_revisions[0]
         witness_counter_cut_id = feedback_revision.counter_cut_id
-        _validate_feedback_reentry_lineage(
+        _validate_feedback_reentry_chain(
             field=field,
             substrate=substrate,
             witness=witness,
@@ -557,13 +557,20 @@ def _validate_oscillation_reentry_lineage(
         )
 
 
-def _validate_feedback_reentry_lineage(
+def _validate_feedback_reentry_chain(
     *,
     field: RecursivelyRevisedArrangementField,
     substrate: ReconfigurationSubstrate,
     witness: TracedAlternative,
     field_revision: "FeedbackFieldRevisionTrace",
+    visited_alternative_ids: Tuple[str, ...] = (),
 ) -> None:
+    """Validate exact recursive origin without deriving authority from depth."""
+
+    if field_revision.recomputed_alternative_id in visited_alternative_ids:
+        raise InvalidReconfiguration(
+            "feedback-recomputed witness contains circular revision lineage"
+        )
     feedback = field_revision.feedback
     if feedback not in field.feedback:
         raise InvalidReconfiguration(
@@ -605,6 +612,44 @@ def _validate_feedback_reentry_lineage(
     ):
         raise InvalidReconfiguration(
             "feedback-recomputed witness requires exact disturbance lineage"
+        )
+
+    prior_feedback_revisions = tuple(
+        item
+        for item in field.feedback_revisions
+        if item.recomputed_alternative_id == feedback.alternative_id
+        and item.recomputed_trace == feedback.expected_trace
+    )
+    prior_oscillation_revisions = tuple(
+        (revision, affected)
+        for revision in field.oscillation_revisions
+        for affected in revision.affected
+        if affected.recomputed_alternative_id == feedback.alternative_id
+        and affected.recomputed_trace == feedback.expected_trace
+    )
+    if len(prior_feedback_revisions) + len(prior_oscillation_revisions) != 1:
+        raise InvalidReconfiguration(
+            "feedback-recomputed witness requires one exact originating recomputation"
+        )
+    if prior_feedback_revisions:
+        prior_revision = prior_feedback_revisions[0]
+        _validate_feedback_reentry_chain(
+            field=field,
+            substrate=substrate,
+            witness=feedback.expected_trace,
+            field_revision=prior_revision,
+            visited_alternative_ids=(
+                visited_alternative_ids
+                + (field_revision.recomputed_alternative_id,)
+            ),
+        )
+    else:
+        oscillation_revision, dependent_revision = prior_oscillation_revisions[0]
+        _validate_oscillation_reentry_lineage(
+            substrate=substrate,
+            witness=feedback.expected_trace,
+            field_revision=oscillation_revision,
+            dependent_revision=dependent_revision,
         )
 
 
