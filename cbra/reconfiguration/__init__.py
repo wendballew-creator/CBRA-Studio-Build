@@ -22,6 +22,17 @@ from .arrangements import (
     BurdenRedistributionCandidate,
     compare_arrangements,
 )
+from .alternatives import (
+    CompetingAlternatives,
+    DimensionEffect,
+    EffectDirection,
+    EffectMeasure,
+    HarmConstraint,
+    HarmIncreaseTrace,
+    ProhibitedChange,
+    TracedAlternative,
+    retain_competing_alternatives,
+)
 from .substrate import (
     InvalidReconfiguration,
     ReconfigurationSubstrate,
@@ -45,4 +56,13 @@ __all__ = [
     "BurdenRedistributionCandidate",
     "compare_arrangements",
     "TransportTrace",
+    "CompetingAlternatives",
+    "DimensionEffect",
+    "EffectDirection",
+    "EffectMeasure",
+    "HarmConstraint",
+    "HarmIncreaseTrace",
+    "ProhibitedChange",
+    "TracedAlternative",
+    "retain_competing_alternatives",
 ]

@@ -74,7 +74,7 @@ It also does not implement diffraction across apparatus and material
 relations, public intervention, effect reinsertion, persistence, a model,
 API, browser, or live UX.
 
-The next valid pass must not jump to language generation. It should add a
-constraint-driven arrangement set that can retain multiple alternatives,
-record why variation is unavailable when it would increase harm, and trace
-each alternative's effects without selecting one through a hidden score.
+That next pass is now implemented as the bounded mechanism documented in
+`COMPETING_ARRANGEMENTS_SLICE.md`. It retains multiple alternatives and
+independent harm-constraint traces without selecting among them. It does not
+retroactively turn this single-candidate slice into evidence of care or play.
