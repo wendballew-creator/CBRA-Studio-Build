@@ -47,6 +47,7 @@ class RecursivelyRevisedArrangementField:
     oscillation_revisions: Tuple["OscillationFieldRevisionTrace", ...] = ()
     feedback: Tuple["FormationFeedbackTrace", ...] = ()
     feedback_revisions: Tuple["FeedbackFieldRevisionTrace", ...] = ()
+    provenance_closures: Tuple["FeedbackProvenanceClosure", ...] = ()
 
 
 @dataclass(frozen=True)
@@ -97,12 +98,14 @@ def revise_reopened_arrangement(
     existing_oscillation_revisions: Tuple[OscillationFieldRevisionTrace, ...] = ()
     existing_feedback: Tuple["FormationFeedbackTrace", ...] = ()
     existing_feedback_revisions: Tuple["FeedbackFieldRevisionTrace", ...] = ()
+    existing_provenance_closures: Tuple["FeedbackProvenanceClosure", ...] = ()
     if isinstance(field, RecursivelyRevisedArrangementField):
         existing_revisions = field.revisions
         existing_reentries = field.reentries
         existing_oscillation_revisions = field.oscillation_revisions
         existing_feedback = field.feedback
         existing_feedback_revisions = field.feedback_revisions
+        existing_provenance_closures = field.provenance_closures
         field = field.field
 
     disturbance = next(
@@ -217,6 +220,7 @@ def revise_reopened_arrangement(
         existing_oscillation_revisions,
         existing_feedback,
         existing_feedback_revisions,
+        existing_provenance_closures,
     )
 
 
@@ -394,6 +398,7 @@ def return_oscillation_counter_cut_to_field(
         oscillation_revisions=field.oscillation_revisions + (trace,),
         feedback=field.feedback,
         feedback_revisions=field.feedback_revisions,
+        provenance_closures=field.provenance_closures,
     )
 
 
@@ -513,6 +518,7 @@ def reenter_recomputed_arrangement_difference(
         oscillation_revisions=field.oscillation_revisions,
         feedback=field.feedback,
         feedback_revisions=field.feedback_revisions,
+        provenance_closures=field.provenance_closures,
     )
 
 
@@ -563,14 +569,8 @@ def _validate_feedback_reentry_chain(
     substrate: ReconfigurationSubstrate,
     witness: TracedAlternative,
     field_revision: "FeedbackFieldRevisionTrace",
-    visited_alternative_ids: Tuple[str, ...] = (),
 ) -> None:
-    """Validate exact recursive origin without deriving authority from depth."""
-
-    if field_revision.recomputed_alternative_id in visited_alternative_ids:
-        raise InvalidReconfiguration(
-            "feedback-recomputed witness contains circular revision lineage"
-        )
+    """Validate a bounded closure formed by an already-audited revision."""
     feedback = field_revision.feedback
     if feedback not in field.feedback:
         raise InvalidReconfiguration(
@@ -614,43 +614,13 @@ def _validate_feedback_reentry_chain(
             "feedback-recomputed witness requires exact disturbance lineage"
         )
 
-    prior_feedback_revisions = tuple(
-        item
-        for item in field.feedback_revisions
-        if item.recomputed_alternative_id == feedback.alternative_id
-        and item.recomputed_trace == feedback.expected_trace
+    from .feedback import validate_feedback_provenance_closure
+
+    validate_feedback_provenance_closure(
+        field=field,
+        substrate=substrate,
+        revision=field_revision,
     )
-    prior_oscillation_revisions = tuple(
-        (revision, affected)
-        for revision in field.oscillation_revisions
-        for affected in revision.affected
-        if affected.recomputed_alternative_id == feedback.alternative_id
-        and affected.recomputed_trace == feedback.expected_trace
-    )
-    if len(prior_feedback_revisions) + len(prior_oscillation_revisions) != 1:
-        raise InvalidReconfiguration(
-            "feedback-recomputed witness requires one exact originating recomputation"
-        )
-    if prior_feedback_revisions:
-        prior_revision = prior_feedback_revisions[0]
-        _validate_feedback_reentry_chain(
-            field=field,
-            substrate=substrate,
-            witness=feedback.expected_trace,
-            field_revision=prior_revision,
-            visited_alternative_ids=(
-                visited_alternative_ids
-                + (field_revision.recomputed_alternative_id,)
-            ),
-        )
-    else:
-        oscillation_revision, dependent_revision = prior_oscillation_revisions[0]
-        _validate_oscillation_reentry_lineage(
-            substrate=substrate,
-            witness=feedback.expected_trace,
-            field_revision=oscillation_revision,
-            dependent_revision=dependent_revision,
-        )
 
 
 def _validate_reentry_revision_lineage(

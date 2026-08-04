@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from hashlib import sha256
 from typing import Sequence, Tuple
 
 from .alternatives import (
@@ -64,6 +65,18 @@ class FeedbackFieldRevisionTrace:
     recomputed_alternative_id: str
     prior_trace: TracedAlternative
     recomputed_trace: TracedAlternative
+
+
+@dataclass(frozen=True)
+class FeedbackProvenanceClosure:
+    """Bounded continuity witness; preserved history remains the evidence."""
+
+    closure_id: str
+    predecessor_closure_id: str
+    observation_trace_id: str
+    disturbance_delta_id: str
+    counter_cut_id: str
+    recomputed_alternative_id: str
 
 
 def return_effects_as_feedback(
@@ -123,7 +136,7 @@ def return_effects_as_feedback(
         prior_alternative_id = affected.prior_alternative_id
     else:
         feedback_revision = feedback_matches[0]
-        _validate_feedback_recomputation_lineage(
+        validate_feedback_provenance_closure(
             field=field,
             substrate=substrate,
             revision=feedback_revision,
@@ -374,10 +387,121 @@ def revise_field_from_feedback(
         prior_trace=prior,
         recomputed_trace=recomputed_trace,
     )
+    predecessor_closure_id = _origin_closure_id(field, feedback)
+    closure = _form_provenance_closure(revision, predecessor_closure_id)
     return replace(
         field,
         field=revised_field,
         feedback_revisions=field.feedback_revisions + (revision,),
+        provenance_closures=field.provenance_closures + (closure,),
+    )
+
+
+def validate_feedback_provenance_closure(
+    *,
+    field: RecursivelyRevisedArrangementField,
+    substrate: ReconfigurationSubstrate,
+    revision: FeedbackFieldRevisionTrace,
+) -> None:
+    """Validate present continuity without recursively traversing its history."""
+
+    matches = tuple(
+        item for item in field.provenance_closures
+        if item.recomputed_alternative_id == revision.recomputed_alternative_id
+        and item.counter_cut_id == revision.counter_cut_id
+    )
+    if len(matches) != 1:
+        raise InvalidReconfiguration(
+            "feedback recomputation requires one exact provenance closure"
+        )
+    closure = matches[0]
+    expected = _form_provenance_closure(revision, closure.predecessor_closure_id)
+    if closure != expected:
+        raise InvalidReconfiguration("feedback provenance closure is inconsistent")
+    _validate_feedback_recomputation_lineage(
+        field=field,
+        substrate=substrate,
+        revision=revision,
+    )
+    if closure.predecessor_closure_id.startswith("feedback:"):
+        predecessor_id = closure.predecessor_closure_id.removeprefix("feedback:")
+        predecessors = tuple(
+            item for item in field.provenance_closures
+            if item.closure_id == predecessor_id
+            and item.recomputed_alternative_id == revision.prior_alternative_id
+        )
+        if len(predecessors) != 1:
+            raise InvalidReconfiguration(
+                "feedback provenance closure requires its retained predecessor"
+            )
+    elif closure.predecessor_closure_id.startswith("oscillation:"):
+        if closure.predecessor_closure_id != f"oscillation:{revision.prior_alternative_id}":
+            raise InvalidReconfiguration(
+                "feedback provenance closure has inconsistent oscillation origin"
+            )
+        roots = tuple(
+            affected
+            for oscillation_revision in field.oscillation_revisions
+            for affected in oscillation_revision.affected
+            if affected.recomputed_alternative_id == revision.prior_alternative_id
+            and affected.recomputed_trace == revision.prior_trace
+        )
+        if len(roots) != 1:
+            raise InvalidReconfiguration(
+                "feedback provenance closure requires its oscillation origin"
+            )
+    else:
+        raise InvalidReconfiguration("feedback provenance closure has no valid origin")
+
+
+def _origin_closure_id(
+    field: RecursivelyRevisedArrangementField,
+    feedback: FormationFeedbackTrace,
+) -> str:
+    prior_closures = tuple(
+        item for item in field.provenance_closures
+        if item.recomputed_alternative_id == feedback.alternative_id
+    )
+    if len(prior_closures) == 1:
+        return f"feedback:{prior_closures[0].closure_id}"
+    oscillation_matches = tuple(
+        affected
+        for revision in field.oscillation_revisions
+        for affected in revision.affected
+        if affected.recomputed_alternative_id == feedback.alternative_id
+        and affected.recomputed_trace == feedback.expected_trace
+    )
+    if len(prior_closures) == 0 and len(oscillation_matches) == 1:
+        return f"oscillation:{feedback.alternative_id}"
+    raise InvalidReconfiguration(
+        "feedback revision requires one locally closed originating recomputation"
+    )
+
+
+def _form_provenance_closure(
+    revision: FeedbackFieldRevisionTrace,
+    predecessor_closure_id: str,
+) -> FeedbackProvenanceClosure:
+    feedback = revision.feedback
+    assert feedback.disturbance_delta is not None
+    material = "\x1f".join((
+        predecessor_closure_id,
+        feedback.observation_trace_id,
+        feedback.disturbance_delta.delta_id,
+        revision.reopened_cut_id,
+        revision.counter_cut_id,
+        revision.prior_alternative_id,
+        revision.recomputed_alternative_id,
+        repr(revision.prior_trace),
+        repr(revision.recomputed_trace),
+    ))
+    return FeedbackProvenanceClosure(
+        closure_id=sha256(material.encode()).hexdigest(),
+        predecessor_closure_id=predecessor_closure_id,
+        observation_trace_id=feedback.observation_trace_id,
+        disturbance_delta_id=feedback.disturbance_delta.delta_id,
+        counter_cut_id=revision.counter_cut_id,
+        recomputed_alternative_id=revision.recomputed_alternative_id,
     )
 
 
@@ -479,7 +603,7 @@ def _validate_feedback_target_origin(
             "feedback revision requires one exact originating recomputation"
         )
     if feedback_matches:
-        _validate_feedback_recomputation_lineage(
+        validate_feedback_provenance_closure(
             field=field,
             substrate=substrate,
             revision=feedback_matches[0],

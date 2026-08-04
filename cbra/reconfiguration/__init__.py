@@ -64,6 +64,7 @@ from .oscillation import (
 from .feedback import (
     FeedbackDisposition,
     FeedbackFieldRevisionTrace,
+    FeedbackProvenanceClosure,
     FormationFeedbackTrace,
     ObservedDimensionEffect,
     revise_field_from_feedback,
@@ -123,6 +124,7 @@ __all__ = [
     "counter_cut_from_oscillation",
     "FeedbackDisposition",
     "FeedbackFieldRevisionTrace",
+    "FeedbackProvenanceClosure",
     "FormationFeedbackTrace",
     "ObservedDimensionEffect",
     "revise_field_from_feedback",

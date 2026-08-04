@@ -2361,7 +2361,7 @@ class RecursiveFeedbackGroundedRevisionTests(unittest.TestCase):
         )
         forged = replace(field, feedback_revisions=(forged_prior,))
         before = self.substrate.state
-        with self.assertRaisesRegex(InvalidReconfiguration, "exact disturbance lineage"):
+        with self.assertRaisesRegex(InvalidReconfiguration, "provenance closure"):
             self.revise_again(field=forged)
         self.assertEqual(before, self.substrate.state)
 
@@ -2527,11 +2527,11 @@ class RecursiveFeedbackReentryAndEffectsTests(unittest.TestCase):
         self.assertEqual(2, len(invalidated.feedback_revisions))
         self.assertFalse(hasattr(invalidated.feedback[-1], "failure"))
 
-    def test_missing_earlier_recomputation_cannot_be_replaced_by_history_length(self):
+    def test_missing_predecessor_closure_cannot_be_replaced_by_history_length(self):
         revised = self.revise_again()
-        forged = replace(revised, feedback_revisions=(revised.feedback_revisions[-1],))
+        forged = replace(revised, provenance_closures=(revised.provenance_closures[-1],))
         before = self.substrate.state
-        with self.assertRaisesRegex(InvalidReconfiguration, "originating recomputation"):
+        with self.assertRaisesRegex(InvalidReconfiguration, "retained predecessor"):
             self.reenter_latest(field=forged)
         self.assertEqual(before, self.substrate.state)
 
@@ -2558,6 +2558,212 @@ class RecursiveFeedbackReentryAndEffectsTests(unittest.TestCase):
             "maturity", "seniority", "depth", "generation", "iteration",
             "confidence", "weight", "count", "score", "rank", "authority",
             "selected", "preferred", "winner", "final", "success", "failure",
+        }))
+
+
+class BoundedRecursiveFeedbackRevisionTests(unittest.TestCase):
+    """Further revision uses local closure, never ancestry length."""
+
+    setUp = DiffractiveArrangementTests.setUp
+    difference = DiffractiveArrangementTests.difference
+    disturb = DiffractiveArrangementTests.disturb
+    counter_cut = CounterCutRevisionTests.counter_cut
+    revised_arrangement = CounterCutRevisionTests.revised_arrangement
+    revise = CounterCutRevisionTests.revise
+    witness = StructuralResponsivenessTests.witness
+    proposed_counter_cut = OscillationCounterCutTests.proposed_counter_cut
+    prepared = OscillationFieldReturnTests.prepared
+    recomputed = OscillationFieldReturnTests.recomputed
+    return_to_field = OscillationFieldReturnTests.return_to_field
+    observed = staticmethod(PostReturnFeedbackTests.observed)
+    feedback_counter_cut = FeedbackGroundedFieldRevisionTests.feedback_counter_cut
+    feedback_recomputed = FeedbackGroundedFieldRevisionTests.feedback_recomputed
+    with_feedback = FeedbackGroundedFieldRevisionTests.with_feedback
+    apply_revision = FeedbackGroundedFieldRevisionTests.apply_revision
+    later_counter_cut = RecursiveFeedbackGroundedRevisionTests.later_counter_cut
+    later_recomputed = RecursiveFeedbackGroundedRevisionTests.later_recomputed
+    later_feedback = RecursiveFeedbackGroundedRevisionTests.later_feedback
+    revise_again = RecursiveFeedbackGroundedRevisionTests.revise_again
+    reenter_latest = RecursiveFeedbackReentryAndEffectsTests.reenter_latest
+
+    def further_counter_cut(self, reopened_cut_id, **overrides):
+        cut_id = overrides.pop("cut_id", "cut:further-feedback-counter")
+        values = dict(
+            cut_id=cut_id,
+            transport_basis=("transport:further-feedback",),
+            dependency_ids=(self.source.cut_id,),
+            lineage_ids=(reopened_cut_id,),
+            positions=(
+                CutPosition("effect", "further material effect"),
+                CutPosition("relation", "reopened local relation"),
+                CutPosition("uptake", "fresh local uptake"),
+            ),
+            relations=(
+                Relation("effect-reopens-relation", local(cut_id, "effect"), local(cut_id, "relation")),
+                Relation("relation-shapes-uptake", local(cut_id, "relation"), local(cut_id, "uptake")),
+            ),
+        )
+        values.update(overrides)
+        return CutEnactment(**values)
+
+    def further_recomputed(self, **overrides):
+        prior = self.later_recomputed()
+        cut_id = overrides.pop("cut_id", "cut:shared-after-further-feedback")
+        values = dict(
+            cut_id=cut_id,
+            transport_basis=("transport:further-feedback",),
+            dependency_ids=("cut:further-feedback-counter",),
+            lineage_ids=("cut:shared-after-later-feedback",),
+            positions=prior.positions,
+            relations=tuple(
+                Relation(
+                    item.relation_type,
+                    local(cut_id, item.source.position_key),
+                    local(cut_id, item.target.position_key),
+                ) for item in prior.relations
+            ),
+            allocations=tuple(
+                Allocation(item.dimension, local(cut_id, item.position.position_key), item.amount)
+                for item in prior.allocations
+                if item.dimension != StructuralDimension.BURDEN
+            ) + (
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "disclosure"), 1.35),
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "coordination"), 1.35),
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "affected"), 1.30),
+            ),
+        )
+        values.update(overrides)
+        return CutEnactment(**values)
+
+    def further_feedback(self, disposition=FeedbackDisposition.INVALIDATES):
+        revised = self.revise_again()
+        current = revised.field.competing.alternatives[0]
+        affected_cut_id = "cut:later-feedback-counter"
+        if disposition == FeedbackDisposition.COMPLICATES:
+            affected_cut_id = "cut:further-feedback-dependent"
+            self.substrate.enact_cut(
+                dependent_cut(
+                    affected_cut_id,
+                    "cut:later-feedback-counter",
+                    "further effect-local dependent",
+                ),
+                delta_id="delta:further-feedback-dependent",
+            )
+        self.substrate.record_transport(transport(
+            "transport:further-feedback",
+            "Further material effects reopen the current formation.",
+        ))
+        return return_effects_as_feedback(
+            field=revised,
+            substrate=self.substrate,
+            observation_trace_id="transport:further-feedback",
+            alternative_id="cut:shared-after-later-feedback",
+            observed_effects=self.observed(current, burden_maximum=2.9),
+            disposition=disposition,
+            affected_cut_id=affected_cut_id,
+            delta_id="delta:further-feedback-disturbance",
+        )
+
+    def revise_further(self, disposition=FeedbackDisposition.INVALIDATES, **overrides):
+        field = overrides.pop("field", None)
+        if field is None:
+            field = self.further_feedback(disposition)
+        feedback = next(
+            item for item in field.feedback
+            if item.observation_trace_id == "transport:further-feedback"
+        )
+        values = dict(
+            field=field,
+            substrate=self.substrate,
+            observation_trace_id="transport:further-feedback",
+            counter_cut=self.further_counter_cut(feedback.affected_cut_id),
+            counter_cut_delta_id="delta:further-feedback-counter",
+            recomputed_arrangement=self.further_recomputed(),
+        )
+        values.update(overrides)
+        return revise_field_from_feedback(**values)
+
+    def test_further_invalidation_grounds_bounded_counter_cut_and_recomputation(self):
+        revised = self.revise_further()
+        latest = revised.feedback_revisions[-1]
+        self.assertEqual("cut:later-feedback-counter", latest.reopened_cut_id)
+        self.assertEqual("cut:further-feedback-counter", latest.counter_cut_id)
+        self.assertEqual("cut:shared-after-further-feedback", latest.recomputed_alternative_id)
+        self.assertEqual(3, len(revised.feedback_revisions))
+        self.assertEqual(3, len(revised.provenance_closures))
+
+    def test_further_complication_remains_local(self):
+        revised = self.revise_further(FeedbackDisposition.COMPLICATES)
+        self.assertEqual(
+            "cut:further-feedback-dependent",
+            revised.feedback_revisions[-1].reopened_cut_id,
+        )
+        self.assertIn("cut:later-feedback-counter", self.substrate.state.active_cut_ids)
+
+    def test_complete_history_is_preserved_beside_bounded_closures(self):
+        revised = self.revise_further()
+        self.assertEqual(3, len(revised.feedback))
+        self.assertEqual(3, len(revised.feedback_revisions))
+        self.assertEqual(
+            tuple(item.feedback for item in revised.feedback_revisions),
+            revised.feedback,
+        )
+
+    def test_forged_current_closure_fails_without_mutation(self):
+        field = self.further_feedback()
+        closure = field.provenance_closures[-1]
+        forged = replace(
+            field,
+            provenance_closures=field.provenance_closures[:-1] + (
+                replace(closure, observation_trace_id="transport:invented"),
+            ),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "closure is inconsistent"):
+            self.revise_further(field=forged)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_closure_tuple_order_does_not_confer_authority(self):
+        revised = self.revise_again()
+        reordered = replace(
+            revised,
+            provenance_closures=tuple(reversed(revised.provenance_closures)),
+        )
+        reentered = self.reenter_latest(field=reordered)
+        self.assertEqual(
+            "cut:later-feedback-counter",
+            reentered.reentries[-1].witness_counter_cut_id,
+        )
+
+    def test_further_cosmetic_recomputation_fails_atomically(self):
+        field = self.further_feedback()
+        prior = field.field.competing.alternatives[0].replacement
+        cosmetic = replace(
+            self.further_recomputed(),
+            allocations=tuple(
+                Allocation(
+                    item.dimension,
+                    local("cut:shared-after-further-feedback", item.position.position_key),
+                    item.amount,
+                ) for item in prior.allocations
+            ),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "freshly change"):
+            self.revise_further(field=field, recomputed_arrangement=cosmetic)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_closure_contains_no_depth_maturity_or_selection_authority(self):
+        revised = self.revise_further()
+        names = {
+            item.name
+            for record in (*revised.provenance_closures, revised)
+            for item in fields(record)
+        }
+        self.assertTrue(names.isdisjoint({
+            "depth", "generation", "iteration", "maturity", "authority",
+            "confidence", "weight", "score", "rank", "selected", "preferred",
+            "winner", "final", "success", "failure",
         }))
 
 
