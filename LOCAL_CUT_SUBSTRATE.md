@@ -62,8 +62,8 @@ to both dependent cuts. An alternative local cut is then enacted with:
 - possibility expanded through the coordination arrangement;
 - private cause and total available capacity left unknown.
 
-The resulting delta changes all four currently implemented dimensions:
-burden, capacity, consequence, and possibility. Those changes are derived
+The resulting delta changes all five currently implemented dimensions:
+burden, capacity, consequence, power, and possibility. Those changes are derived
 from before/after allocations, not from a `care`, `reconfigured`, or
 `rationale` field.
 

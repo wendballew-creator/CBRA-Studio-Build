@@ -16,6 +16,12 @@ from .models import (
     StructuralDimension,
     TransportTrace,
 )
+from .arrangements import (
+    ArrangementComparison,
+    ArrangementExplorer,
+    BurdenRedistributionCandidate,
+    compare_arrangements,
+)
 from .substrate import (
     InvalidReconfiguration,
     ReconfigurationSubstrate,
@@ -34,5 +40,9 @@ __all__ = [
     "Relation",
     "StorageOntologyViolation",
     "StructuralDimension",
+    "ArrangementComparison",
+    "ArrangementExplorer",
+    "BurdenRedistributionCandidate",
+    "compare_arrangements",
     "TransportTrace",
 ]

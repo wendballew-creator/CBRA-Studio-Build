@@ -43,6 +43,7 @@ class StructuralDimension(str, Enum):
     BURDEN = "burden"
     CAPACITY = "capacity"
     CONSEQUENCE = "consequence"
+    POWER = "power"
     POSSIBILITY = "possibility"
 
 

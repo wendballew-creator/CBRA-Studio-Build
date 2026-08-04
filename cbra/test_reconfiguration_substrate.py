@@ -52,6 +52,7 @@ def case2_initial_cut(cut_id: str = "cut:initial") -> CutEnactment:
             Allocation(StructuralDimension.BURDEN, local(cut_id, "participant"), 4),
             Allocation(StructuralDimension.CAPACITY, local(cut_id, "participant"), 3),
             Allocation(StructuralDimension.CONSEQUENCE, local(cut_id, "participant"), 2),
+            Allocation(StructuralDimension.POWER, local(cut_id, "participant"), 3),
             Allocation(StructuralDimension.POSSIBILITY, local(cut_id, "arrangement"), 1),
         ),
         revision_conditions=("later capacity evidence",),
@@ -73,6 +74,7 @@ def dependent_accountability_cut(cut_id: str = "cut:accountability") -> CutEnact
             Allocation(StructuralDimension.BURDEN, local(cut_id, "same-position"), 4),
             Allocation(StructuralDimension.CAPACITY, local(cut_id, "same-position"), 2),
             Allocation(StructuralDimension.CONSEQUENCE, local(cut_id, "same-position"), 2),
+            Allocation(StructuralDimension.POWER, local(cut_id, "same-position"), 2),
         ),
     )
 
@@ -105,6 +107,8 @@ def reconfigured_case2_cut(cut_id: str = "cut:reconfigured") -> CutEnactment:
             Allocation(StructuralDimension.BURDEN, local(cut_id, "coordination"), 2),
             Allocation(StructuralDimension.CAPACITY, local(cut_id, "coordination"), 1),
             Allocation(StructuralDimension.CONSEQUENCE, local(cut_id, "affected-work"), 2),
+            Allocation(StructuralDimension.POWER, local(cut_id, "coordination"), 1),
+            Allocation(StructuralDimension.POWER, local(cut_id, "affected-work"), 1),
             Allocation(StructuralDimension.POSSIBILITY, local(cut_id, "coordination"), 4),
         ),
         revision_conditions=("observed response effect", "new capacity evidence"),
@@ -393,6 +397,7 @@ class StructuralDeltaAndCase2Tests(unittest.TestCase):
                 Allocation(StructuralDimension.BURDEN, local("cut:renamed", "different-a"), 4),
                 Allocation(StructuralDimension.CAPACITY, local("cut:renamed", "different-a"), 3),
                 Allocation(StructuralDimension.CONSEQUENCE, local("cut:renamed", "different-a"), 2),
+                Allocation(StructuralDimension.POWER, local("cut:renamed", "different-a"), 3),
                 Allocation(StructuralDimension.POSSIBILITY, local("cut:renamed", "different-b"), 1),
             ),
         )
