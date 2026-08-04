@@ -18,6 +18,7 @@ from cbra.reconfiguration import (
     TransportTrace,
     disturb_through_arrangement_difference,
     retain_competing_alternatives,
+    revise_reopened_arrangement,
 )
 
 
@@ -286,6 +287,222 @@ class DiffractiveArrangementTests(unittest.TestCase):
         )
         self.assertEqual(before.deltas, self.substrate.state.deltas)
         self.assertEqual((), self.field.disturbances)
+
+
+class CounterCutRevisionTests(unittest.TestCase):
+    setUp = DiffractiveArrangementTests.setUp
+    difference = DiffractiveArrangementTests.difference
+    disturb = DiffractiveArrangementTests.disturb
+
+    def counter_cut(self, **overrides):
+        values = dict(
+            cut_id="cut:counter-shared",
+            transport_basis=("transport:disclosure",),
+            dependency_ids=(self.source.cut_id,),
+            lineage_ids=("cut:enable-shared",),
+            positions=(
+                CutPosition("availability", "revised shared availability"),
+                CutPosition("support", "support participation"),
+            ),
+            allocations=(
+                Allocation(
+                    StructuralDimension.CAPACITY,
+                    local("cut:counter-shared", "support"),
+                    1,
+                ),
+            ),
+        )
+        values.update(overrides)
+        return CutEnactment(**values)
+
+    def revised_arrangement(self, **overrides):
+        original = self.field.competing.alternatives[0].replacement
+        cut_id = overrides.pop("cut_id", "cut:shared-recomputed")
+        values = dict(
+            cut_id=cut_id,
+            transport_basis=original.transport_basis,
+            dependency_ids=("cut:counter-shared",),
+            lineage_ids=(original.cut_id,),
+            positions=tuple(
+                CutPosition(item.key, item.local_name) for item in original.positions
+            ),
+            relations=tuple(
+                Relation(
+                    item.relation_type,
+                    local(cut_id, item.source.position_key),
+                    local(cut_id, item.target.position_key),
+                )
+                for item in original.relations
+            ),
+            allocations=tuple(
+                Allocation(item.dimension, local(cut_id, item.position.position_key), item.amount)
+                for item in original.allocations
+                if item.dimension != StructuralDimension.BURDEN
+            )
+            + (
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "disclosure"), 1.25),
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "coordination"), 1.5),
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "affected"), 1.25),
+            ),
+            revision_conditions=original.revision_conditions,
+            exclusions=original.exclusions,
+        )
+        values.update(overrides)
+        return CutEnactment(**values)
+
+    def revise(self, **overrides):
+        disturbed = self.disturb()
+        values = dict(
+            field=disturbed,
+            substrate=self.substrate,
+            disturbance_delta_id="delta:burden-diffraction",
+            counter_cut=self.counter_cut(),
+            counter_cut_delta_id="delta:counter-shared",
+            revised_arrangement=self.revised_arrangement(),
+        )
+        values.update(overrides)
+        return revise_reopened_arrangement(**values)
+
+    def test_counter_cut_recomputes_trace_and_preserves_disturbance_history(self):
+        revised = self.revise()
+        revision = revised.revisions[0]
+        self.assertEqual("cut:shared", revision.reopened_alternative_id)
+        self.assertEqual("cut:shared-recomputed", revision.revised_alternative_id)
+        self.assertEqual(2.0, revision.prior_trace.effects[0].maximum_after)
+        self.assertEqual(1.5, revision.recomputed_trace.effects[0].maximum_after)
+        self.assertEqual(
+            "delta:burden-diffraction", revision.disturbance_delta_id
+        )
+        self.assertEqual(1, len(revised.field.disturbances))
+        self.assertEqual(
+            "delta:burden-diffraction",
+            revised.field.disturbances[0].delta.delta_id,
+        )
+
+    def test_counter_cut_is_active_and_invalidated_formation_remains_recorded(self):
+        self.revise()
+        self.assertIn("cut:counter-shared", self.substrate.state.active_cut_ids)
+        self.assertNotIn("cut:enable-shared", self.substrate.state.active_cut_ids)
+        self.assertIn("cut:enable-shared", self.substrate.state.cuts)
+        self.assertEqual(
+            "delta:burden-diffraction",
+            self.substrate.state.invalidated_by["cut:enable-shared"],
+        )
+
+    def test_revised_field_retains_ordinal_without_ranking_or_selection(self):
+        revised = self.revise()
+        self.assertEqual(
+            ("cut:shared-recomputed", "cut:distributed"),
+            tuple(
+                item.replacement.cut_id
+                for item in revised.field.competing.alternatives
+            ),
+        )
+        names = {
+            item.name
+            for record in (revised, revised.revisions[0])
+            for item in fields(record)
+        }
+        self.assertTrue(
+            names.isdisjoint(
+                {"score", "rank", "ranking", "selected", "preferred", "winner"}
+            )
+        )
+        self.assertFalse(hasattr(revised, "choose"))
+
+    def test_cosmetic_recomputation_fails_atomically(self):
+        disturbed = self.disturb()
+        before = self.substrate.state
+        original = self.field.competing.alternatives[0].replacement
+        cosmetic = replace(
+            self.revised_arrangement(),
+            allocations=tuple(
+                Allocation(
+                    item.dimension,
+                    local("cut:shared-recomputed", item.position.position_key),
+                    item.amount,
+                )
+                for item in original.allocations
+            ),
+        )
+        with self.assertRaisesRegex(InvalidReconfiguration, "structurally changed"):
+            revise_reopened_arrangement(
+                field=disturbed,
+                substrate=self.substrate,
+                disturbance_delta_id="delta:burden-diffraction",
+                counter_cut=self.counter_cut(),
+                counter_cut_delta_id="delta:counter-shared",
+                revised_arrangement=cosmetic,
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_counter_cut_must_name_reopened_lineage(self):
+        disturbed = self.disturb()
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "reopened enabling cut"):
+            revise_reopened_arrangement(
+                field=disturbed,
+                substrate=self.substrate,
+                disturbance_delta_id="delta:burden-diffraction",
+                counter_cut=self.counter_cut(lineage_ids=(self.source.cut_id,)),
+                counter_cut_delta_id="delta:counter-shared",
+                revised_arrangement=self.revised_arrangement(),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_recomputed_arrangement_must_depend_on_counter_cut(self):
+        disturbed = self.disturb()
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "explicit counter-cut"):
+            revise_reopened_arrangement(
+                field=disturbed,
+                substrate=self.substrate,
+                disturbance_delta_id="delta:burden-diffraction",
+                counter_cut=self.counter_cut(),
+                counter_cut_delta_id="delta:counter-shared",
+                revised_arrangement=self.revised_arrangement(
+                    dependency_ids=(self.source.cut_id,)
+                ),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_relabelled_enabling_cut_is_not_a_counter_cut(self):
+        disturbed = self.disturb()
+        before = self.substrate.state
+        relabelled = CutEnactment(
+            cut_id="cut:counter-shared",
+            transport_basis=("transport:disclosure",),
+            dependency_ids=(self.source.cut_id,),
+            lineage_ids=("cut:enable-shared",),
+            positions=(CutPosition("renamed", "compassionate availability"),),
+        )
+        with self.assertRaisesRegex(InvalidReconfiguration, "relabelled enabling"):
+            revise_reopened_arrangement(
+                field=disturbed,
+                substrate=self.substrate,
+                disturbance_delta_id="delta:burden-diffraction",
+                counter_cut=relabelled,
+                counter_cut_delta_id="delta:counter-shared",
+                revised_arrangement=self.revised_arrangement(),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_same_disturbance_cannot_revise_twice(self):
+        revised = self.revise()
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "already has a revision"):
+            revise_reopened_arrangement(
+                field=revised,
+                substrate=self.substrate,
+                disturbance_delta_id="delta:burden-diffraction",
+                counter_cut=self.counter_cut(cut_id="cut:counter-again"),
+                counter_cut_delta_id="delta:counter-again",
+                revised_arrangement=self.revised_arrangement(
+                    cut_id="cut:shared-again",
+                    dependency_ids=("cut:counter-again",),
+                ),
+            )
+        self.assertEqual(before, self.substrate.state)
 
 
 if __name__ == "__main__":
