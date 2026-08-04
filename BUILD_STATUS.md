@@ -1,9 +1,11 @@
 # CBRA Current Build Status
 
-Status date: 2026-08-03
+Status date: 2026-08-04
 
-Status boundary: `agent/local-cut-substrate`, based on the Case 2 paradigmatic
-falsification, the canonical redesign, and the first bounded executable slice.
+Status boundary: recursive-reconfiguration structural checkpoint at `42111b7`,
+based on the Case 2 paradigmatic falsification, the canonical redesign, and
+the complete linear sequence from local-cut substrate through renewable
+bounded continuity.
 
 ## Current conclusion
 
@@ -49,27 +51,31 @@ The `cbra/constitutive/` slice and its eight focused tests remain preserved as
 failed scaffolding evidence. They do not implement the active grammar and
 must not be extended as the next runtime substrate.
 
-`cbra/reconfiguration/` now implements the first narrow substrate for the
-active grammar: opaque transport traces, cut-local semantic positions,
-explicit dependencies and lineage, recursive invalidation, and mechanically
-derived structural deltas. The Case 2 fixture demonstrates that a later
-disclosure can invalidate the initial individualized-failure cut and all
-dependent accountability/intervention cuts while leaving transport history
-unchanged.
+`cbra/reconfiguration/` now implements a bounded structural substrate for the
+active grammar: opaque transport traces; cut-local positions; explicit
+dependency and lineage; recursive invalidation; mechanically derived deltas;
+care-organized arrangement variation; concurrent alternatives without a
+winner; diffractive disturbance; local counter-cuts; structural
+responsiveness and oscillation; effect return; feedback-grounded recursive
+revision; and renewable bounded continuity.
 
-This is not an operative response runtime. The Case 2 cuts are fixtures, not
-semantic formations from language. The pass does not activate care/play
-alternative generation, diffraction, public intervention, persistence,
-models, API, browser path, or live evaluation.
+This remains a structural substrate, not an operative response runtime. Test
+fixtures still supply the semantic positions, relations, cuts, constraints,
+and observed effects. The runtime does not yet form those relations from
+language, documents, tools, embodiment, material conditions, or model
+proposals. It does not form a public intervention, persist the new grammar,
+or expose it through an API or browser.
 
-Twenty-one focused substrate tests and 121 selected dependency-free canonical and
-historical regression tests pass. Those results establish bounded technical
-conformance only. Broad discovery also runs 138 tests successfully and reports
-seven dependency import errors because FastAPI and HTTPX are unavailable.
-Python compilation and diff checks pass. No provider request was made.
+At this consolidation boundary, 145 focused canonical, arrangement,
+diffraction, and authority-invariant tests pass. The complete dependency-free
+suite passes 293 tests. Broad discovery executes the same 293 tests and
+reports seven unavailable modules because FastAPI and HTTPX are absent in this
+environment. Python compilation and diff checks pass. These results establish
+only the bounded behaviors exercised; they do not certify posthuman validity.
 
-See [`CANONICAL_REDESIGN.md`](CANONICAL_REDESIGN.md) and
-[`LOCAL_CUT_SUBSTRATE.md`](LOCAL_CUT_SUBSTRATE.md), and
+See [`CANONICAL_REDESIGN.md`](CANONICAL_REDESIGN.md),
+[`LOCAL_CUT_SUBSTRATE.md`](LOCAL_CUT_SUBSTRATE.md),
+[`RECURSIVE_RECONFIGURATION_CHECKPOINT.md`](RECURSIVE_RECONFIGURATION_CHECKPOINT.md), and
 [`BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md`](BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md).
 
 ## Historical engineering record

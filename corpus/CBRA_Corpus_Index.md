@@ -14,5 +14,10 @@ Execution grammar: recursive-reconfiguration-v1
   `constitutive-phenomenon-v1` scaffolding.
 - Prior kernels, loop contracts, glossaries, constraints, invariants, and the
   `cbra/constitutive/` slice remain historical falsification evidence only.
-- No current runtime implements `recursive-reconfiguration-v1`.
+- `cbra/reconfiguration/` implements a bounded structural substrate for parts
+  of `recursive-reconfiguration-v1`: local cuts, material arrangement
+  variation, diffraction, recursive revision, effect return, and bounded
+  continuity. It does not yet form cuts from situated arrivals, enact public
+  interventions, persist the new grammar, or provide an integrated response
+  runtime.
 - Canonical means current and versioned, not ontologically authoritative.
