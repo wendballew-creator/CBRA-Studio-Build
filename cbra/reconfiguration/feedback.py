@@ -12,10 +12,16 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Sequence, Tuple
 
-from .alternatives import DimensionEffect, TracedAlternative
+from .alternatives import (
+    CompetingAlternatives,
+    DimensionEffect,
+    TracedAlternative,
+    retain_competing_alternatives,
+)
 from dataclasses import replace
 
-from .models import ReconfigurationDelta, StructuralDimension
+from .diffraction import ArrangementDependency, DiffractiveArrangementField
+from .models import CutEnactment, ReconfigurationDelta, StructuralDimension
 from .revision import RecursivelyRevisedArrangementField
 from .substrate import InvalidReconfiguration, ReconfigurationSubstrate
 
@@ -45,6 +51,19 @@ class FormationFeedbackTrace:
     disposition: FeedbackDisposition
     affected_cut_id: str | None
     disturbance_delta: ReconfigurationDelta | None
+
+
+@dataclass(frozen=True)
+class FeedbackFieldRevisionTrace:
+    """One disturbing feedback trace taken up through a local counter-cut."""
+
+    feedback: FormationFeedbackTrace
+    reopened_cut_id: str
+    counter_cut_id: str
+    prior_alternative_id: str
+    recomputed_alternative_id: str
+    prior_trace: TracedAlternative
+    recomputed_trace: TracedAlternative
 
 
 def return_effects_as_feedback(
@@ -172,6 +191,229 @@ def return_effects_as_feedback(
         observations, differing, disposition, affected_cut_id, delta,
     )
     return replace(field, feedback=field.feedback + (trace,))
+
+
+def revise_field_from_feedback(
+    *,
+    field: RecursivelyRevisedArrangementField,
+    substrate: ReconfigurationSubstrate,
+    observation_trace_id: str,
+    counter_cut: CutEnactment,
+    counter_cut_delta_id: str,
+    recomputed_arrangement: CutEnactment,
+) -> RecursivelyRevisedArrangementField:
+    """Ground one local counter-cut in exact complicating or invalidating feedback.
+
+    Feedback uptake is explicit rather than automatic.  The complete competing
+    field is retraced before the counter-cut is enacted, and prior confirmation
+    remains evidence only: it supplies no weight, protection, or authority.
+    """
+
+    matches = tuple(
+        item for item in field.feedback
+        if item.observation_trace_id == observation_trace_id
+    )
+    if len(matches) != 1:
+        raise InvalidReconfiguration(
+            "feedback revision requires one exact retained feedback trace"
+        )
+    feedback = matches[0]
+    if feedback.disposition == FeedbackDisposition.CONFIRMS:
+        raise InvalidReconfiguration(
+            "confirming feedback cannot authorize a counter-cut"
+        )
+    if feedback.disposition not in (
+        FeedbackDisposition.COMPLICATES,
+        FeedbackDisposition.INVALIDATES,
+    ):
+        raise InvalidReconfiguration("unknown feedback disposition")
+    if feedback.disturbance_delta is None or feedback.affected_cut_id is None:
+        raise InvalidReconfiguration(
+            "feedback revision requires a recorded local disturbance"
+        )
+    if any(
+        item.feedback.observation_trace_id == observation_trace_id
+        for item in field.feedback_revisions
+    ):
+        raise InvalidReconfiguration(
+            "one feedback trace cannot manufacture repeated revision authority"
+        )
+
+    recorded_delta = next(
+        (
+            item for item in substrate.state.deltas
+            if item.delta_id == feedback.disturbance_delta.delta_id
+        ),
+        None,
+    )
+    if recorded_delta != feedback.disturbance_delta:
+        raise InvalidReconfiguration(
+            "feedback revision requires the exact recorded disturbance delta"
+        )
+    reopened_cut_id = feedback.affected_cut_id
+    if (
+        reopened_cut_id not in feedback.disturbance_delta.invalidated_cut_ids
+        or substrate.state.invalidated_by.get(reopened_cut_id)
+        != feedback.disturbance_delta.delta_id
+    ):
+        raise InvalidReconfiguration(
+            "feedback revision must match substrate invalidation history"
+        )
+    if feedback.observation_trace_id not in feedback.disturbance_delta.triggering_trace_ids:
+        raise InvalidReconfiguration(
+            "feedback disturbance must retain its observation provenance"
+        )
+
+    current = tuple(field.field.competing.alternatives)
+    prior_index = next(
+        (
+            index for index, item in enumerate(current)
+            if item.replacement.cut_id == feedback.alternative_id
+        ),
+        None,
+    )
+    if prior_index is None or current[prior_index] != feedback.expected_trace:
+        raise InvalidReconfiguration(
+            "feedback revision target must remain the exact current projection"
+        )
+    prior = current[prior_index]
+    dependencies = {
+        item.alternative_cut_id: item.enabling_cut_ids
+        for item in field.field.dependencies
+    }
+    if feedback.enabling_cut_id not in dependencies.get(feedback.alternative_id, ()):
+        raise InvalidReconfiguration(
+            "feedback revision target has inconsistent field lineage"
+        )
+
+    _validate_feedback_counter_cut(
+        field=field,
+        substrate=substrate,
+        feedback=feedback,
+        counter_cut=counter_cut,
+    )
+    if recomputed_arrangement.cut_id == prior.replacement.cut_id:
+        raise InvalidReconfiguration(
+            "feedback recomputation requires a new local cut id"
+        )
+    if prior.replacement.cut_id not in recomputed_arrangement.lineage_ids:
+        raise InvalidReconfiguration(
+            "feedback recomputation must preserve proposal lineage"
+        )
+    if counter_cut.cut_id not in recomputed_arrangement.dependency_ids:
+        raise InvalidReconfiguration(
+            "feedback recomputation must depend on its local counter-cut"
+        )
+
+    source = substrate.state.cuts.get(field.field.competing.source_cut_id)
+    if source is None:
+        raise InvalidReconfiguration("competing source cut is not recorded")
+    replacements = tuple(
+        recomputed_arrangement if index == prior_index else item.replacement
+        for index, item in enumerate(current)
+    )
+    recomputed = retain_competing_alternatives(
+        source=source,
+        replacements=replacements,
+        constraints=field.field.competing.constraints,
+    )
+    recomputed_trace = recomputed.alternatives[prior_index]
+    if recomputed_trace.effects == prior.effects:
+        raise InvalidReconfiguration(
+            "feedback counter-cut must freshly change the affected trace"
+        )
+
+    substrate.enact_cut(counter_cut, delta_id=counter_cut_delta_id)
+    revised_dependencies = tuple(
+        ArrangementDependency(
+            recomputed_arrangement.cut_id,
+            (counter_cut.cut_id,),
+        )
+        if item.alternative_cut_id == prior.replacement.cut_id
+        else item
+        for item in field.field.dependencies
+    )
+    revised_field = DiffractiveArrangementField(
+        competing=CompetingAlternatives(
+            source_cut_id=recomputed.source_cut_id,
+            alternatives=recomputed.alternatives,
+            constraints=recomputed.constraints,
+        ),
+        dependencies=revised_dependencies,
+        disturbances=field.field.disturbances,
+    )
+    revision = FeedbackFieldRevisionTrace(
+        feedback=feedback,
+        reopened_cut_id=reopened_cut_id,
+        counter_cut_id=counter_cut.cut_id,
+        prior_alternative_id=prior.replacement.cut_id,
+        recomputed_alternative_id=recomputed_arrangement.cut_id,
+        prior_trace=prior,
+        recomputed_trace=recomputed_trace,
+    )
+    return replace(
+        field,
+        field=revised_field,
+        feedback_revisions=field.feedback_revisions + (revision,),
+    )
+
+
+def _validate_feedback_counter_cut(
+    *,
+    field: RecursivelyRevisedArrangementField,
+    substrate: ReconfigurationSubstrate,
+    feedback: FormationFeedbackTrace,
+    counter_cut: CutEnactment,
+) -> None:
+    reopened_cut_id = feedback.affected_cut_id
+    assert reopened_cut_id is not None
+    if reopened_cut_id not in counter_cut.lineage_ids:
+        raise InvalidReconfiguration(
+            "feedback counter-cut must preserve reopened formation lineage"
+        )
+    source_cut_id = field.field.competing.source_cut_id
+    if source_cut_id not in counter_cut.dependency_ids:
+        raise InvalidReconfiguration(
+            "feedback counter-cut must remain dependent on the competing source"
+        )
+    if feedback.observation_trace_id not in counter_cut.transport_basis:
+        raise InvalidReconfiguration(
+            "feedback counter-cut must retain observation provenance"
+        )
+    if counter_cut.cut_id in substrate.state.cuts:
+        raise InvalidReconfiguration("feedback counter-cut id must be new")
+    reopened = substrate.state.cuts.get(reopened_cut_id)
+    if reopened is None:
+        raise InvalidReconfiguration("feedback-reopened formation is not recorded")
+    if _cut_shape(counter_cut) == _cut_shape(reopened):
+        raise InvalidReconfiguration(
+            "relabelled feedback formation cannot serve as a counter-cut"
+        )
+
+
+def _cut_shape(cut: CutEnactment):
+    allocations = tuple(sorted(
+        (
+            item.dimension.value,
+            item.position.position_key,
+            item.amount,
+        )
+        for item in cut.allocations
+    ))
+    relations = tuple(sorted(
+        (
+            item.relation_type,
+            item.source.position_key,
+            item.target.position_key,
+        )
+        for item in cut.relations
+    ))
+    return (
+        tuple(item.key for item in cut.positions),
+        relations,
+        allocations,
+        len(cut.dependency_ids),
+    )
 
 
 def _corresponds(

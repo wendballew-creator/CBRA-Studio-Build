@@ -22,6 +22,7 @@ from cbra.reconfiguration import (
     counter_cut_from_oscillation,
     FeedbackDisposition,
     ObservedDimensionEffect,
+    revise_field_from_feedback,
     return_effects_as_feedback,
     disturb_through_arrangement_difference,
     reenter_recomputed_arrangement_difference,
@@ -1631,6 +1632,301 @@ class PostReturnFeedbackTests(unittest.TestCase):
             triggering_trace_ids=("transport:disclosure",),
         )
         self.assertEqual(updated.feedback, reentered.feedback)
+
+
+class FeedbackGroundedFieldRevisionTests(unittest.TestCase):
+    setUp = DiffractiveArrangementTests.setUp
+    difference = DiffractiveArrangementTests.difference
+    disturb = DiffractiveArrangementTests.disturb
+    counter_cut = CounterCutRevisionTests.counter_cut
+    revised_arrangement = CounterCutRevisionTests.revised_arrangement
+    revise = CounterCutRevisionTests.revise
+    witness = StructuralResponsivenessTests.witness
+    proposed_counter_cut = OscillationCounterCutTests.proposed_counter_cut
+    prepared = OscillationFieldReturnTests.prepared
+    recomputed = OscillationFieldReturnTests.recomputed
+    return_to_field = OscillationFieldReturnTests.return_to_field
+    observed = staticmethod(PostReturnFeedbackTests.observed)
+
+    def feedback_counter_cut(self, reopened_cut_id, **overrides):
+        cut_id = overrides.pop("cut_id", "cut:feedback-counter")
+        values = dict(
+            cut_id=cut_id,
+            transport_basis=("transport:feedback-revision",),
+            dependency_ids=(self.source.cut_id,),
+            lineage_ids=(reopened_cut_id,),
+            positions=(
+                CutPosition("availability", "feedback-reopened availability"),
+                CutPosition("uptake", "observed-effect uptake"),
+            ),
+            relations=(Relation(
+                "feedback-revises-availability",
+                local(cut_id, "uptake"),
+                local(cut_id, "availability"),
+            ),),
+        )
+        values.update(overrides)
+        return CutEnactment(**values)
+
+    def feedback_recomputed(self, **overrides):
+        prior = self.recomputed()
+        cut_id = overrides.pop("cut_id", "cut:shared-after-feedback")
+        values = dict(
+            cut_id=cut_id,
+            transport_basis=("transport:feedback-revision",),
+            dependency_ids=("cut:feedback-counter",),
+            lineage_ids=("cut:shared-after-oscillation",),
+            positions=prior.positions,
+            relations=tuple(
+                Relation(
+                    item.relation_type,
+                    local(cut_id, item.source.position_key),
+                    local(cut_id, item.target.position_key),
+                )
+                for item in prior.relations
+            ),
+            allocations=tuple(
+                Allocation(
+                    item.dimension,
+                    local(cut_id, item.position.position_key),
+                    item.amount,
+                )
+                for item in prior.allocations
+                if item.dimension != StructuralDimension.BURDEN
+            ) + (
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "disclosure"), 1.5),
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "coordination"), 1.25),
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "affected"), 1.25),
+            ),
+        )
+        values.update(overrides)
+        return CutEnactment(**values)
+
+    def with_feedback(self, disposition=FeedbackDisposition.INVALIDATES):
+        returned = self.return_to_field()
+        self.substrate.record_transport(transport(
+            "transport:feedback-revision", "Observed consequences complicate the return."
+        ))
+        affected_cut_id = "cut:oscillation-counter"
+        if disposition == FeedbackDisposition.COMPLICATES:
+            affected_cut_id = "cut:feedback-dependent"
+            self.substrate.enact_cut(
+                dependent_cut(
+                    affected_cut_id,
+                    "cut:oscillation-counter",
+                    "feedback-local dependent",
+                ),
+                delta_id="delta:feedback-dependent-local",
+            )
+        trace = returned.field.competing.alternatives[0]
+        return return_effects_as_feedback(
+            field=returned,
+            substrate=self.substrate,
+            observation_trace_id="transport:feedback-revision",
+            alternative_id="cut:shared-after-oscillation",
+            observed_effects=self.observed(trace, burden_maximum=3.0),
+            disposition=disposition,
+            affected_cut_id=affected_cut_id,
+            delta_id="delta:feedback-revision-disturbance",
+        )
+
+    def apply_revision(self, disposition=FeedbackDisposition.INVALIDATES, **overrides):
+        field = overrides.pop("field", None)
+        if field is None:
+            field = self.with_feedback(disposition)
+        feedback = field.feedback[-1]
+        values = dict(
+            field=field,
+            substrate=self.substrate,
+            observation_trace_id="transport:feedback-revision",
+            counter_cut=self.feedback_counter_cut(feedback.affected_cut_id),
+            counter_cut_delta_id="delta:feedback-counter",
+            recomputed_arrangement=self.feedback_recomputed(),
+        )
+        values.update(overrides)
+        return revise_field_from_feedback(**values)
+
+    def test_invalidating_feedback_grounds_counter_cut_and_fresh_recomputation(self):
+        revised = self.apply_revision()
+        trace = revised.feedback_revisions[-1]
+        self.assertEqual("cut:oscillation-counter", trace.reopened_cut_id)
+        self.assertEqual("cut:feedback-counter", trace.counter_cut_id)
+        self.assertEqual("cut:shared-after-feedback", trace.recomputed_alternative_id)
+        self.assertEqual(2.0, trace.prior_trace.effects[0].maximum_after)
+        self.assertEqual(1.5, trace.recomputed_trace.effects[0].maximum_after)
+        self.assertIn("cut:feedback-counter", self.substrate.state.active_cut_ids)
+
+    def test_complicating_feedback_can_ground_its_own_local_counter_cut(self):
+        revised = self.apply_revision(FeedbackDisposition.COMPLICATES)
+        trace = revised.feedback_revisions[-1]
+        self.assertEqual("cut:feedback-dependent", trace.reopened_cut_id)
+        self.assertIn("cut:oscillation-counter", self.substrate.state.active_cut_ids)
+        self.assertIn("cut:feedback-counter", self.substrate.state.active_cut_ids)
+
+    def test_confirming_feedback_remains_evidence_without_revision_authority(self):
+        returned = self.return_to_field()
+        self.substrate.record_transport(transport(
+            "transport:feedback-revision", "Observed effects correspond."
+        ))
+        trace = returned.field.competing.alternatives[0]
+        confirmed = return_effects_as_feedback(
+            field=returned,
+            substrate=self.substrate,
+            observation_trace_id="transport:feedback-revision",
+            alternative_id="cut:shared-after-oscillation",
+            observed_effects=self.observed(trace),
+            disposition=FeedbackDisposition.CONFIRMS,
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "cannot authorize"):
+            revise_field_from_feedback(
+                field=confirmed,
+                substrate=self.substrate,
+                observation_trace_id="transport:feedback-revision",
+                counter_cut=self.feedback_counter_cut("cut:oscillation-counter"),
+                counter_cut_delta_id="delta:confirmation-counter",
+                recomputed_arrangement=self.feedback_recomputed(),
+            )
+        self.assertEqual(before, self.substrate.state)
+        self.assertEqual(FeedbackDisposition.CONFIRMS, confirmed.feedback[-1].disposition)
+
+    def test_prior_confirmation_is_preserved_but_does_not_accumulate_weight(self):
+        returned = self.return_to_field()
+        self.substrate.record_transport(transport("transport:confirm-first", "Correspondence."))
+        current = returned.field.competing.alternatives[0]
+        confirmed = return_effects_as_feedback(
+            field=returned,
+            substrate=self.substrate,
+            observation_trace_id="transport:confirm-first",
+            alternative_id="cut:shared-after-oscillation",
+            observed_effects=self.observed(current),
+            disposition=FeedbackDisposition.CONFIRMS,
+        )
+        self.substrate.record_transport(transport(
+            "transport:feedback-revision", "Later effects complicate correspondence."
+        ))
+        disturbed = return_effects_as_feedback(
+            field=confirmed,
+            substrate=self.substrate,
+            observation_trace_id="transport:feedback-revision",
+            alternative_id="cut:shared-after-oscillation",
+            observed_effects=self.observed(current, burden_maximum=3.0),
+            disposition=FeedbackDisposition.INVALIDATES,
+            affected_cut_id="cut:oscillation-counter",
+            delta_id="delta:feedback-revision-disturbance",
+        )
+        revised = self.apply_revision(field=disturbed)
+        self.assertEqual(2, len(revised.feedback))
+        self.assertEqual(FeedbackDisposition.CONFIRMS, revised.feedback[0].disposition)
+        names = {item.name for item in fields(revised.feedback_revisions[-1])}
+        self.assertTrue(names.isdisjoint({"confidence", "weight", "count"}))
+
+    def test_forged_feedback_delta_has_no_revision_authority(self):
+        field = self.with_feedback()
+        forged_feedback = replace(
+            field.feedback[-1],
+            disturbance_delta=replace(
+                field.feedback[-1].disturbance_delta,
+                triggering_trace_ids=("transport:disclosure",),
+            ),
+        )
+        forged = replace(field, feedback=(forged_feedback,))
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "exact recorded"):
+            self.apply_revision(field=forged)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_relabelled_reopened_formation_is_not_a_counter_cut(self):
+        field = self.with_feedback()
+        reopened = self.substrate.state.cuts["cut:oscillation-counter"]
+        cut_id = "cut:feedback-counter"
+        relabelled = replace(
+            reopened,
+            cut_id=cut_id,
+            transport_basis=("transport:feedback-revision",),
+            lineage_ids=("cut:oscillation-counter",),
+            relations=tuple(
+                Relation(
+                    item.relation_type,
+                    local(cut_id, item.source.position_key),
+                    local(cut_id, item.target.position_key),
+                ) for item in reopened.relations
+            ),
+            allocations=tuple(
+                Allocation(item.dimension, local(cut_id, item.position.position_key), item.amount)
+                for item in reopened.allocations
+            ),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "relabelled feedback"):
+            self.apply_revision(field=field, counter_cut=relabelled)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_cosmetic_recomputation_fails_atomically(self):
+        field = self.with_feedback()
+        prior = field.field.competing.alternatives[0].replacement
+        cosmetic = replace(
+            self.feedback_recomputed(),
+            allocations=tuple(
+                Allocation(item.dimension, local("cut:shared-after-feedback", item.position.position_key), item.amount)
+                for item in prior.allocations
+            ),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "freshly change"):
+            self.apply_revision(field=field, recomputed_arrangement=cosmetic)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_duplicate_topology_fails_before_counter_cut_enactment(self):
+        field = self.with_feedback()
+        other = field.field.competing.alternatives[1].replacement
+        duplicate = replace(
+            self.feedback_recomputed(),
+            allocations=tuple(
+                Allocation(item.dimension, local("cut:shared-after-feedback", item.position.position_key), item.amount)
+                for item in other.allocations
+            ),
+            relations=tuple(
+                Relation(item.relation_type, local("cut:shared-after-feedback", item.source.position_key), local("cut:shared-after-feedback", item.target.position_key))
+                for item in other.relations
+            ),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "duplicated topology"):
+            self.apply_revision(field=field, recomputed_arrangement=duplicate)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_same_feedback_cannot_authorize_serial_revisions(self):
+        revised = self.apply_revision()
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "repeated revision"):
+            revise_field_from_feedback(
+                field=revised,
+                substrate=self.substrate,
+                observation_trace_id="transport:feedback-revision",
+                counter_cut=self.feedback_counter_cut(
+                    "cut:oscillation-counter", cut_id="cut:feedback-counter-again"
+                ),
+                counter_cut_delta_id="delta:feedback-counter-again",
+                recomputed_arrangement=self.feedback_recomputed(
+                    cut_id="cut:shared-after-feedback-again",
+                    dependency_ids=("cut:feedback-counter-again",),
+                ),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_feedback_revision_contains_no_confidence_ranking_or_finality_authority(self):
+        revised = self.apply_revision()
+        names = {
+            item.name
+            for record in (revised, revised.feedback_revisions[-1])
+            for item in fields(record)
+        }
+        self.assertTrue(names.isdisjoint({
+            "confidence", "weight", "score", "rank", "selected", "preferred",
+            "winner", "final", "settled", "success", "failure", "iteration",
+        }))
+        self.assertFalse(hasattr(revised, "choose"))
 
 
 class CounterCutRevisionAdditionalValidationTests(unittest.TestCase):

@@ -63,8 +63,10 @@ from .oscillation import (
 )
 from .feedback import (
     FeedbackDisposition,
+    FeedbackFieldRevisionTrace,
     FormationFeedbackTrace,
     ObservedDimensionEffect,
+    revise_field_from_feedback,
     return_effects_as_feedback,
 )
 from .substrate import (
@@ -120,7 +122,9 @@ __all__ = [
     "OscillationCounterCutTrace",
     "counter_cut_from_oscillation",
     "FeedbackDisposition",
+    "FeedbackFieldRevisionTrace",
     "FormationFeedbackTrace",
     "ObservedDimensionEffect",
+    "revise_field_from_feedback",
     "return_effects_as_feedback",
 ]
