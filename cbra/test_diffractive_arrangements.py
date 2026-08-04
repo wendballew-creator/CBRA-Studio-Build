@@ -3211,6 +3211,182 @@ class PostClosureGroundedFeedbackRevisionTests(unittest.TestCase):
         }))
 
 
+class SuccessorClosureRenewalAndEffectsTests(unittest.TestCase):
+    """Renewed continuity never accumulates authority for a successor."""
+
+    setUp = DiffractiveArrangementTests.setUp
+    difference = DiffractiveArrangementTests.difference
+    disturb = DiffractiveArrangementTests.disturb
+    counter_cut = CounterCutRevisionTests.counter_cut
+    revised_arrangement = CounterCutRevisionTests.revised_arrangement
+    revise = CounterCutRevisionTests.revise
+    witness = StructuralResponsivenessTests.witness
+    proposed_counter_cut = OscillationCounterCutTests.proposed_counter_cut
+    prepared = OscillationFieldReturnTests.prepared
+    recomputed = OscillationFieldReturnTests.recomputed
+    return_to_field = OscillationFieldReturnTests.return_to_field
+    observed = staticmethod(PostReturnFeedbackTests.observed)
+    feedback_counter_cut = FeedbackGroundedFieldRevisionTests.feedback_counter_cut
+    feedback_recomputed = FeedbackGroundedFieldRevisionTests.feedback_recomputed
+    with_feedback = FeedbackGroundedFieldRevisionTests.with_feedback
+    apply_revision = FeedbackGroundedFieldRevisionTests.apply_revision
+    later_counter_cut = RecursiveFeedbackGroundedRevisionTests.later_counter_cut
+    later_recomputed = RecursiveFeedbackGroundedRevisionTests.later_recomputed
+    later_feedback = RecursiveFeedbackGroundedRevisionTests.later_feedback
+    revise_again = RecursiveFeedbackGroundedRevisionTests.revise_again
+    further_counter_cut = BoundedRecursiveFeedbackRevisionTests.further_counter_cut
+    further_recomputed = BoundedRecursiveFeedbackRevisionTests.further_recomputed
+    further_feedback = BoundedRecursiveFeedbackRevisionTests.further_feedback
+    revise_further = BoundedRecursiveFeedbackRevisionTests.revise_further
+    post_closure_feedback = PostClosureGroundedFeedbackRevisionTests.post_closure_feedback
+    successor_counter_cut = PostClosureGroundedFeedbackRevisionTests.successor_counter_cut
+    successor_recomputed = PostClosureGroundedFeedbackRevisionTests.successor_recomputed
+    revise_post_closure = PostClosureGroundedFeedbackRevisionTests.revise_post_closure
+
+    def reenter_successor(self, field=None, **overrides):
+        if field is None:
+            field = self.revise_post_closure()
+        values = dict(
+            field=field,
+            substrate=self.substrate,
+            difference=ConsequentialDifference(
+                witness_alternative_id="cut:shared-after-post-closure",
+                contrasted_alternative_id="cut:distributed",
+                dimension=StructuralDimension.BURDEN,
+                measure=EffectMeasure.MAXIMUM_LOCAL_LOAD,
+            ),
+            enabling_cut_id="cut:enable-distributed",
+            delta_id="delta:successor-reentry",
+            triggering_trace_ids=("transport:post-closure-disturbance",),
+        )
+        values.update(overrides)
+        return reenter_recomputed_arrangement_difference(**values)
+
+    def test_successor_recomputation_renews_continuity_through_material_reentry(self):
+        reentered = self.reenter_successor()
+        trace = reentered.reentries[-1]
+        self.assertEqual("cut:shared-after-post-closure", trace.witness_alternative_id)
+        self.assertEqual("cut:post-closure-counter", trace.witness_counter_cut_id)
+        self.assertEqual(4, len(reentered.provenance_closures))
+
+    def test_reordered_closures_do_not_change_successor_reentry_authority(self):
+        revised = self.revise_post_closure()
+        reordered = replace(
+            revised,
+            provenance_closures=tuple(reversed(revised.provenance_closures)),
+        )
+        reentered = self.reenter_successor(field=reordered)
+        self.assertEqual(
+            "cut:post-closure-counter",
+            reentered.reentries[-1].witness_counter_cut_id,
+        )
+
+    def test_valid_renewed_continuity_cannot_replace_active_successor_cut(self):
+        revised = self.revise_post_closure()
+        self.substrate.disturb(
+            delta_id="delta:reopen-successor-counter",
+            triggering_trace_ids=("transport:post-closure-disturbance",),
+            invalidated_root_ids=("cut:post-closure-counter",),
+            replacements=(),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "active enabling formation"):
+            self.reenter_successor(field=revised)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_successor_receives_confirmation_without_accumulated_authority(self):
+        revised = self.revise_post_closure(confirm=True)
+        current = revised.field.competing.alternatives[0]
+        self.substrate.record_transport(transport(
+            "transport:renewed-successor-confirmation",
+            "The successor presently corresponds without becoming authoritative.",
+        ))
+        confirmed = return_effects_as_feedback(
+            field=revised,
+            substrate=self.substrate,
+            observation_trace_id="transport:renewed-successor-confirmation",
+            alternative_id="cut:shared-after-post-closure",
+            observed_effects=self.observed(current),
+            disposition=FeedbackDisposition.CONFIRMS,
+        )
+        confirmations = tuple(
+            item for item in confirmed.feedback
+            if item.disposition == FeedbackDisposition.CONFIRMS
+        )
+        self.assertEqual(2, len(confirmations))
+        self.assertIn("cut:post-closure-counter", self.substrate.state.active_cut_ids)
+        self.assertFalse(hasattr(confirmed, "confidence"))
+
+    def test_renewed_successor_remains_immediately_open_to_complication(self):
+        revised = self.revise_post_closure()
+        current = revised.field.competing.alternatives[0]
+        self.substrate.enact_cut(
+            dependent_cut(
+                "cut:renewed-successor-dependent",
+                "cut:post-closure-counter",
+                "renewed successor effect-local dependent",
+            ),
+            delta_id="delta:renewed-successor-dependent",
+        )
+        self.substrate.record_transport(transport(
+            "transport:renewed-successor-complication",
+            "Further effects complicate one local successor relation.",
+        ))
+        complicated = return_effects_as_feedback(
+            field=revised,
+            substrate=self.substrate,
+            observation_trace_id="transport:renewed-successor-complication",
+            alternative_id="cut:shared-after-post-closure",
+            observed_effects=self.observed(current, burden_maximum=3.4),
+            disposition=FeedbackDisposition.COMPLICATES,
+            affected_cut_id="cut:renewed-successor-dependent",
+            delta_id="delta:renewed-successor-complication",
+        )
+        self.assertEqual(FeedbackDisposition.COMPLICATES, complicated.feedback[-1].disposition)
+        self.assertIn("cut:post-closure-counter", self.substrate.state.active_cut_ids)
+        self.assertEqual(4, len(complicated.provenance_closures))
+
+    def test_renewed_successor_remains_immediately_open_to_invalidation(self):
+        revised = self.revise_post_closure(confirm=True)
+        current = revised.field.competing.alternatives[0]
+        self.substrate.record_transport(transport(
+            "transport:renewed-successor-invalidation",
+            "Further effects reopen the successor formation.",
+        ))
+        invalidated = return_effects_as_feedback(
+            field=revised,
+            substrate=self.substrate,
+            observation_trace_id="transport:renewed-successor-invalidation",
+            alternative_id="cut:shared-after-post-closure",
+            observed_effects=self.observed(current, burden_maximum=3.5),
+            disposition=FeedbackDisposition.INVALIDATES,
+            affected_cut_id="cut:post-closure-counter",
+            delta_id="delta:renewed-successor-invalidation",
+        )
+        prior_confirmation = next(
+            item for item in invalidated.feedback
+            if item.observation_trace_id == "transport:post-closure-confirmation"
+        )
+        self.assertEqual(FeedbackDisposition.CONFIRMS, prior_confirmation.disposition)
+        self.assertEqual(FeedbackDisposition.INVALIDATES, invalidated.feedback[-1].disposition)
+        self.assertNotIn("cut:post-closure-counter", self.substrate.state.active_cut_ids)
+        self.assertFalse(hasattr(invalidated.feedback[-1], "failure"))
+
+    def test_renewal_records_contain_no_cumulative_authority(self):
+        revised = self.revise_post_closure(confirm=True)
+        names = {
+            item.name
+            for record in (*revised.provenance_closures, revised)
+            for item in fields(record)
+        }
+        self.assertTrue(names.isdisjoint({
+            "renewals", "renewal_count", "depth", "generation", "maturity",
+            "authority", "confidence", "weight", "score", "rank",
+            "selected", "preferred", "protected", "certificate", "final",
+            "success", "failure",
+        }))
+
+
 class CounterCutRevisionAdditionalValidationTests(unittest.TestCase):
     setUp = DiffractiveArrangementTests.setUp
     difference = DiffractiveArrangementTests.difference
