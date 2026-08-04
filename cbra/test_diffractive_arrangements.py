@@ -3,6 +3,7 @@ import unittest
 
 from cbra.reconfiguration import (
     Allocation,
+    ArrangementStateWitness,
     ArrangementDependency,
     ArrangementExplorer,
     ConsequentialDifference,
@@ -13,9 +14,11 @@ from cbra.reconfiguration import (
     InvalidReconfiguration,
     LocalPositionRef,
     ReconfigurationSubstrate,
+    ResponsivenessFinding,
     Relation,
     StructuralDimension,
     TransportTrace,
+    audit_structural_responsiveness,
     disturb_through_arrangement_difference,
     reenter_recomputed_arrangement_difference,
     retain_competing_alternatives,
@@ -702,6 +705,184 @@ class CounterCutRevisionValidationTests(unittest.TestCase):
                 revised_arrangement=self.revised_arrangement(),
             )
         self.assertEqual(before, self.substrate.state)
+
+
+class StructuralResponsivenessTests(unittest.TestCase):
+    setUp = DiffractiveArrangementTests.setUp
+    difference = DiffractiveArrangementTests.difference
+    disturb = DiffractiveArrangementTests.disturb
+    counter_cut = CounterCutRevisionTests.counter_cut
+    revised_arrangement = CounterCutRevisionTests.revised_arrangement
+    revise = CounterCutRevisionTests.revise
+
+    def traces(self):
+        revised = self.revise()
+        original = self.field.competing.alternatives[0]
+        changed = revised.revisions[0].recomputed_trace
+        return original, changed
+
+    def witness(
+        self,
+        witness_id,
+        trace,
+        enabling,
+        triggers=("transport:missed", "transport:disclosure"),
+        deltas=("delta:source",),
+    ):
+        return ArrangementStateWitness(
+            witness_id=witness_id,
+            trace=trace,
+            enabling_cut_ids=(enabling,),
+            operative_delta_ids=deltas,
+            triggering_trace_ids=triggers,
+        )
+
+    def test_structural_change_is_recorded_without_becoming_preference(self):
+        original, changed = self.traces()
+        audit = audit_structural_responsiveness((
+            self.witness("state:a", original, "cut:enable-shared"),
+            self.witness("state:b", changed, "cut:counter-shared"),
+        ), substrate=self.substrate)
+        self.assertEqual(ResponsivenessFinding.MATERIAL_CHANGE, audit.traces[0].finding)
+        self.assertTrue(audit.traces[0].structural_change)
+
+    def test_unsupported_return_to_prior_topology_is_oscillation(self):
+        original, changed = self.traces()
+        audit = audit_structural_responsiveness((
+            self.witness("state:a", original, "cut:enable-shared"),
+            self.witness("state:b", changed, "cut:enable-shared"),
+            self.witness("state:a-return", original, "cut:enable-shared"),
+        ), substrate=self.substrate)
+        trace = audit.traces[-1]
+        self.assertEqual(ResponsivenessFinding.STRUCTURAL_OSCILLATION, trace.finding)
+        self.assertEqual("state:a", trace.recurring_witness_id)
+
+    def test_recurrence_with_new_material_remains_responsive(self):
+        original, changed = self.traces()
+        self.substrate.record_transport(
+            transport("transport:new-disturbance", "A new material disturbance.")
+        )
+        new_material = CutEnactment(
+            cut_id="cut:new-material",
+            transport_basis=("transport:new-disturbance",),
+            dependency_ids=(self.source.cut_id,),
+            lineage_ids=(),
+            positions=(CutPosition("material", "new material participation"),),
+        )
+        self.substrate.enact_cut(new_material, delta_id="delta:new-material")
+        audit = audit_structural_responsiveness((
+            self.witness("state:a", original, "cut:enable-shared"),
+            self.witness("state:b", changed, "cut:enable-shared"),
+            self.witness(
+                "state:a-return",
+                original,
+                "cut:counter-shared",
+                ("transport:missed", "transport:disclosure", "transport:new-disturbance"),
+                ("delta:source", "delta:new-material"),
+            ),
+        ), substrate=self.substrate)
+        trace = audit.traces[-1]
+        self.assertEqual(ResponsivenessFinding.MATERIAL_RECURRENCE, trace.finding)
+        self.assertEqual(("transport:new-disturbance",), trace.new_triggering_trace_ids)
+        self.assertTrue(trace.changed_enabling_formation)
+
+    def test_persistence_is_not_convergence_or_preference(self):
+        original, _ = self.traces()
+        audit = audit_structural_responsiveness((
+            self.witness("state:a", original, "cut:enable-shared"),
+            self.witness("state:a-still", original, "cut:enable-shared"),
+        ), substrate=self.substrate)
+        self.assertEqual(
+            ResponsivenessFinding.STRUCTURAL_PERSISTENCE,
+            audit.traces[0].finding,
+        )
+        names = {
+            item.name
+            for record in (audit, audit.traces[0])
+            for item in fields(record)
+        }
+        self.assertTrue(names.isdisjoint({
+            "score", "rank", "selected", "preferred", "winner", "stable",
+            "converged", "iteration", "limit", "terminal",
+        }))
+        self.assertFalse(hasattr(audit, "stop"))
+
+    def test_unchanged_topology_can_remain_materially_responsive(self):
+        original, _ = self.traces()
+        self.substrate.record_transport(
+            transport("transport:new-disturbance", "New material enters.")
+        )
+        new_material = CutEnactment(
+            cut_id="cut:new-material",
+            transport_basis=("transport:new-disturbance",),
+            dependency_ids=(self.source.cut_id,),
+            lineage_ids=(),
+            positions=(CutPosition("material", "new material participation"),),
+        )
+        self.substrate.enact_cut(new_material, delta_id="delta:new-material")
+        audit = audit_structural_responsiveness((
+            self.witness("state:a", original, "cut:enable-shared"),
+            self.witness(
+                "state:a-responsive",
+                original,
+                "cut:enable-shared",
+                ("transport:missed", "transport:disclosure", "transport:new-disturbance"),
+                ("delta:source", "delta:new-material"),
+            ),
+        ), substrate=self.substrate)
+        trace = audit.traces[0]
+        self.assertEqual(ResponsivenessFinding.MATERIAL_RECURRENCE, trace.finding)
+        self.assertFalse(trace.structural_change)
+
+    def test_repetition_count_does_not_change_the_finding(self):
+        original, changed = self.traces()
+        prefix = (
+            self.witness("state:a", original, "cut:enable-shared"),
+            self.witness("state:b", changed, "cut:enable-shared"),
+        )
+        once = audit_structural_responsiveness(prefix + (
+            self.witness("state:a-return", original, "cut:enable-shared"),
+        ), substrate=self.substrate)
+        many = audit_structural_responsiveness(prefix + (
+            self.witness("state:a-return", original, "cut:enable-shared"),
+            self.witness("state:b-return", changed, "cut:enable-shared"),
+            self.witness("state:a-again", original, "cut:enable-shared"),
+        ), substrate=self.substrate)
+        self.assertEqual(once.traces[-1].finding, many.traces[-1].finding)
+
+    def test_audit_requires_distinct_historical_witnesses(self):
+        original, _ = self.traces()
+        repeated = self.witness("state:a", original, "cut:enable-shared")
+        with self.assertRaisesRegex(InvalidReconfiguration, "ids must be unique"):
+            audit_structural_responsiveness(
+                (repeated, repeated), substrate=self.substrate
+            )
+
+    def test_unrecorded_novelty_cannot_hide_oscillation(self):
+        original, changed = self.traces()
+        witnesses = (
+            self.witness("state:a", original, "cut:enable-shared"),
+            self.witness("state:b", changed, "cut:enable-shared"),
+            self.witness(
+                "state:a-return",
+                original,
+                "cut:enable-shared",
+                ("transport:missed", "transport:disclosure", "transport:invented"),
+            ),
+        )
+        with self.assertRaisesRegex(InvalidReconfiguration, "must match operative"):
+            audit_structural_responsiveness(
+                witnesses, substrate=self.substrate
+            )
+
+
+class CounterCutRevisionAdditionalValidationTests(unittest.TestCase):
+    setUp = DiffractiveArrangementTests.setUp
+    difference = DiffractiveArrangementTests.difference
+    disturb = DiffractiveArrangementTests.disturb
+    counter_cut = CounterCutRevisionTests.counter_cut
+    revised_arrangement = CounterCutRevisionTests.revised_arrangement
+    revise = CounterCutRevisionTests.revise
 
     def test_recomputed_arrangement_must_depend_on_counter_cut(self):
         disturbed = self.disturb()

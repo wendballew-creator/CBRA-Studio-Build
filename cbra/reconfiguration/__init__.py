@@ -47,6 +47,13 @@ from .revision import (
     reenter_recomputed_arrangement_difference,
     revise_reopened_arrangement,
 )
+from .responsiveness import (
+    ArrangementStateWitness,
+    ResponsivenessAudit,
+    ResponsivenessFinding,
+    ResponsivenessTrace,
+    audit_structural_responsiveness,
+)
 from .substrate import (
     InvalidReconfiguration,
     ReconfigurationSubstrate,
@@ -89,4 +96,9 @@ __all__ = [
     "RecursivelyRevisedArrangementField",
     "reenter_recomputed_arrangement_difference",
     "revise_reopened_arrangement",
+    "ArrangementStateWitness",
+    "ResponsivenessAudit",
+    "ResponsivenessFinding",
+    "ResponsivenessTrace",
+    "audit_structural_responsiveness",
 ]
