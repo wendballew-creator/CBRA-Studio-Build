@@ -2960,6 +2960,257 @@ class ClosureGroundedReentryAndEffectsTests(unittest.TestCase):
         self.assertFalse(hasattr(invalidated.feedback[-1], "failure"))
 
 
+class PostClosureGroundedFeedbackRevisionTests(unittest.TestCase):
+    """Continuity closures cannot transmit protection into later revisions."""
+
+    setUp = DiffractiveArrangementTests.setUp
+    difference = DiffractiveArrangementTests.difference
+    disturb = DiffractiveArrangementTests.disturb
+    counter_cut = CounterCutRevisionTests.counter_cut
+    revised_arrangement = CounterCutRevisionTests.revised_arrangement
+    revise = CounterCutRevisionTests.revise
+    witness = StructuralResponsivenessTests.witness
+    proposed_counter_cut = OscillationCounterCutTests.proposed_counter_cut
+    prepared = OscillationFieldReturnTests.prepared
+    recomputed = OscillationFieldReturnTests.recomputed
+    return_to_field = OscillationFieldReturnTests.return_to_field
+    observed = staticmethod(PostReturnFeedbackTests.observed)
+    feedback_counter_cut = FeedbackGroundedFieldRevisionTests.feedback_counter_cut
+    feedback_recomputed = FeedbackGroundedFieldRevisionTests.feedback_recomputed
+    with_feedback = FeedbackGroundedFieldRevisionTests.with_feedback
+    apply_revision = FeedbackGroundedFieldRevisionTests.apply_revision
+    later_counter_cut = RecursiveFeedbackGroundedRevisionTests.later_counter_cut
+    later_recomputed = RecursiveFeedbackGroundedRevisionTests.later_recomputed
+    later_feedback = RecursiveFeedbackGroundedRevisionTests.later_feedback
+    revise_again = RecursiveFeedbackGroundedRevisionTests.revise_again
+    further_counter_cut = BoundedRecursiveFeedbackRevisionTests.further_counter_cut
+    further_recomputed = BoundedRecursiveFeedbackRevisionTests.further_recomputed
+    further_feedback = BoundedRecursiveFeedbackRevisionTests.further_feedback
+    revise_further = BoundedRecursiveFeedbackRevisionTests.revise_further
+
+    def post_closure_feedback(
+        self,
+        disposition=FeedbackDisposition.INVALIDATES,
+        *,
+        confirm=False,
+    ):
+        revised = self.revise_further()
+        current = revised.field.competing.alternatives[0]
+        if confirm:
+            self.substrate.record_transport(transport(
+                "transport:post-closure-confirmation",
+                "Situated effects correspond before later disturbance.",
+            ))
+            revised = return_effects_as_feedback(
+                field=revised,
+                substrate=self.substrate,
+                observation_trace_id="transport:post-closure-confirmation",
+                alternative_id="cut:shared-after-further-feedback",
+                observed_effects=self.observed(current),
+                disposition=FeedbackDisposition.CONFIRMS,
+            )
+        affected_cut_id = "cut:further-feedback-counter"
+        if disposition == FeedbackDisposition.COMPLICATES:
+            affected_cut_id = "cut:post-closure-dependent"
+            self.substrate.enact_cut(
+                dependent_cut(
+                    affected_cut_id,
+                    "cut:further-feedback-counter",
+                    "post-closure effect-local dependent",
+                ),
+                delta_id="delta:post-closure-dependent",
+            )
+        self.substrate.record_transport(transport(
+            "transport:post-closure-disturbance",
+            "Effects after closure-grounded re-entry reopen a local formation.",
+        ))
+        return return_effects_as_feedback(
+            field=revised,
+            substrate=self.substrate,
+            observation_trace_id="transport:post-closure-disturbance",
+            alternative_id="cut:shared-after-further-feedback",
+            observed_effects=self.observed(current, burden_maximum=3.2),
+            disposition=disposition,
+            affected_cut_id=affected_cut_id,
+            delta_id="delta:post-closure-disturbance",
+        )
+
+    def successor_counter_cut(self, reopened_cut_id, **overrides):
+        cut_id = overrides.pop("cut_id", "cut:post-closure-counter")
+        values = dict(
+            cut_id=cut_id,
+            transport_basis=("transport:post-closure-disturbance",),
+            dependency_ids=(self.source.cut_id,),
+            lineage_ids=(reopened_cut_id,),
+            positions=(
+                CutPosition("effect", "post-closure material effect"),
+                CutPosition("relation", "locally reopened relation"),
+                CutPosition("continuity", "retained but non-protective continuity"),
+                CutPosition("uptake", "successor local uptake"),
+            ),
+            relations=(
+                Relation(
+                    "effect-reopens-relation",
+                    local(cut_id, "effect"),
+                    local(cut_id, "relation"),
+                ),
+                Relation(
+                    "relation-meets-continuity",
+                    local(cut_id, "relation"),
+                    local(cut_id, "continuity"),
+                ),
+                Relation(
+                    "continuity-remains-answerable-in-uptake",
+                    local(cut_id, "continuity"),
+                    local(cut_id, "uptake"),
+                ),
+            ),
+        )
+        values.update(overrides)
+        return CutEnactment(**values)
+
+    def successor_recomputed(self, **overrides):
+        prior = self.further_recomputed()
+        cut_id = overrides.pop("cut_id", "cut:shared-after-post-closure")
+        values = dict(
+            cut_id=cut_id,
+            transport_basis=("transport:post-closure-disturbance",),
+            dependency_ids=("cut:post-closure-counter",),
+            lineage_ids=("cut:shared-after-further-feedback",),
+            positions=prior.positions,
+            relations=tuple(
+                Relation(
+                    item.relation_type,
+                    local(cut_id, item.source.position_key),
+                    local(cut_id, item.target.position_key),
+                ) for item in prior.relations
+            ),
+            allocations=tuple(
+                Allocation(
+                    item.dimension,
+                    local(cut_id, item.position.position_key),
+                    item.amount,
+                )
+                for item in prior.allocations
+                if item.dimension != StructuralDimension.BURDEN
+            ) + (
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "disclosure"), 1.1),
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "coordination"), 1.1),
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "affected"), 1.8),
+            ),
+        )
+        values.update(overrides)
+        return CutEnactment(**values)
+
+    def revise_post_closure(
+        self,
+        disposition=FeedbackDisposition.INVALIDATES,
+        *,
+        confirm=False,
+        **overrides,
+    ):
+        field = overrides.pop("field", None)
+        if field is None:
+            field = self.post_closure_feedback(disposition, confirm=confirm)
+        feedback = next(
+            item for item in field.feedback
+            if item.observation_trace_id == "transport:post-closure-disturbance"
+        )
+        values = dict(
+            field=field,
+            substrate=self.substrate,
+            observation_trace_id="transport:post-closure-disturbance",
+            counter_cut=self.successor_counter_cut(feedback.affected_cut_id),
+            counter_cut_delta_id="delta:post-closure-counter",
+            recomputed_arrangement=self.successor_recomputed(),
+        )
+        values.update(overrides)
+        return revise_field_from_feedback(**values)
+
+    def test_post_closure_invalidation_grounds_successor_revision(self):
+        revised = self.revise_post_closure()
+        latest = revised.feedback_revisions[-1]
+        self.assertEqual("cut:further-feedback-counter", latest.reopened_cut_id)
+        self.assertEqual("cut:post-closure-counter", latest.counter_cut_id)
+        self.assertEqual(
+            "cut:shared-after-post-closure", latest.recomputed_alternative_id
+        )
+        self.assertEqual(4, len(revised.feedback_revisions))
+        self.assertEqual(4, len(revised.provenance_closures))
+
+    def test_post_closure_complication_remains_local(self):
+        revised = self.revise_post_closure(FeedbackDisposition.COMPLICATES)
+        self.assertEqual(
+            "cut:post-closure-dependent",
+            revised.feedback_revisions[-1].reopened_cut_id,
+        )
+        self.assertIn("cut:further-feedback-counter", self.substrate.state.active_cut_ids)
+
+    def test_prior_confirmation_and_closure_cannot_protect_formation(self):
+        revised = self.revise_post_closure(confirm=True)
+        self.assertEqual(
+            FeedbackDisposition.CONFIRMS,
+            revised.feedback[-2].disposition,
+        )
+        self.assertEqual(
+            FeedbackDisposition.INVALIDATES,
+            revised.feedback[-1].disposition,
+        )
+        self.assertIn("cut:post-closure-counter", self.substrate.state.active_cut_ids)
+
+    def test_successor_closure_cannot_protect_fresh_counter_cut(self):
+        revised = self.revise_post_closure()
+        current = revised.field.competing.alternatives[0]
+        self.substrate.record_transport(transport(
+            "transport:successor-invalidation",
+            "The successor formation remains materially answerable.",
+        ))
+        invalidated = return_effects_as_feedback(
+            field=revised,
+            substrate=self.substrate,
+            observation_trace_id="transport:successor-invalidation",
+            alternative_id="cut:shared-after-post-closure",
+            observed_effects=self.observed(current, burden_maximum=3.3),
+            disposition=FeedbackDisposition.INVALIDATES,
+            affected_cut_id="cut:post-closure-counter",
+            delta_id="delta:successor-invalidation",
+        )
+        self.assertEqual(
+            FeedbackDisposition.INVALIDATES,
+            invalidated.feedback[-1].disposition,
+        )
+        self.assertNotIn("cut:post-closure-counter", self.substrate.state.active_cut_ids)
+        self.assertEqual(4, len(invalidated.provenance_closures))
+
+    def test_forged_predecessor_closure_cannot_authorize_successor(self):
+        field = self.post_closure_feedback()
+        predecessor = field.provenance_closures[-1]
+        forged = replace(
+            field,
+            provenance_closures=field.provenance_closures[:-1] + (
+                replace(predecessor, counter_cut_id="cut:invented-protection"),
+            ),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "exact provenance closure"):
+            self.revise_post_closure(field=forged)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_successor_closure_contains_no_protection_authority(self):
+        revised = self.revise_post_closure(confirm=True)
+        names = {
+            item.name
+            for record in (*revised.provenance_closures, revised)
+            for item in fields(record)
+        }
+        self.assertTrue(names.isdisjoint({
+            "certificate", "checkpoint", "protected", "protection", "immune",
+            "immunity", "adequate", "authority", "confidence", "weight",
+            "score", "rank", "selected", "preferred", "final", "success",
+            "failure",
+        }))
+
+
 class CounterCutRevisionAdditionalValidationTests(unittest.TestCase):
     setUp = DiffractiveArrangementTests.setUp
     difference = DiffractiveArrangementTests.difference
