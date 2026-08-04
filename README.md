@@ -26,11 +26,17 @@ The retained entity/stream application implements `entity-stream-v1` and now
 fails closed when paired with the active corpus. It cannot silently treat the
 new canon as contextual material while continuing the old execution grammar.
 
+`cbra/reconfiguration/` now contains the first narrow executable substrate for
+the active grammar. It separates opaque transport records from cut-local
+semantic positions, propagates dependency invalidation, and derives structural
+deltas under a Case 2 fixture. It does not form cuts from language or produce
+public responses. See [`LOCAL_CUT_SUBSTRATE.md`](LOCAL_CUT_SUBSTRATE.md).
+
 `cbra/constitutive/` and
 [`CONSTITUTIVE_PHENOMENON_REDESIGN.md`](CONSTITUTIVE_PHENOMENON_REDESIGN.md)
 are retained failed-experiment evidence. They do not implement the active
-grammar. No operative runtime currently implements
-`recursive-reconfiguration-v1`. See [`BUILD_STATUS.md`](BUILD_STATUS.md).
+grammar. No operative response runtime currently implements the complete
+`recursive-reconfiguration-v1` grammar. See [`BUILD_STATUS.md`](BUILD_STATUS.md).
 
 The material below records the prior application's engineering and validation
 history. Its activation instructions do not apply to the active corpus.
