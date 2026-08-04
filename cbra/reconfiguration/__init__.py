@@ -42,7 +42,9 @@ from .diffraction import (
 )
 from .revision import (
     ArrangementRevisionTrace,
+    RecursiveDiffractiveReentryTrace,
     RecursivelyRevisedArrangementField,
+    reenter_recomputed_arrangement_difference,
     revise_reopened_arrangement,
 )
 from .substrate import (
@@ -83,6 +85,8 @@ __all__ = [
     "DiffractiveDisturbanceTrace",
     "disturb_through_arrangement_difference",
     "ArrangementRevisionTrace",
+    "RecursiveDiffractiveReentryTrace",
     "RecursivelyRevisedArrangementField",
+    "reenter_recomputed_arrangement_difference",
     "revise_reopened_arrangement",
 ]

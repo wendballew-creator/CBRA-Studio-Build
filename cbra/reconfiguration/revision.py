@@ -9,14 +9,20 @@ or declare the revision better, caring, or complete.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple, Union
+from typing import Sequence, Tuple, Union
 
 from .alternatives import (
     CompetingAlternatives,
     TracedAlternative,
     retain_competing_alternatives,
 )
-from .diffraction import ArrangementDependency, DiffractiveArrangementField
+from .diffraction import (
+    ArrangementDependency,
+    ConsequentialDifference,
+    DiffractiveArrangementField,
+    DiffractiveDisturbanceTrace,
+    disturb_through_arrangement_difference,
+)
 from .models import CutEnactment, StructuralDimension
 from .substrate import InvalidReconfiguration, ReconfigurationSubstrate
 
@@ -36,6 +42,17 @@ class ArrangementRevisionTrace:
 class RecursivelyRevisedArrangementField:
     field: DiffractiveArrangementField
     revisions: Tuple[ArrangementRevisionTrace, ...]
+    reentries: Tuple["RecursiveDiffractiveReentryTrace", ...] = ()
+
+
+@dataclass(frozen=True)
+class RecursiveDiffractiveReentryTrace:
+    """A recomputed witness re-entering through active formation, not seniority."""
+
+    witness_alternative_id: str
+    witness_counter_cut_id: str
+    target_enabling_cut_id: str
+    disturbance: DiffractiveDisturbanceTrace
 
 
 def revise_reopened_arrangement(
@@ -55,8 +72,10 @@ def revise_reopened_arrangement(
     """
 
     existing_revisions: Tuple[ArrangementRevisionTrace, ...] = ()
+    existing_reentries: Tuple[RecursiveDiffractiveReentryTrace, ...] = ()
     if isinstance(field, RecursivelyRevisedArrangementField):
         existing_revisions = field.revisions
+        existing_reentries = field.reentries
         field = field.field
 
     disturbance = next(
@@ -165,8 +184,138 @@ def revise_reopened_arrangement(
         recomputed_trace=recomputed_trace,
     )
     return RecursivelyRevisedArrangementField(
-        revised_field, existing_revisions + (revision,)
+        revised_field, existing_revisions + (revision,), existing_reentries
     )
+
+
+def reenter_recomputed_arrangement_difference(
+    *,
+    field: RecursivelyRevisedArrangementField,
+    substrate: ReconfigurationSubstrate,
+    difference: ConsequentialDifference,
+    enabling_cut_id: str,
+    delta_id: str,
+    triggering_trace_ids: Sequence[str],
+) -> RecursivelyRevisedArrangementField:
+    """Let a current recomputed trace disturb another active formation.
+
+    Authority derives only from current structural correspondence, recorded
+    revision lineage, and an active enabling cut.  Revision tuple position,
+    depth, recency, and repetition are not inputs to the operation.
+    """
+
+    current = {
+        item.replacement.cut_id: item for item in field.field.competing.alternatives
+    }
+    witness = current.get(difference.witness_alternative_id)
+    if witness is None:
+        raise InvalidReconfiguration("re-entry witness must be currently retained")
+
+    witness_revisions = tuple(
+        item
+        for item in field.revisions
+        if item.revised_alternative_id == difference.witness_alternative_id
+        and item.recomputed_trace == witness
+    )
+    if len(witness_revisions) != 1:
+        raise InvalidReconfiguration(
+            "re-entry witness requires one exact recorded recomputation"
+        )
+    witness_revision = witness_revisions[0]
+    _validate_reentry_revision_lineage(
+        field=field,
+        substrate=substrate,
+        witness=witness,
+        revision=witness_revision,
+    )
+
+    dependencies = {
+        item.alternative_cut_id: item for item in field.field.dependencies
+    }
+    witness_dependency = dependencies[difference.witness_alternative_id]
+    if witness_revision.counter_cut_id not in witness_dependency.enabling_cut_ids:
+        raise InvalidReconfiguration(
+            "re-entry witness must remain enabled by its recorded counter-cut"
+        )
+    if not set(witness_dependency.enabling_cut_ids).issubset(
+        substrate.state.active_cut_ids
+    ):
+        raise InvalidReconfiguration(
+            "re-entry witness requires an active enabling formation"
+        )
+
+    disturbed_field = disturb_through_arrangement_difference(
+        field=field.field,
+        substrate=substrate,
+        difference=difference,
+        enabling_cut_id=enabling_cut_id,
+        delta_id=delta_id,
+        triggering_trace_ids=triggering_trace_ids,
+    )
+    disturbance = disturbed_field.disturbances[-1]
+    reentry = RecursiveDiffractiveReentryTrace(
+        witness_alternative_id=difference.witness_alternative_id,
+        witness_counter_cut_id=witness_revision.counter_cut_id,
+        target_enabling_cut_id=enabling_cut_id,
+        disturbance=disturbance,
+    )
+    return RecursivelyRevisedArrangementField(
+        field=disturbed_field,
+        revisions=field.revisions,
+        reentries=field.reentries + (reentry,),
+    )
+
+
+def _validate_reentry_revision_lineage(
+    *,
+    field: RecursivelyRevisedArrangementField,
+    substrate: ReconfigurationSubstrate,
+    witness: TracedAlternative,
+    revision: ArrangementRevisionTrace,
+) -> None:
+    if revision.reopened_alternative_id not in witness.replacement.lineage_ids:
+        raise InvalidReconfiguration(
+            "re-entry witness does not preserve its recorded proposal lineage"
+        )
+    counter_cut = substrate.state.cuts.get(revision.counter_cut_id)
+    if counter_cut is None:
+        raise InvalidReconfiguration("re-entry counter-cut is not recorded")
+    if revision.invalidated_enabling_cut_id not in counter_cut.lineage_ids:
+        raise InvalidReconfiguration(
+            "re-entry counter-cut does not preserve reopened formation lineage"
+        )
+    if (
+        substrate.state.invalidated_by.get(revision.invalidated_enabling_cut_id)
+        != revision.disturbance_delta_id
+    ):
+        raise InvalidReconfiguration(
+            "re-entry revision does not match substrate invalidation history"
+        )
+    disturbance = next(
+        (
+            item
+            for item in field.field.disturbances
+            if item.delta.delta_id == revision.disturbance_delta_id
+        ),
+        None,
+    )
+    recorded_delta = next(
+        (
+            item
+            for item in substrate.state.deltas
+            if item.delta_id == revision.disturbance_delta_id
+        ),
+        None,
+    )
+    if (
+        disturbance is None
+        or recorded_delta != disturbance.delta
+        or disturbance.reopened_alternative_id != revision.reopened_alternative_id
+        or disturbance.enabling_cut_id != revision.invalidated_enabling_cut_id
+    ):
+        raise InvalidReconfiguration(
+            "re-entry revision requires exact recorded disturbance lineage"
+        )
 
 
 def _validate_counter_cut(

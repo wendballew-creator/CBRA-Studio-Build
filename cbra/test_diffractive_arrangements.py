@@ -17,6 +17,7 @@ from cbra.reconfiguration import (
     StructuralDimension,
     TransportTrace,
     disturb_through_arrangement_difference,
+    reenter_recomputed_arrangement_difference,
     retain_competing_alternatives,
     revise_reopened_arrangement,
 )
@@ -435,6 +436,258 @@ class CounterCutRevisionTests(unittest.TestCase):
                 revised_arrangement=cosmetic,
             )
         self.assertEqual(before, self.substrate.state)
+
+
+class RecursiveDiffractiveReentryTests(unittest.TestCase):
+    setUp = DiffractiveArrangementTests.setUp
+    difference = DiffractiveArrangementTests.difference
+    disturb = DiffractiveArrangementTests.disturb
+    counter_cut = CounterCutRevisionTests.counter_cut
+    revised_arrangement = CounterCutRevisionTests.revised_arrangement
+    revise = CounterCutRevisionTests.revise
+
+    def first_revised_field(self):
+        revised = self.revised_arrangement()
+        revised = replace(
+            revised,
+            allocations=revised.allocations
+            + (
+                Allocation(
+                    StructuralDimension.CAPACITY,
+                    local(revised.cut_id, "coordination"),
+                    1,
+                ),
+            ),
+        )
+        return self.revise(revised_arrangement=revised)
+
+    @staticmethod
+    def reentry_difference():
+        return ConsequentialDifference(
+            witness_alternative_id="cut:shared-recomputed",
+            contrasted_alternative_id="cut:distributed",
+            dimension=StructuralDimension.CAPACITY,
+            measure=EffectMeasure.TOTAL,
+        )
+
+    def reenter(self, **overrides):
+        revised = self.first_revised_field()
+        values = dict(
+            field=revised,
+            substrate=self.substrate,
+            difference=self.reentry_difference(),
+            enabling_cut_id="cut:enable-distributed",
+            delta_id="delta:recursive-reentry",
+            triggering_trace_ids=("transport:disclosure",),
+        )
+        values.update(overrides)
+        return reenter_recomputed_arrangement_difference(**values)
+
+    def counter_distributed(self):
+        return CutEnactment(
+            cut_id="cut:counter-distributed",
+            transport_basis=("transport:disclosure",),
+            dependency_ids=(self.source.cut_id,),
+            lineage_ids=("cut:enable-distributed",),
+            positions=(
+                CutPosition("availability", "revised distributed availability"),
+                CutPosition("coordination", "coordination participation"),
+            ),
+            allocations=(
+                Allocation(
+                    StructuralDimension.POSSIBILITY,
+                    local("cut:counter-distributed", "coordination"),
+                    1,
+                ),
+            ),
+        )
+
+    def recomputed_distributed(self):
+        original = self.field.competing.alternatives[1].replacement
+        cut_id = "cut:distributed-recomputed"
+        return CutEnactment(
+            cut_id=cut_id,
+            transport_basis=original.transport_basis,
+            dependency_ids=("cut:counter-distributed",),
+            lineage_ids=(original.cut_id,),
+            positions=original.positions,
+            relations=tuple(
+                Relation(
+                    item.relation_type,
+                    local(cut_id, item.source.position_key),
+                    local(cut_id, item.target.position_key),
+                )
+                for item in original.relations
+            ),
+            allocations=tuple(
+                Allocation(
+                    item.dimension,
+                    local(cut_id, item.position.position_key),
+                    3 if item.dimension == StructuralDimension.POWER else item.amount,
+                )
+                for item in original.allocations
+            ),
+        )
+
+    def twice_revised_field(self):
+        reentered = self.reenter()
+        return revise_reopened_arrangement(
+            field=reentered,
+            substrate=self.substrate,
+            disturbance_delta_id="delta:recursive-reentry",
+            counter_cut=self.counter_distributed(),
+            counter_cut_delta_id="delta:counter-distributed",
+            revised_arrangement=self.recomputed_distributed(),
+        )
+
+    def test_recomputed_arrangement_reenters_as_current_structural_witness(self):
+        reentered = self.reenter()
+        trace = reentered.reentries[0]
+        self.assertEqual("cut:shared-recomputed", trace.witness_alternative_id)
+        self.assertEqual("cut:counter-shared", trace.witness_counter_cut_id)
+        self.assertEqual("cut:enable-distributed", trace.target_enabling_cut_id)
+        self.assertEqual((4.0, 3.0), (
+            trace.disturbance.witness_value,
+            trace.disturbance.reopened_value,
+        ))
+        self.assertNotIn("cut:enable-distributed", self.substrate.state.active_cut_ids)
+        self.assertEqual(1, len(reentered.revisions))
+        self.assertEqual(2, len(reentered.field.disturbances))
+
+    def test_recomputed_arrangement_can_disturb_an_earlier_counter_cut(self):
+        twice_revised = self.twice_revised_field()
+        self.substrate.enact_cut(
+            dependent_cut(
+                "cut:counter-shared-dependent",
+                "cut:counter-shared",
+                "counter-cut dependent",
+            ),
+            delta_id="delta:counter-shared-dependent",
+        )
+        reordered = replace(
+            twice_revised,
+            revisions=tuple(reversed(twice_revised.revisions)),
+        )
+        final = reenter_recomputed_arrangement_difference(
+            field=reordered,
+            substrate=self.substrate,
+            difference=ConsequentialDifference(
+                witness_alternative_id="cut:distributed-recomputed",
+                contrasted_alternative_id="cut:shared-recomputed",
+                dimension=StructuralDimension.POWER,
+                measure=EffectMeasure.TOTAL,
+            ),
+            enabling_cut_id="cut:counter-shared",
+            delta_id="delta:counter-cut-reentry",
+            triggering_trace_ids=("transport:disclosure",),
+        )
+        self.assertNotIn("cut:counter-shared", self.substrate.state.active_cut_ids)
+        self.assertIn("cut:counter-distributed", self.substrate.state.active_cut_ids)
+        self.assertEqual(2, len(final.revisions))
+        self.assertEqual(2, len(final.reentries))
+        self.assertEqual(
+            {"cut:counter-shared", "cut:counter-shared-dependent"},
+            set(final.reentries[-1].disturbance.invalidated_cut_ids),
+        )
+
+    def test_unrevised_alternative_has_no_recursive_reentry_authority(self):
+        revised = self.first_revised_field()
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "exact recorded recomputation"):
+            reenter_recomputed_arrangement_difference(
+                field=revised,
+                substrate=self.substrate,
+                difference=ConsequentialDifference(
+                    witness_alternative_id="cut:distributed",
+                    contrasted_alternative_id="cut:shared-recomputed",
+                    dimension=StructuralDimension.CAPACITY,
+                    measure=EffectMeasure.TOTAL,
+                ),
+                enabling_cut_id="cut:counter-shared",
+                delta_id="delta:unrevised-authority",
+                triggering_trace_ids=("transport:disclosure",),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_repeated_revision_records_cannot_create_iteration_authority(self):
+        revised = self.first_revised_field()
+        inflated = replace(revised, revisions=revised.revisions * 2)
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "one exact recorded"):
+            reenter_recomputed_arrangement_difference(
+                field=inflated,
+                substrate=self.substrate,
+                difference=self.reentry_difference(),
+                enabling_cut_id="cut:enable-distributed",
+                delta_id="delta:iteration-authority",
+                triggering_trace_ids=("transport:disclosure",),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_forged_revision_lineage_cannot_create_reentry_authority(self):
+        revised = self.first_revised_field()
+        forged_revision = replace(
+            revised.revisions[0],
+            disturbance_delta_id="delta:counter-shared",
+        )
+        forged = replace(revised, revisions=(forged_revision,))
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "invalidation history"):
+            reenter_recomputed_arrangement_difference(
+                field=forged,
+                substrate=self.substrate,
+                difference=self.reentry_difference(),
+                enabling_cut_id="cut:enable-distributed",
+                delta_id="delta:forged-reentry",
+                triggering_trace_ids=("transport:disclosure",),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_inactive_witness_counter_cut_removes_reentry_authority(self):
+        revised = self.first_revised_field()
+        self.substrate.enact_cut(
+            dependent_cut("cut:counter-dependent", "cut:counter-shared", "dependent"),
+            delta_id="delta:counter-dependent",
+        )
+        self.substrate.disturb(
+            delta_id="delta:invalidate-witness",
+            triggering_trace_ids=("transport:disclosure",),
+            invalidated_root_ids=("cut:counter-shared",),
+            replacements=(),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "active enabling formation"):
+            reenter_recomputed_arrangement_difference(
+                field=revised,
+                substrate=self.substrate,
+                difference=self.reentry_difference(),
+                enabling_cut_id="cut:enable-distributed",
+                delta_id="delta:stale-reentry",
+                triggering_trace_ids=("transport:disclosure",),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_reentry_records_expose_no_recency_depth_or_selection_authority(self):
+        reentered = self.reenter()
+        names = {
+            item.name
+            for record in (reentered, reentered.reentries[0])
+            for item in fields(record)
+        }
+        self.assertTrue(names.isdisjoint({
+            "score", "rank", "ranking", "selected", "preferred", "winner",
+            "depth", "recency", "iteration", "generation",
+        }))
+        self.assertFalse(hasattr(reentered, "choose"))
+
+
+class CounterCutRevisionValidationTests(unittest.TestCase):
+    setUp = DiffractiveArrangementTests.setUp
+    difference = DiffractiveArrangementTests.difference
+    disturb = DiffractiveArrangementTests.disturb
+    counter_cut = CounterCutRevisionTests.counter_cut
+    revised_arrangement = CounterCutRevisionTests.revised_arrangement
+    revise = CounterCutRevisionTests.revise
 
     def test_counter_cut_must_name_reopened_lineage(self):
         disturbed = self.disturb()
