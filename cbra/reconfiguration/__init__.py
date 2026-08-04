@@ -54,6 +54,10 @@ from .responsiveness import (
     ResponsivenessTrace,
     audit_structural_responsiveness,
 )
+from .oscillation import (
+    OscillationCounterCutTrace,
+    counter_cut_from_oscillation,
+)
 from .substrate import (
     InvalidReconfiguration,
     ReconfigurationSubstrate,
@@ -101,4 +105,6 @@ __all__ = [
     "ResponsivenessFinding",
     "ResponsivenessTrace",
     "audit_structural_responsiveness",
+    "OscillationCounterCutTrace",
+    "counter_cut_from_oscillation",
 ]

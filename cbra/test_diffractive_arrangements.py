@@ -19,6 +19,7 @@ from cbra.reconfiguration import (
     StructuralDimension,
     TransportTrace,
     audit_structural_responsiveness,
+    counter_cut_from_oscillation,
     disturb_through_arrangement_difference,
     reenter_recomputed_arrangement_difference,
     retain_competing_alternatives,
@@ -874,6 +875,277 @@ class StructuralResponsivenessTests(unittest.TestCase):
             audit_structural_responsiveness(
                 witnesses, substrate=self.substrate
             )
+
+
+class OscillationCounterCutTests(unittest.TestCase):
+    setUp = DiffractiveArrangementTests.setUp
+    difference = DiffractiveArrangementTests.difference
+    disturb = DiffractiveArrangementTests.disturb
+    counter_cut = CounterCutRevisionTests.counter_cut
+    revised_arrangement = CounterCutRevisionTests.revised_arrangement
+    revise = CounterCutRevisionTests.revise
+    traces = StructuralResponsivenessTests.traces
+    witness = StructuralResponsivenessTests.witness
+
+    def oscillation_audit(self):
+        original, changed = self.traces()
+        return audit_structural_responsiveness((
+            self.witness("state:a", original, "cut:counter-shared"),
+            self.witness("state:b", changed, "cut:counter-shared"),
+            self.witness("state:a-return", original, "cut:counter-shared"),
+        ), substrate=self.substrate)
+
+    def proposed_counter_cut(self, **overrides):
+        values = dict(
+            cut_id="cut:oscillation-counter",
+            transport_basis=("transport:disclosure",),
+            dependency_ids=(self.source.cut_id,),
+            lineage_ids=("cut:counter-shared",),
+            positions=(
+                CutPosition("availability", "oscillation-exposed availability"),
+                CutPosition("feedback", "recurrence feedback participation"),
+                CutPosition("dependency", "reproducing dependency"),
+            ),
+            allocations=(
+                Allocation(
+                    StructuralDimension.POSSIBILITY,
+                    local("cut:oscillation-counter", "feedback"),
+                    1,
+                ),
+            ),
+        )
+        values.update(overrides)
+        return CutEnactment(**values)
+
+    def enact(self, **overrides):
+        audit = self.oscillation_audit()
+        self.substrate.enact_cut(
+            dependent_cut(
+                "cut:oscillation-dependent",
+                "cut:counter-shared",
+                "formation reproduced through return",
+            ),
+            delta_id="delta:oscillation-dependent",
+        )
+        values = dict(
+            audit=audit,
+            returning_witness_id="state:a-return",
+            reopened_enabling_cut_id="cut:counter-shared",
+            counter_cut=self.proposed_counter_cut(),
+            delta_id="delta:oscillation-counter",
+            triggering_trace_ids=("transport:disclosure",),
+            substrate=self.substrate,
+        )
+        values.update(overrides)
+        return counter_cut_from_oscillation(**values)
+
+    def test_oscillation_trace_can_materially_ground_a_local_counter_cut(self):
+        trace = self.enact()
+        self.assertEqual("state:a", trace.recurring_witness_id)
+        self.assertEqual("state:b", trace.departing_witness_id)
+        self.assertEqual("state:a-return", trace.returning_witness_id)
+        self.assertEqual(
+            ResponsivenessFinding.STRUCTURAL_OSCILLATION,
+            trace.responsiveness_trace.finding,
+        )
+        self.assertEqual(
+            {"cut:counter-shared", "cut:oscillation-dependent"},
+            set(trace.disturbance_delta.invalidated_cut_ids),
+        )
+        self.assertIn("cut:oscillation-counter", self.substrate.state.active_cut_ids)
+
+    def test_detection_alone_does_not_mutate_or_command(self):
+        original, changed = self.traces()
+        witnesses = (
+            self.witness("state:a", original, "cut:counter-shared"),
+            self.witness("state:b", changed, "cut:counter-shared"),
+            self.witness("state:a-return", original, "cut:counter-shared"),
+        )
+        before = self.substrate.state
+        audit = audit_structural_responsiveness(witnesses, substrate=self.substrate)
+        self.assertEqual(before, self.substrate.state)
+        names = {
+            item.name
+            for record in (audit, audit.traces[-1])
+            for item in fields(record)
+        }
+        self.assertTrue(names.isdisjoint({
+            "stop", "settle", "restore", "selected", "preferred", "winner",
+            "score", "rank", "limit", "converged",
+        }))
+
+    def test_material_recurrence_cannot_be_used_as_oscillation(self):
+        original, changed = self.traces()
+        audit = audit_structural_responsiveness((
+            self.witness("state:a", original, "cut:enable-distributed"),
+            self.witness("state:b", changed, "cut:enable-distributed"),
+            self.witness(
+                "state:a-return",
+                original,
+                "cut:counter-shared",
+                deltas=("delta:source", "delta:counter-shared"),
+            ),
+        ), substrate=self.substrate)
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "unsupported structural"):
+            counter_cut_from_oscillation(
+                audit=audit,
+                returning_witness_id="state:a-return",
+                reopened_enabling_cut_id="cut:counter-shared",
+                counter_cut=self.proposed_counter_cut(),
+                delta_id="delta:not-oscillation",
+                triggering_trace_ids=("transport:disclosure",),
+                substrate=self.substrate,
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_target_must_participate_in_departure_and_return(self):
+        audit = self.oscillation_audit()
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "unsupported return"):
+            counter_cut_from_oscillation(
+                audit=audit,
+                returning_witness_id="state:a-return",
+                reopened_enabling_cut_id="cut:enable-distributed",
+                counter_cut=self.proposed_counter_cut(
+                    lineage_ids=("cut:enable-distributed",)
+                ),
+                delta_id="delta:unbound-target",
+                triggering_trace_ids=("transport:disclosure",),
+                substrate=self.substrate,
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_relabelled_target_is_not_a_counter_cut(self):
+        audit = self.oscillation_audit()
+        reopened = self.substrate.state.cuts["cut:counter-shared"]
+        relabelled = CutEnactment(
+            cut_id="cut:oscillation-counter",
+            transport_basis=("transport:disclosure",),
+            dependency_ids=reopened.dependency_ids,
+            lineage_ids=("cut:counter-shared",),
+            positions=tuple(
+                CutPosition(item.key, "renamed " + item.local_name)
+                for item in reopened.positions
+            ),
+            allocations=tuple(
+                Allocation(
+                    item.dimension,
+                    local("cut:oscillation-counter", item.position.position_key),
+                    item.amount,
+                )
+                for item in reopened.allocations
+            ),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "structurally distinct"):
+            counter_cut_from_oscillation(
+                audit=audit,
+                returning_witness_id="state:a-return",
+                reopened_enabling_cut_id="cut:counter-shared",
+                counter_cut=relabelled,
+                delta_id="delta:relabelled",
+                triggering_trace_ids=("transport:disclosure",),
+                substrate=self.substrate,
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_transport_evidence_must_be_operative_in_return(self):
+        audit = self.oscillation_audit()
+        self.substrate.record_transport(
+            transport("transport:unrelated", "Unrelated later message.")
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "operative in the return"):
+            counter_cut_from_oscillation(
+                audit=audit,
+                returning_witness_id="state:a-return",
+                reopened_enabling_cut_id="cut:counter-shared",
+                counter_cut=self.proposed_counter_cut(
+                    transport_basis=("transport:unrelated",)
+                ),
+                delta_id="delta:unrelated-evidence",
+                triggering_trace_ids=("transport:unrelated",),
+                substrate=self.substrate,
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_forged_oscillation_finding_has_no_counter_cut_authority(self):
+        audit = self.oscillation_audit()
+        forged_trace = replace(
+            audit.traces[-1],
+            prior_witness_id="state:a",
+        )
+        forged = replace(audit, traces=audit.traces[:-1] + (forged_trace,))
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "exact recorded audit"):
+            counter_cut_from_oscillation(
+                audit=forged,
+                returning_witness_id="state:a-return",
+                reopened_enabling_cut_id="cut:counter-shared",
+                counter_cut=self.proposed_counter_cut(),
+                delta_id="delta:forged-oscillation",
+                triggering_trace_ids=("transport:disclosure",),
+                substrate=self.substrate,
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_unrelated_dependency_cannot_acquire_local_counter_cut_authority(self):
+        audit = self.oscillation_audit()
+        unrelated = CutEnactment(
+            cut_id="cut:unrelated-active",
+            transport_basis=("transport:disclosure",),
+            dependency_ids=(),
+            lineage_ids=(),
+            positions=(CutPosition("unrelated", "unrelated availability"),),
+        )
+        self.substrate.enact_cut(unrelated, delta_id="delta:unrelated-active")
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "locally anchored"):
+            counter_cut_from_oscillation(
+                audit=audit,
+                returning_witness_id="state:a-return",
+                reopened_enabling_cut_id="cut:counter-shared",
+                counter_cut=self.proposed_counter_cut(
+                    dependency_ids=("cut:unrelated-active",)
+                ),
+                delta_id="delta:unrelated-anchor",
+                triggering_trace_ids=("transport:disclosure",),
+                substrate=self.substrate,
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_same_trace_cannot_force_repeated_revision(self):
+        audit = self.oscillation_audit()
+        self.substrate.enact_cut(
+            dependent_cut(
+                "cut:oscillation-dependent",
+                "cut:counter-shared",
+                "formation reproduced through return",
+            ),
+            delta_id="delta:oscillation-dependent",
+        )
+        trace = counter_cut_from_oscillation(
+            audit=audit,
+            returning_witness_id="state:a-return",
+            reopened_enabling_cut_id="cut:counter-shared",
+            counter_cut=self.proposed_counter_cut(),
+            delta_id="delta:oscillation-counter",
+            triggering_trace_ids=("transport:disclosure",),
+            substrate=self.substrate,
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "remain active"):
+            counter_cut_from_oscillation(
+                audit=audit,
+                returning_witness_id=trace.returning_witness_id,
+                reopened_enabling_cut_id=trace.reopened_enabling_cut_id,
+                counter_cut=self.proposed_counter_cut(cut_id="cut:forced-again"),
+                delta_id="delta:forced-again",
+                triggering_trace_ids=("transport:disclosure",),
+                substrate=self.substrate,
+            )
+        self.assertEqual(before, self.substrate.state)
 
 
 class CounterCutRevisionAdditionalValidationTests(unittest.TestCase):
