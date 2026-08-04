@@ -2767,6 +2767,199 @@ class BoundedRecursiveFeedbackRevisionTests(unittest.TestCase):
         }))
 
 
+class ClosureGroundedReentryAndEffectsTests(unittest.TestCase):
+    """A bounded closure preserves continuity but never answers for materiality."""
+
+    setUp = DiffractiveArrangementTests.setUp
+    difference = DiffractiveArrangementTests.difference
+    disturb = DiffractiveArrangementTests.disturb
+    counter_cut = CounterCutRevisionTests.counter_cut
+    revised_arrangement = CounterCutRevisionTests.revised_arrangement
+    revise = CounterCutRevisionTests.revise
+    witness = StructuralResponsivenessTests.witness
+    proposed_counter_cut = OscillationCounterCutTests.proposed_counter_cut
+    prepared = OscillationFieldReturnTests.prepared
+    recomputed = OscillationFieldReturnTests.recomputed
+    return_to_field = OscillationFieldReturnTests.return_to_field
+    observed = staticmethod(PostReturnFeedbackTests.observed)
+    feedback_counter_cut = FeedbackGroundedFieldRevisionTests.feedback_counter_cut
+    feedback_recomputed = FeedbackGroundedFieldRevisionTests.feedback_recomputed
+    with_feedback = FeedbackGroundedFieldRevisionTests.with_feedback
+    apply_revision = FeedbackGroundedFieldRevisionTests.apply_revision
+    later_counter_cut = RecursiveFeedbackGroundedRevisionTests.later_counter_cut
+    later_recomputed = RecursiveFeedbackGroundedRevisionTests.later_recomputed
+    later_feedback = RecursiveFeedbackGroundedRevisionTests.later_feedback
+    revise_again = RecursiveFeedbackGroundedRevisionTests.revise_again
+    further_counter_cut = BoundedRecursiveFeedbackRevisionTests.further_counter_cut
+    further_recomputed = BoundedRecursiveFeedbackRevisionTests.further_recomputed
+    further_feedback = BoundedRecursiveFeedbackRevisionTests.further_feedback
+    revise_further = BoundedRecursiveFeedbackRevisionTests.revise_further
+
+    def reenter_closure_grounded(self, field=None, **overrides):
+        if field is None:
+            field = self.revise_further()
+        values = dict(
+            field=field,
+            substrate=self.substrate,
+            difference=ConsequentialDifference(
+                witness_alternative_id="cut:shared-after-further-feedback",
+                contrasted_alternative_id="cut:distributed",
+                dimension=StructuralDimension.BURDEN,
+                measure=EffectMeasure.MAXIMUM_LOCAL_LOAD,
+            ),
+            enabling_cut_id="cut:enable-distributed",
+            delta_id="delta:closure-grounded-reentry",
+            triggering_trace_ids=("transport:further-feedback",),
+        )
+        values.update(overrides)
+        return reenter_recomputed_arrangement_difference(**values)
+
+    def test_closure_grounded_recomputation_reenters_through_present_materiality(self):
+        reentered = self.reenter_closure_grounded()
+        trace = reentered.reentries[-1]
+        self.assertEqual(
+            "cut:shared-after-further-feedback", trace.witness_alternative_id
+        )
+        self.assertEqual("cut:further-feedback-counter", trace.witness_counter_cut_id)
+        self.assertEqual(
+            "cut:enable-distributed", trace.target_enabling_cut_id
+        )
+
+    def test_valid_closure_cannot_substitute_for_active_counter_cut(self):
+        revised = self.revise_further()
+        self.substrate.disturb(
+            delta_id="delta:reopen-closure-counter",
+            triggering_trace_ids=("transport:further-feedback",),
+            invalidated_root_ids=("cut:further-feedback-counter",),
+            replacements=(),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "active enabling formation"):
+            self.reenter_closure_grounded(field=revised)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_valid_closure_cannot_substitute_for_current_field_dependency(self):
+        revised = self.revise_further()
+        dependencies = tuple(
+            ArrangementDependency(
+                item.alternative_cut_id,
+                ("cut:enable-shared",),
+            )
+            if item.alternative_cut_id == "cut:shared-after-further-feedback"
+            else item
+            for item in revised.field.dependencies
+        )
+        forged = replace(
+            revised,
+            field=replace(revised.field, dependencies=dependencies),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "recorded counter-cut"):
+            self.reenter_closure_grounded(field=forged)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_valid_closure_cannot_substitute_for_exact_current_trace(self):
+        revised = self.revise_further()
+        latest = revised.feedback_revisions[-1]
+        alternatives = tuple(
+            latest.prior_trace
+            if item.replacement.cut_id == "cut:shared-after-further-feedback"
+            else item
+            for item in revised.field.competing.alternatives
+        )
+        forged = replace(
+            revised,
+            field=replace(
+                revised.field,
+                competing=replace(
+                    revised.field.competing,
+                    alternatives=alternatives,
+                ),
+                dependencies=tuple(
+                    ArrangementDependency(
+                        latest.prior_alternative_id,
+                        item.enabling_cut_ids,
+                    )
+                    if item.alternative_cut_id
+                    == "cut:shared-after-further-feedback"
+                    else item
+                    for item in revised.field.dependencies
+                ),
+            ),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "currently retained"):
+            self.reenter_closure_grounded(field=forged)
+        self.assertEqual(before, self.substrate.state)
+
+    def test_valid_closure_cannot_turn_equal_effects_into_difference(self):
+        revised = self.revise_further()
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "equal arrangement effects"):
+            self.reenter_closure_grounded(
+                field=revised,
+                difference=ConsequentialDifference(
+                    witness_alternative_id="cut:shared-after-further-feedback",
+                    contrasted_alternative_id="cut:distributed",
+                    dimension=StructuralDimension.BURDEN,
+                    measure=EffectMeasure.TOTAL,
+                ),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_closure_grounded_recomputation_receives_later_effects(self):
+        revised = self.revise_further()
+        current = revised.field.competing.alternatives[0]
+        self.substrate.record_transport(transport(
+            "transport:closure-confirmation",
+            "Present effects correspond with the current formation.",
+        ))
+        confirmed = return_effects_as_feedback(
+            field=revised,
+            substrate=self.substrate,
+            observation_trace_id="transport:closure-confirmation",
+            alternative_id="cut:shared-after-further-feedback",
+            observed_effects=self.observed(current),
+            disposition=FeedbackDisposition.CONFIRMS,
+        )
+        self.assertEqual(FeedbackDisposition.CONFIRMS, confirmed.feedback[-1].disposition)
+        self.assertIn("cut:further-feedback-counter", self.substrate.state.active_cut_ids)
+
+    def test_confirmation_does_not_protect_closure_grounded_counter_cut(self):
+        revised = self.revise_further()
+        current = revised.field.competing.alternatives[0]
+        self.substrate.record_transport(transport(
+            "transport:closure-confirmation",
+            "Present effects correspond with the current formation.",
+        ))
+        confirmed = return_effects_as_feedback(
+            field=revised,
+            substrate=self.substrate,
+            observation_trace_id="transport:closure-confirmation",
+            alternative_id="cut:shared-after-further-feedback",
+            observed_effects=self.observed(current),
+            disposition=FeedbackDisposition.CONFIRMS,
+        )
+        self.substrate.record_transport(transport(
+            "transport:closure-invalidation",
+            "Further effects materially reopen the current formation.",
+        ))
+        invalidated = return_effects_as_feedback(
+            field=confirmed,
+            substrate=self.substrate,
+            observation_trace_id="transport:closure-invalidation",
+            alternative_id="cut:shared-after-further-feedback",
+            observed_effects=self.observed(current, burden_maximum=3.1),
+            disposition=FeedbackDisposition.INVALIDATES,
+            affected_cut_id="cut:further-feedback-counter",
+            delta_id="delta:closure-invalidation",
+        )
+        self.assertEqual(FeedbackDisposition.CONFIRMS, invalidated.feedback[-2].disposition)
+        self.assertEqual(FeedbackDisposition.INVALIDATES, invalidated.feedback[-1].disposition)
+        self.assertNotIn("cut:further-feedback-counter", self.substrate.state.active_cut_ids)
+        self.assertFalse(hasattr(invalidated.feedback[-1], "failure"))
+
+
 class CounterCutRevisionAdditionalValidationTests(unittest.TestCase):
     setUp = DiffractiveArrangementTests.setUp
     difference = DiffractiveArrangementTests.difference
