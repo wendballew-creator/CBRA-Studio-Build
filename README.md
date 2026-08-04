@@ -31,10 +31,14 @@ the active grammar. It separates opaque transport records from cut-local
 semantic positions; produces materially distinct, concurrent arrangements;
 traces diffractive disturbance; supports counter-cuts, recursive
 reconfiguration, effect return, feedback-grounded revision, and bounded
-continuity without ranking, confidence, or selection. It still does not form
-cuts from situated language or other arrivals, produce public interventions,
-persist the new grammar, or serve an API/browser path. See
-[`RECURSIVE_RECONFIGURATION_CHECKPOINT.md`](RECURSIVE_RECONFIGURATION_CHECKPOINT.md).
+continuity without ranking, confidence, or selection. Its first situated
+formation boundary now grounds proposed local positions in exact arrival
+evidence and explicit apparatus participation, exclusions, and revision
+conditions. It does not yet generate those proposals from language or other
+media, produce public interventions, persist the new grammar, or serve an
+API/browser path. See
+[`RECURSIVE_RECONFIGURATION_CHECKPOINT.md`](RECURSIVE_RECONFIGURATION_CHECKPOINT.md)
+and [`SITUATED_FORMATION_EVIDENCE_SLICE.md`](SITUATED_FORMATION_EVIDENCE_SLICE.md).
 
 `cbra/constitutive/` and
 [`CONSTITUTIVE_PHENOMENON_REDESIGN.md`](CONSTITUTIVE_PHENOMENON_REDESIGN.md)

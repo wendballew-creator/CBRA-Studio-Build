@@ -1,8 +1,9 @@
 """Narrow executable substrate for ``recursive-reconfiguration-v1``.
 
-This package implements transport/cut separation, dependency invalidation,
-and mechanically derived structural deltas.  It does not implement semantic
-formation, public articulation, or CBRA as a whole.
+This package implements transport/cut separation, accountable situated
+formation proposals, dependency invalidation, and mechanically derived
+structural deltas. It does not infer semantic formations from arrivals,
+implement public articulation, or implement CBRA as a whole.
 """
 
 from .models import (
@@ -15,6 +16,14 @@ from .models import (
     Relation,
     StructuralDimension,
     TransportTrace,
+)
+from .formation import (
+    ApparatusParticipation,
+    EvidenceSpan,
+    PositionGrounding,
+    SituatedCutProposal,
+    SituatedFormationBoundary,
+    SituatedNoticing,
 )
 from .arrangements import (
     ArrangementComparison,
@@ -93,6 +102,12 @@ __all__ = [
     "BurdenRedistributionCandidate",
     "compare_arrangements",
     "TransportTrace",
+    "ApparatusParticipation",
+    "EvidenceSpan",
+    "PositionGrounding",
+    "SituatedCutProposal",
+    "SituatedFormationBoundary",
+    "SituatedNoticing",
     "CompetingAlternatives",
     "DimensionEffect",
     "EffectDirection",

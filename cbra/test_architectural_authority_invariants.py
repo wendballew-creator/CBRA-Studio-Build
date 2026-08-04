@@ -13,6 +13,9 @@ from cbra.reconfiguration import (
     FeedbackDisposition,
     FeedbackProvenanceClosure,
     FormationFeedbackTrace,
+    ApparatusParticipation,
+    SituatedNoticing,
+    SituatedCutProposal,
 )
 
 
@@ -94,6 +97,14 @@ class ArchitecturalAuthorityInvariantTests(unittest.TestCase):
             field_names(FeedbackProvenanceClosure),
         )
         self.assertCarriesNoAuthorityFields(FeedbackProvenanceClosure)
+
+    def test_situated_formation_records_trace_conditions_not_authority(self):
+        for record_type in (
+            ApparatusParticipation,
+            SituatedNoticing,
+            SituatedCutProposal,
+        ):
+            self.assertCarriesNoAuthorityFields(record_type)
 
 
 if __name__ == "__main__":

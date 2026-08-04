@@ -2,10 +2,8 @@
 
 Status date: 2026-08-04
 
-Status boundary: recursive-reconfiguration structural checkpoint at `42111b7`,
-based on the Case 2 paradigmatic falsification, the canonical redesign, and
-the complete linear sequence from local-cut substrate through renewable
-bounded continuity.
+Status boundary: first situated-formation evidence slice after the shared
+recursive-reconfiguration checkpoint at `b0a5974`.
 
 ## Current conclusion
 
@@ -59,23 +57,27 @@ winner; diffractive disturbance; local counter-cuts; structural
 responsiveness and oscillation; effect return; feedback-grounded recursive
 revision; and renewable bounded continuity.
 
-This remains a structural substrate, not an operative response runtime. Test
-fixtures still supply the semantic positions, relations, cuts, constraints,
-and observed effects. The runtime does not yet form those relations from
-language, documents, tools, embodiment, material conditions, or model
-proposals. It does not form a public intervention, persist the new grammar,
-or expose it through an API or browser.
+This remains a structural substrate, not an operative response runtime. The
+first situated-formation boundary now requires exact arrival evidence,
+inspectable apparatus participation, exclusions, revision conditions, and
+noticing-grounded local positions before a proposed cut may be enacted. Test
+fixtures still supply the descriptions, semantic positions, relations, cuts,
+constraints, and observed effects. The runtime does not yet generate plural
+formation proposals from language, documents, tools, embodiment, material
+conditions, or model participation. It does not form a public intervention,
+persist the new grammar, or expose it through an API or browser.
 
-At this consolidation boundary, 145 focused canonical, arrangement,
-diffraction, and authority-invariant tests pass. The complete dependency-free
-suite passes 293 tests. Broad discovery executes the same 293 tests and
+At this boundary, 11 focused situated-formation and authority-invariant tests
+pass. The complete dependency-free suite passes 300 tests. Broad discovery
+executes the same 300 tests and
 reports seven unavailable modules because FastAPI and HTTPX are absent in this
 environment. Python compilation and diff checks pass. These results establish
 only the bounded behaviors exercised; they do not certify posthuman validity.
 
 See [`CANONICAL_REDESIGN.md`](CANONICAL_REDESIGN.md),
 [`LOCAL_CUT_SUBSTRATE.md`](LOCAL_CUT_SUBSTRATE.md),
-[`RECURSIVE_RECONFIGURATION_CHECKPOINT.md`](RECURSIVE_RECONFIGURATION_CHECKPOINT.md), and
+[`RECURSIVE_RECONFIGURATION_CHECKPOINT.md`](RECURSIVE_RECONFIGURATION_CHECKPOINT.md),
+[`SITUATED_FORMATION_EVIDENCE_SLICE.md`](SITUATED_FORMATION_EVIDENCE_SLICE.md), and
 [`BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md`](BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md).
 
 ## Historical engineering record
