@@ -433,7 +433,18 @@ def reenter_recomputed_arrangement_difference(
         if item.recomputed_alternative_id == difference.witness_alternative_id
         and item.recomputed_trace == witness
     )
-    if len(witness_revisions) + len(oscillation_revisions) != 1:
+    feedback_revisions = tuple(
+        item
+        for item in field.feedback_revisions
+        if item.recomputed_alternative_id == difference.witness_alternative_id
+        and item.recomputed_trace == witness
+    )
+    if (
+        len(witness_revisions)
+        + len(oscillation_revisions)
+        + len(feedback_revisions)
+        != 1
+    ):
         raise InvalidReconfiguration(
             "re-entry witness requires one exact recorded recomputation"
         )
@@ -446,7 +457,7 @@ def reenter_recomputed_arrangement_difference(
             witness=witness,
             revision=witness_revision,
         )
-    else:
+    elif oscillation_revisions:
         oscillation_revision, dependent_revision = oscillation_revisions[0]
         witness_counter_cut_id = oscillation_revision.counter_cut_id
         _validate_oscillation_reentry_lineage(
@@ -454,6 +465,15 @@ def reenter_recomputed_arrangement_difference(
             witness=witness,
             field_revision=oscillation_revision,
             dependent_revision=dependent_revision,
+        )
+    else:
+        feedback_revision = feedback_revisions[0]
+        witness_counter_cut_id = feedback_revision.counter_cut_id
+        _validate_feedback_reentry_lineage(
+            field=field,
+            substrate=substrate,
+            witness=witness,
+            field_revision=feedback_revision,
         )
 
     dependencies = {
@@ -534,6 +554,57 @@ def _validate_oscillation_reentry_lineage(
     ):
         raise InvalidReconfiguration(
             "oscillation-recomputed witness requires exact disturbance lineage"
+        )
+
+
+def _validate_feedback_reentry_lineage(
+    *,
+    field: RecursivelyRevisedArrangementField,
+    substrate: ReconfigurationSubstrate,
+    witness: TracedAlternative,
+    field_revision: "FeedbackFieldRevisionTrace",
+) -> None:
+    feedback = field_revision.feedback
+    if feedback not in field.feedback:
+        raise InvalidReconfiguration(
+            "feedback-recomputed witness requires retained feedback lineage"
+        )
+    if field_revision.prior_alternative_id not in witness.replacement.lineage_ids:
+        raise InvalidReconfiguration(
+            "feedback-recomputed witness does not preserve proposal lineage"
+        )
+    counter_cut = substrate.state.cuts.get(field_revision.counter_cut_id)
+    if counter_cut is None:
+        raise InvalidReconfiguration(
+            "feedback-recomputed witness counter-cut is not recorded"
+        )
+    if field_revision.reopened_cut_id not in counter_cut.lineage_ids:
+        raise InvalidReconfiguration(
+            "feedback-recomputed counter-cut does not preserve reopened lineage"
+        )
+    if feedback.observation_trace_id not in counter_cut.transport_basis:
+        raise InvalidReconfiguration(
+            "feedback-recomputed counter-cut loses observation provenance"
+        )
+    recorded_delta = next(
+        (
+            item for item in substrate.state.deltas
+            if feedback.disturbance_delta is not None
+            and item.delta_id == feedback.disturbance_delta.delta_id
+        ),
+        None,
+    )
+    if (
+        feedback.disturbance_delta is None
+        or recorded_delta != feedback.disturbance_delta
+        or feedback.affected_cut_id != field_revision.reopened_cut_id
+        or substrate.state.invalidated_by.get(field_revision.reopened_cut_id)
+        != feedback.disturbance_delta.delta_id
+        or feedback.observation_trace_id
+        not in feedback.disturbance_delta.triggering_trace_ids
+    ):
+        raise InvalidReconfiguration(
+            "feedback-recomputed witness requires exact disturbance lineage"
         )
 
 

@@ -100,19 +100,36 @@ def return_effects_as_feedback(
     expected = current.get(alternative_id)
     if expected is None:
         raise InvalidReconfiguration("feedback target must be currently retained")
-    matches = tuple(
+    oscillation_matches = tuple(
         (revision, affected)
         for revision in field.oscillation_revisions
         for affected in revision.affected
         if affected.recomputed_alternative_id == alternative_id
         and affected.recomputed_trace == expected
     )
-    if len(matches) != 1:
+    feedback_matches = tuple(
+        revision
+        for revision in field.feedback_revisions
+        if revision.recomputed_alternative_id == alternative_id
+        and revision.recomputed_trace == expected
+    )
+    if len(oscillation_matches) + len(feedback_matches) != 1:
         raise InvalidReconfiguration(
             "feedback requires one exact recorded field recomputation"
         )
-    revision, affected = matches[0]
-    enabling_cut_id = revision.counter_cut_id
+    if oscillation_matches:
+        revision, affected = oscillation_matches[0]
+        enabling_cut_id = revision.counter_cut_id
+        prior_alternative_id = affected.prior_alternative_id
+    else:
+        feedback_revision = feedback_matches[0]
+        _validate_feedback_recomputation_lineage(
+            field=field,
+            substrate=substrate,
+            revision=feedback_revision,
+        )
+        enabling_cut_id = feedback_revision.counter_cut_id
+        prior_alternative_id = feedback_revision.prior_alternative_id
     dependencies = {
         item.alternative_cut_id: item.enabling_cut_ids
         for item in field.field.dependencies
@@ -121,7 +138,7 @@ def return_effects_as_feedback(
         raise InvalidReconfiguration("feedback target has inconsistent field lineage")
     if enabling_cut_id not in substrate.state.active_cut_ids:
         raise InvalidReconfiguration("feedback target enabling formation is inactive")
-    if affected.prior_alternative_id not in expected.replacement.lineage_ids:
+    if prior_alternative_id not in expected.replacement.lineage_ids:
         raise InvalidReconfiguration("feedback target has inconsistent proposal lineage")
 
     observations = tuple(observed_effects)
@@ -388,6 +405,45 @@ def _validate_feedback_counter_cut(
     if _cut_shape(counter_cut) == _cut_shape(reopened):
         raise InvalidReconfiguration(
             "relabelled feedback formation cannot serve as a counter-cut"
+        )
+
+
+def _validate_feedback_recomputation_lineage(
+    *,
+    field: RecursivelyRevisedArrangementField,
+    substrate: ReconfigurationSubstrate,
+    revision: FeedbackFieldRevisionTrace,
+) -> None:
+    feedback = revision.feedback
+    if feedback not in field.feedback:
+        raise InvalidReconfiguration(
+            "feedback recomputation requires retained feedback lineage"
+        )
+    if feedback.disturbance_delta is None:
+        raise InvalidReconfiguration(
+            "feedback recomputation requires a disturbing observation"
+        )
+    recorded_delta = next(
+        (
+            item for item in substrate.state.deltas
+            if item.delta_id == feedback.disturbance_delta.delta_id
+        ),
+        None,
+    )
+    counter_cut = substrate.state.cuts.get(revision.counter_cut_id)
+    if (
+        recorded_delta != feedback.disturbance_delta
+        or feedback.affected_cut_id != revision.reopened_cut_id
+        or substrate.state.invalidated_by.get(revision.reopened_cut_id)
+        != feedback.disturbance_delta.delta_id
+        or feedback.observation_trace_id
+        not in feedback.disturbance_delta.triggering_trace_ids
+        or counter_cut is None
+        or revision.reopened_cut_id not in counter_cut.lineage_ids
+        or feedback.observation_trace_id not in counter_cut.transport_basis
+    ):
+        raise InvalidReconfiguration(
+            "feedback recomputation requires exact disturbance lineage"
         )
 
 

@@ -1929,6 +1929,236 @@ class FeedbackGroundedFieldRevisionTests(unittest.TestCase):
         self.assertFalse(hasattr(revised, "choose"))
 
 
+class FeedbackRecomputedProjectionTests(unittest.TestCase):
+    """Feedback revision remains recursively observable, never authoritative by age."""
+
+    setUp = DiffractiveArrangementTests.setUp
+    difference = DiffractiveArrangementTests.difference
+    disturb = DiffractiveArrangementTests.disturb
+    counter_cut = CounterCutRevisionTests.counter_cut
+    revised_arrangement = CounterCutRevisionTests.revised_arrangement
+    revise = CounterCutRevisionTests.revise
+    witness = StructuralResponsivenessTests.witness
+    proposed_counter_cut = OscillationCounterCutTests.proposed_counter_cut
+    prepared = OscillationFieldReturnTests.prepared
+    recomputed = OscillationFieldReturnTests.recomputed
+    return_to_field = OscillationFieldReturnTests.return_to_field
+    observed = staticmethod(PostReturnFeedbackTests.observed)
+    feedback_counter_cut = FeedbackGroundedFieldRevisionTests.feedback_counter_cut
+    feedback_recomputed = FeedbackGroundedFieldRevisionTests.feedback_recomputed
+    with_feedback = FeedbackGroundedFieldRevisionTests.with_feedback
+    apply_revision = FeedbackGroundedFieldRevisionTests.apply_revision
+
+    def test_feedback_recomputed_projection_reenters_as_current_witness(self):
+        proposed = self.feedback_recomputed()
+        proposed = replace(
+            proposed,
+            allocations=tuple(
+                item for item in proposed.allocations
+                if item.dimension != StructuralDimension.BURDEN
+            ) + (
+                Allocation(StructuralDimension.BURDEN, local(proposed.cut_id, "disclosure"), 1.75),
+                Allocation(StructuralDimension.BURDEN, local(proposed.cut_id, "coordination"), 1.25),
+                Allocation(StructuralDimension.BURDEN, local(proposed.cut_id, "affected"), 1.0),
+            ),
+        )
+        revised = self.apply_revision(recomputed_arrangement=proposed)
+        reentered = reenter_recomputed_arrangement_difference(
+            field=revised,
+            substrate=self.substrate,
+            difference=ConsequentialDifference(
+                witness_alternative_id="cut:shared-after-feedback",
+                contrasted_alternative_id="cut:distributed",
+                dimension=StructuralDimension.BURDEN,
+                measure=EffectMeasure.MAXIMUM_LOCAL_LOAD,
+            ),
+            enabling_cut_id="cut:enable-distributed",
+            delta_id="delta:feedback-recomputed-reentry",
+            triggering_trace_ids=("transport:feedback-revision",),
+        )
+        trace = reentered.reentries[-1]
+        self.assertEqual("cut:shared-after-feedback", trace.witness_alternative_id)
+        self.assertEqual("cut:feedback-counter", trace.witness_counter_cut_id)
+        self.assertNotIn("cut:enable-distributed", self.substrate.state.active_cut_ids)
+
+    def test_feedback_recomputed_projection_can_receive_confirming_effects(self):
+        revised = self.apply_revision()
+        self.substrate.record_transport(transport(
+            "transport:feedback-recomputed-confirmation",
+            "Observed effects correspond with the feedback recomputation.",
+        ))
+        current = revised.field.competing.alternatives[0]
+        updated = return_effects_as_feedback(
+            field=revised,
+            substrate=self.substrate,
+            observation_trace_id="transport:feedback-recomputed-confirmation",
+            alternative_id="cut:shared-after-feedback",
+            observed_effects=self.observed(current),
+            disposition=FeedbackDisposition.CONFIRMS,
+        )
+        self.assertEqual(FeedbackDisposition.CONFIRMS, updated.feedback[-1].disposition)
+        self.assertIn("cut:feedback-counter", self.substrate.state.active_cut_ids)
+
+    def test_later_effect_can_complicate_earlier_confirmation_without_rewriting_it(self):
+        revised = self.apply_revision()
+        current = revised.field.competing.alternatives[0]
+        self.substrate.record_transport(transport(
+            "transport:feedback-recomputed-confirmation", "Correspondence observed."
+        ))
+        confirmed = return_effects_as_feedback(
+            field=revised,
+            substrate=self.substrate,
+            observation_trace_id="transport:feedback-recomputed-confirmation",
+            alternative_id="cut:shared-after-feedback",
+            observed_effects=self.observed(current),
+            disposition=FeedbackDisposition.CONFIRMS,
+        )
+        self.substrate.enact_cut(
+            dependent_cut(
+                "cut:later-feedback-dependent",
+                "cut:feedback-counter",
+                "later observed consequence",
+            ),
+            delta_id="delta:later-feedback-dependent",
+        )
+        self.substrate.record_transport(transport(
+            "transport:feedback-recomputed-complication",
+            "Later effects complicate the earlier correspondence.",
+        ))
+        complicated = return_effects_as_feedback(
+            field=confirmed,
+            substrate=self.substrate,
+            observation_trace_id="transport:feedback-recomputed-complication",
+            alternative_id="cut:shared-after-feedback",
+            observed_effects=self.observed(current, burden_maximum=2.5),
+            disposition=FeedbackDisposition.COMPLICATES,
+            affected_cut_id="cut:later-feedback-dependent",
+            delta_id="delta:feedback-recomputed-complication",
+        )
+        self.assertEqual(FeedbackDisposition.CONFIRMS, complicated.feedback[-2].disposition)
+        self.assertEqual(FeedbackDisposition.COMPLICATES, complicated.feedback[-1].disposition)
+        self.assertEqual(
+            "cut:shared-after-feedback", complicated.feedback[-2].alternative_id
+        )
+        self.assertFalse(hasattr(complicated.feedback[-1], "failure"))
+
+    def test_later_effect_can_invalidate_recomputed_formation_without_retroactive_failure(self):
+        revised = self.apply_revision()
+        current = revised.field.competing.alternatives[0]
+        self.substrate.record_transport(transport(
+            "transport:feedback-recomputed-confirmation", "Correspondence observed."
+        ))
+        confirmed = return_effects_as_feedback(
+            field=revised,
+            substrate=self.substrate,
+            observation_trace_id="transport:feedback-recomputed-confirmation",
+            alternative_id="cut:shared-after-feedback",
+            observed_effects=self.observed(current),
+            disposition=FeedbackDisposition.CONFIRMS,
+        )
+        self.substrate.record_transport(transport(
+            "transport:feedback-recomputed-invalidation",
+            "Later effects reopen the feedback-grounded formation.",
+        ))
+        invalidated = return_effects_as_feedback(
+            field=confirmed,
+            substrate=self.substrate,
+            observation_trace_id="transport:feedback-recomputed-invalidation",
+            alternative_id="cut:shared-after-feedback",
+            observed_effects=self.observed(current, burden_maximum=2.75),
+            disposition=FeedbackDisposition.INVALIDATES,
+            affected_cut_id="cut:feedback-counter",
+            delta_id="delta:feedback-recomputed-invalidation",
+        )
+        self.assertEqual(FeedbackDisposition.CONFIRMS, invalidated.feedback[-2].disposition)
+        self.assertEqual(FeedbackDisposition.INVALIDATES, invalidated.feedback[-1].disposition)
+        self.assertNotIn("cut:feedback-counter", self.substrate.state.active_cut_ids)
+        self.assertFalse(hasattr(invalidated.feedback[-1], "failure"))
+
+    def test_confirmation_count_does_not_create_reentry_authority(self):
+        revised = self.apply_revision()
+        forged = replace(revised, feedback_revisions=())
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "recorded recomputation"):
+            reenter_recomputed_arrangement_difference(
+                field=forged,
+                substrate=self.substrate,
+                difference=ConsequentialDifference(
+                    witness_alternative_id="cut:shared-after-feedback",
+                    contrasted_alternative_id="cut:distributed",
+                    dimension=StructuralDimension.BURDEN,
+                    measure=EffectMeasure.MAXIMUM_LOCAL_LOAD,
+                ),
+                enabling_cut_id="cut:enable-distributed",
+                delta_id="delta:confidence-cannot-reenter",
+                triggering_trace_ids=("transport:feedback-revision",),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_forged_feedback_revision_lineage_cannot_reenter(self):
+        revised = self.apply_revision()
+        forged_revision = replace(
+            revised.feedback_revisions[-1], reopened_cut_id="cut:enable-distributed"
+        )
+        forged = replace(revised, feedback_revisions=(forged_revision,))
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "reopened lineage"):
+            reenter_recomputed_arrangement_difference(
+                field=forged,
+                substrate=self.substrate,
+                difference=ConsequentialDifference(
+                    witness_alternative_id="cut:shared-after-feedback",
+                    contrasted_alternative_id="cut:distributed",
+                    dimension=StructuralDimension.BURDEN,
+                    measure=EffectMeasure.MAXIMUM_LOCAL_LOAD,
+                ),
+                enabling_cut_id="cut:enable-distributed",
+                delta_id="delta:forged-feedback-reentry",
+                triggering_trace_ids=("transport:feedback-revision",),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_inactive_feedback_counter_cut_removes_witness_authority(self):
+        revised = self.apply_revision()
+        self.substrate.record_transport(transport(
+            "transport:later-invalidation", "A later effect reopens the formation."
+        ))
+        self.substrate.disturb(
+            delta_id="delta:later-counter-invalidation",
+            triggering_trace_ids=("transport:later-invalidation",),
+            invalidated_root_ids=("cut:feedback-counter",),
+            replacements=(),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "active enabling"):
+            reenter_recomputed_arrangement_difference(
+                field=revised,
+                substrate=self.substrate,
+                difference=ConsequentialDifference(
+                    witness_alternative_id="cut:shared-after-feedback",
+                    contrasted_alternative_id="cut:distributed",
+                    dimension=StructuralDimension.BURDEN,
+                    measure=EffectMeasure.MAXIMUM_LOCAL_LOAD,
+                ),
+                enabling_cut_id="cut:enable-distributed",
+                delta_id="delta:inactive-feedback-witness",
+                triggering_trace_ids=("transport:feedback-revision",),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_records_contain_no_confidence_or_retroactive_failure_authority(self):
+        revised = self.apply_revision()
+        names = {
+            item.name
+            for record in (revised, revised.feedback_revisions[-1])
+            for item in fields(record)
+        }
+        self.assertTrue(names.isdisjoint({
+            "confidence", "weight", "count", "score", "rank", "preferred",
+            "winner", "final", "success", "failure", "retroactive_failure",
+        }))
+
+
 class CounterCutRevisionAdditionalValidationTests(unittest.TestCase):
     setUp = DiffractiveArrangementTests.setUp
     difference = DiffractiveArrangementTests.difference
