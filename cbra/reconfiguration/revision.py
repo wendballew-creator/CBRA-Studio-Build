@@ -24,6 +24,7 @@ from .diffraction import (
     disturb_through_arrangement_difference,
 )
 from .models import CutEnactment, StructuralDimension
+from .oscillation import OscillationCounterCutTrace
 from .substrate import InvalidReconfiguration, ReconfigurationSubstrate
 
 
@@ -43,6 +44,24 @@ class RecursivelyRevisedArrangementField:
     field: DiffractiveArrangementField
     revisions: Tuple[ArrangementRevisionTrace, ...]
     reentries: Tuple["RecursiveDiffractiveReentryTrace", ...] = ()
+    oscillation_revisions: Tuple["OscillationFieldRevisionTrace", ...] = ()
+
+
+@dataclass(frozen=True)
+class OscillationDependentRevision:
+    prior_alternative_id: str
+    recomputed_alternative_id: str
+    prior_trace: TracedAlternative
+    recomputed_trace: TracedAlternative
+
+
+@dataclass(frozen=True)
+class OscillationFieldRevisionTrace:
+    """Cycle material returned to the field without becoming a resolution."""
+
+    oscillation_counter_cut: OscillationCounterCutTrace
+    counter_cut_id: str
+    affected: Tuple[OscillationDependentRevision, ...]
 
 
 @dataclass(frozen=True)
@@ -73,9 +92,11 @@ def revise_reopened_arrangement(
 
     existing_revisions: Tuple[ArrangementRevisionTrace, ...] = ()
     existing_reentries: Tuple[RecursiveDiffractiveReentryTrace, ...] = ()
+    existing_oscillation_revisions: Tuple[OscillationFieldRevisionTrace, ...] = ()
     if isinstance(field, RecursivelyRevisedArrangementField):
         existing_revisions = field.revisions
         existing_reentries = field.reentries
+        existing_oscillation_revisions = field.oscillation_revisions
         field = field.field
 
     disturbance = next(
@@ -184,7 +205,185 @@ def revise_reopened_arrangement(
         recomputed_trace=recomputed_trace,
     )
     return RecursivelyRevisedArrangementField(
-        revised_field, existing_revisions + (revision,), existing_reentries
+        revised_field,
+        existing_revisions + (revision,),
+        existing_reentries,
+        existing_oscillation_revisions,
+    )
+
+
+def return_oscillation_counter_cut_to_field(
+    *,
+    field: RecursivelyRevisedArrangementField,
+    substrate: ReconfigurationSubstrate,
+    oscillation_counter_cut: OscillationCounterCutTrace,
+    recomputed_arrangements: Sequence[CutEnactment],
+) -> RecursivelyRevisedArrangementField:
+    """Retrace every current projection dependent on an oscillating formation.
+
+    The oscillation transaction has already enacted its counter-cut.  This
+    transaction returns that material to the competing field.  It neither
+    chooses a projection nor protects the new counter-cut from later re-entry.
+    """
+
+    recorded_delta = next(
+        (
+            item
+            for item in substrate.state.deltas
+            if item.delta_id == oscillation_counter_cut.disturbance_delta.delta_id
+        ),
+        None,
+    )
+    if recorded_delta != oscillation_counter_cut.disturbance_delta:
+        raise InvalidReconfiguration(
+            "field return requires the exact recorded oscillation disturbance"
+        )
+    finding = oscillation_counter_cut.responsiveness_trace
+    if (
+        oscillation_counter_cut.returning_witness_id != finding.witness_id
+        or oscillation_counter_cut.departing_witness_id != finding.prior_witness_id
+        or oscillation_counter_cut.recurring_witness_id
+        != finding.recurring_witness_id
+    ):
+        raise InvalidReconfiguration(
+            "oscillation field return requires internally exact audit lineage"
+        )
+    counter_cut = substrate.state.cuts.get(oscillation_counter_cut.counter_cut_id)
+    if counter_cut is None or counter_cut.cut_id not in substrate.state.active_cut_ids:
+        raise InvalidReconfiguration(
+            "oscillation-grounded counter-cut must remain active during field return"
+        )
+    if (
+        oscillation_counter_cut.reopened_enabling_cut_id
+        not in counter_cut.lineage_ids
+    ):
+        raise InvalidReconfiguration(
+            "oscillation-grounded counter-cut must preserve reopened lineage"
+        )
+    if (
+        substrate.state.invalidated_by.get(
+            oscillation_counter_cut.reopened_enabling_cut_id
+        )
+        != oscillation_counter_cut.disturbance_delta.delta_id
+    ):
+        raise InvalidReconfiguration(
+            "oscillation field return must match substrate invalidation history"
+        )
+    if any(
+        item.oscillation_counter_cut.disturbance_delta.delta_id
+        == oscillation_counter_cut.disturbance_delta.delta_id
+        for item in field.oscillation_revisions
+    ):
+        raise InvalidReconfiguration(
+            "one oscillation disturbance cannot be returned to the field twice"
+        )
+
+    invalidated = set(oscillation_counter_cut.disturbance_delta.invalidated_cut_ids)
+    dependencies = {
+        item.alternative_cut_id: item for item in field.field.dependencies
+    }
+    current = tuple(field.field.competing.alternatives)
+    affected = tuple(
+        item
+        for item in current
+        if set(dependencies[item.replacement.cut_id].enabling_cut_ids) & invalidated
+    )
+    if not affected:
+        raise InvalidReconfiguration(
+            "oscillation disturbance must affect a retained field formation"
+        )
+
+    proposed_by_lineage = {}
+    for proposed in recomputed_arrangements:
+        matches = tuple(
+            prior
+            for prior in affected
+            if prior.replacement.cut_id in proposed.lineage_ids
+        )
+        if len(matches) != 1:
+            raise InvalidReconfiguration(
+                "each recomputation must preserve one affected proposal lineage"
+            )
+        prior_id = matches[0].replacement.cut_id
+        if prior_id in proposed_by_lineage:
+            raise InvalidReconfiguration(
+                "each affected formation requires exactly one recomputation"
+            )
+        if proposed.cut_id == prior_id:
+            raise InvalidReconfiguration(
+                "oscillation recomputation requires a new local cut id"
+            )
+        if counter_cut.cut_id not in proposed.dependency_ids:
+            raise InvalidReconfiguration(
+                "oscillation recomputation must depend on its counter-cut"
+            )
+        proposed_by_lineage[prior_id] = proposed
+    affected_ids = {item.replacement.cut_id for item in affected}
+    if set(proposed_by_lineage) != affected_ids:
+        raise InvalidReconfiguration(
+            "all cycle-dependent field formations must be recomputed together"
+        )
+
+    source = substrate.state.cuts.get(field.field.competing.source_cut_id)
+    if source is None:
+        raise InvalidReconfiguration("competing source cut is not recorded")
+    replacements = tuple(
+        proposed_by_lineage.get(item.replacement.cut_id, item.replacement)
+        for item in current
+    )
+    recomputed = retain_competing_alternatives(
+        source=source,
+        replacements=replacements,
+        constraints=field.field.competing.constraints,
+    )
+    recomputed_by_id = {
+        item.replacement.cut_id: item for item in recomputed.alternatives
+    }
+    affected_traces = tuple(
+        OscillationDependentRevision(
+            prior_alternative_id=prior.replacement.cut_id,
+            recomputed_alternative_id=proposed_by_lineage[
+                prior.replacement.cut_id
+            ].cut_id,
+            prior_trace=prior,
+            recomputed_trace=recomputed_by_id[
+                proposed_by_lineage[prior.replacement.cut_id].cut_id
+            ],
+        )
+        for prior in affected
+    )
+    if any(
+        item.prior_trace.effects == item.recomputed_trace.effects
+        for item in affected_traces
+    ):
+        raise InvalidReconfiguration(
+            "oscillation counter-cut must freshly change each affected trace"
+        )
+
+    revised_dependencies = tuple(
+        ArrangementDependency(
+            proposed_by_lineage[item.alternative_cut_id].cut_id,
+            (counter_cut.cut_id,),
+        )
+        if item.alternative_cut_id in proposed_by_lineage
+        else item
+        for item in field.field.dependencies
+    )
+    revised_field = DiffractiveArrangementField(
+        competing=recomputed,
+        dependencies=revised_dependencies,
+        disturbances=field.field.disturbances,
+    )
+    trace = OscillationFieldRevisionTrace(
+        oscillation_counter_cut=oscillation_counter_cut,
+        counter_cut_id=counter_cut.cut_id,
+        affected=affected_traces,
+    )
+    return RecursivelyRevisedArrangementField(
+        field=revised_field,
+        revisions=field.revisions,
+        reentries=field.reentries,
+        oscillation_revisions=field.oscillation_revisions + (trace,),
     )
 
 
@@ -217,23 +416,41 @@ def reenter_recomputed_arrangement_difference(
         if item.revised_alternative_id == difference.witness_alternative_id
         and item.recomputed_trace == witness
     )
-    if len(witness_revisions) != 1:
+    oscillation_revisions = tuple(
+        (field_revision, item)
+        for field_revision in field.oscillation_revisions
+        for item in field_revision.affected
+        if item.recomputed_alternative_id == difference.witness_alternative_id
+        and item.recomputed_trace == witness
+    )
+    if len(witness_revisions) + len(oscillation_revisions) != 1:
         raise InvalidReconfiguration(
             "re-entry witness requires one exact recorded recomputation"
         )
-    witness_revision = witness_revisions[0]
-    _validate_reentry_revision_lineage(
-        field=field,
-        substrate=substrate,
-        witness=witness,
-        revision=witness_revision,
-    )
+    if witness_revisions:
+        witness_revision = witness_revisions[0]
+        witness_counter_cut_id = witness_revision.counter_cut_id
+        _validate_reentry_revision_lineage(
+            field=field,
+            substrate=substrate,
+            witness=witness,
+            revision=witness_revision,
+        )
+    else:
+        oscillation_revision, dependent_revision = oscillation_revisions[0]
+        witness_counter_cut_id = oscillation_revision.counter_cut_id
+        _validate_oscillation_reentry_lineage(
+            substrate=substrate,
+            witness=witness,
+            field_revision=oscillation_revision,
+            dependent_revision=dependent_revision,
+        )
 
     dependencies = {
         item.alternative_cut_id: item for item in field.field.dependencies
     }
     witness_dependency = dependencies[difference.witness_alternative_id]
-    if witness_revision.counter_cut_id not in witness_dependency.enabling_cut_ids:
+    if witness_counter_cut_id not in witness_dependency.enabling_cut_ids:
         raise InvalidReconfiguration(
             "re-entry witness must remain enabled by its recorded counter-cut"
         )
@@ -255,7 +472,7 @@ def reenter_recomputed_arrangement_difference(
     disturbance = disturbed_field.disturbances[-1]
     reentry = RecursiveDiffractiveReentryTrace(
         witness_alternative_id=difference.witness_alternative_id,
-        witness_counter_cut_id=witness_revision.counter_cut_id,
+        witness_counter_cut_id=witness_counter_cut_id,
         target_enabling_cut_id=enabling_cut_id,
         disturbance=disturbance,
     )
@@ -263,7 +480,49 @@ def reenter_recomputed_arrangement_difference(
         field=disturbed_field,
         revisions=field.revisions,
         reentries=field.reentries + (reentry,),
+        oscillation_revisions=field.oscillation_revisions,
     )
+
+
+def _validate_oscillation_reentry_lineage(
+    *,
+    substrate: ReconfigurationSubstrate,
+    witness: TracedAlternative,
+    field_revision: OscillationFieldRevisionTrace,
+    dependent_revision: OscillationDependentRevision,
+) -> None:
+    oscillation = field_revision.oscillation_counter_cut
+    if dependent_revision.prior_alternative_id not in witness.replacement.lineage_ids:
+        raise InvalidReconfiguration(
+            "oscillation-recomputed witness does not preserve proposal lineage"
+        )
+    counter_cut = substrate.state.cuts.get(field_revision.counter_cut_id)
+    if counter_cut is None:
+        raise InvalidReconfiguration(
+            "oscillation-recomputed witness counter-cut is not recorded"
+        )
+    if oscillation.reopened_enabling_cut_id not in counter_cut.lineage_ids:
+        raise InvalidReconfiguration(
+            "oscillation-recomputed counter-cut does not preserve reopened lineage"
+        )
+    recorded_delta = next(
+        (
+            item
+            for item in substrate.state.deltas
+            if item.delta_id == oscillation.disturbance_delta.delta_id
+        ),
+        None,
+    )
+    if (
+        recorded_delta != oscillation.disturbance_delta
+        or substrate.state.invalidated_by.get(
+            oscillation.reopened_enabling_cut_id
+        )
+        != oscillation.disturbance_delta.delta_id
+    ):
+        raise InvalidReconfiguration(
+            "oscillation-recomputed witness requires exact disturbance lineage"
+        )
 
 
 def _validate_reentry_revision_lineage(

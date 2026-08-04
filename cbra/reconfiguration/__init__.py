@@ -42,9 +42,12 @@ from .diffraction import (
 )
 from .revision import (
     ArrangementRevisionTrace,
+    OscillationDependentRevision,
+    OscillationFieldRevisionTrace,
     RecursiveDiffractiveReentryTrace,
     RecursivelyRevisedArrangementField,
     reenter_recomputed_arrangement_difference,
+    return_oscillation_counter_cut_to_field,
     revise_reopened_arrangement,
 )
 from .responsiveness import (
@@ -96,9 +99,12 @@ __all__ = [
     "DiffractiveDisturbanceTrace",
     "disturb_through_arrangement_difference",
     "ArrangementRevisionTrace",
+    "OscillationDependentRevision",
+    "OscillationFieldRevisionTrace",
     "RecursiveDiffractiveReentryTrace",
     "RecursivelyRevisedArrangementField",
     "reenter_recomputed_arrangement_difference",
+    "return_oscillation_counter_cut_to_field",
     "revise_reopened_arrangement",
     "ArrangementStateWitness",
     "ResponsivenessAudit",

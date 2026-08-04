@@ -23,6 +23,7 @@ from cbra.reconfiguration import (
     disturb_through_arrangement_difference,
     reenter_recomputed_arrangement_difference,
     retain_competing_alternatives,
+    return_oscillation_counter_cut_to_field,
     revise_reopened_arrangement,
 )
 
@@ -1146,6 +1147,312 @@ class OscillationCounterCutTests(unittest.TestCase):
                 substrate=self.substrate,
             )
         self.assertEqual(before, self.substrate.state)
+
+
+class OscillationFieldReturnTests(unittest.TestCase):
+    setUp = DiffractiveArrangementTests.setUp
+    difference = DiffractiveArrangementTests.difference
+    disturb = DiffractiveArrangementTests.disturb
+    counter_cut = CounterCutRevisionTests.counter_cut
+    revised_arrangement = CounterCutRevisionTests.revised_arrangement
+    revise = CounterCutRevisionTests.revise
+    witness = StructuralResponsivenessTests.witness
+    proposed_counter_cut = OscillationCounterCutTests.proposed_counter_cut
+
+    def prepared(self):
+        revised = self.revise()
+        original = self.field.competing.alternatives[0]
+        changed = revised.revisions[0].recomputed_trace
+        audit = audit_structural_responsiveness((
+            self.witness("state:a", original, "cut:counter-shared"),
+            self.witness("state:b", changed, "cut:counter-shared"),
+            self.witness("state:a-return", original, "cut:counter-shared"),
+        ), substrate=self.substrate)
+        self.substrate.enact_cut(
+            dependent_cut(
+                "cut:oscillation-dependent",
+                "cut:counter-shared",
+                "formation reproduced through return",
+            ),
+            delta_id="delta:oscillation-dependent",
+        )
+        oscillation = counter_cut_from_oscillation(
+            audit=audit,
+            returning_witness_id="state:a-return",
+            reopened_enabling_cut_id="cut:counter-shared",
+            counter_cut=self.proposed_counter_cut(),
+            delta_id="delta:oscillation-counter",
+            triggering_trace_ids=("transport:disclosure",),
+            substrate=self.substrate,
+        )
+        return revised, oscillation
+
+    def recomputed(self, **overrides):
+        original = self.revised_arrangement()
+        cut_id = overrides.pop("cut_id", "cut:shared-after-oscillation")
+        values = dict(
+            cut_id=cut_id,
+            transport_basis=original.transport_basis,
+            dependency_ids=("cut:oscillation-counter",),
+            lineage_ids=("cut:shared-recomputed",),
+            positions=original.positions,
+            relations=tuple(
+                Relation(
+                    item.relation_type,
+                    local(cut_id, item.source.position_key),
+                    local(cut_id, item.target.position_key),
+                )
+                for item in original.relations
+            ),
+            allocations=tuple(
+                Allocation(
+                    item.dimension,
+                    local(cut_id, item.position.position_key),
+                    item.amount,
+                )
+                for item in original.allocations
+                if item.dimension != StructuralDimension.BURDEN
+            ) + (
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "disclosure"), 1),
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "coordination"), 1),
+                Allocation(StructuralDimension.BURDEN, local(cut_id, "affected"), 2),
+            ),
+        )
+        values.update(overrides)
+        return CutEnactment(**values)
+
+    def return_to_field(self, **overrides):
+        revised, oscillation = self.prepared()
+        values = dict(
+            field=revised,
+            substrate=self.substrate,
+            oscillation_counter_cut=oscillation,
+            recomputed_arrangements=(self.recomputed(),),
+        )
+        values.update(overrides)
+        return return_oscillation_counter_cut_to_field(**values)
+
+    def test_counter_cut_returns_to_field_and_recomputes_cycle_dependent_trace(self):
+        returned = self.return_to_field()
+        trace = returned.oscillation_revisions[0]
+        self.assertEqual("cut:oscillation-counter", trace.counter_cut_id)
+        self.assertEqual(1, len(trace.affected))
+        affected = trace.affected[0]
+        self.assertEqual("cut:shared-recomputed", affected.prior_alternative_id)
+        self.assertEqual(
+            "cut:shared-after-oscillation", affected.recomputed_alternative_id
+        )
+        self.assertEqual(1.5, affected.prior_trace.effects[0].maximum_after)
+        self.assertEqual(2.0, affected.recomputed_trace.effects[0].maximum_after)
+
+    def test_unaffected_competing_arrangement_and_full_history_remain_present(self):
+        returned = self.return_to_field()
+        self.assertEqual(
+            ("cut:shared-after-oscillation", "cut:distributed"),
+            tuple(
+                item.replacement.cut_id
+                for item in returned.field.competing.alternatives
+            ),
+        )
+        self.assertEqual(1, len(returned.revisions))
+        self.assertEqual(1, len(returned.field.disturbances))
+        self.assertEqual(
+            "delta:oscillation-counter",
+            returned.oscillation_revisions[0]
+            .oscillation_counter_cut.disturbance_delta.delta_id,
+        )
+
+    def test_every_cycle_dependent_formation_must_be_recomputed(self):
+        revised, oscillation = self.prepared()
+        duplicated_dependency = replace(
+            revised,
+            field=replace(
+                revised.field,
+                dependencies=(
+                    revised.field.dependencies[0],
+                    ArrangementDependency(
+                        "cut:distributed", ("cut:counter-shared",)
+                    ),
+                ),
+            ),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "all cycle-dependent"):
+            return_oscillation_counter_cut_to_field(
+                field=duplicated_dependency,
+                substrate=self.substrate,
+                oscillation_counter_cut=oscillation,
+                recomputed_arrangements=(self.recomputed(),),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_cosmetic_recomputation_cannot_reenter_the_field(self):
+        revised, oscillation = self.prepared()
+        current = revised.field.competing.alternatives[0].replacement
+        cosmetic = replace(
+            self.recomputed(),
+            allocations=tuple(
+                Allocation(
+                    item.dimension,
+                    local("cut:shared-after-oscillation", item.position.position_key),
+                    item.amount,
+                )
+                for item in current.allocations
+            ),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "freshly change"):
+            return_oscillation_counter_cut_to_field(
+                field=revised,
+                substrate=self.substrate,
+                oscillation_counter_cut=oscillation,
+                recomputed_arrangements=(cosmetic,),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_exact_recorded_oscillation_delta_is_required(self):
+        revised, oscillation = self.prepared()
+        forged = replace(
+            oscillation,
+            disturbance_delta=replace(
+                oscillation.disturbance_delta,
+                triggering_trace_ids=("transport:missed",),
+            ),
+        )
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "exact recorded"):
+            return_oscillation_counter_cut_to_field(
+                field=revised,
+                substrate=self.substrate,
+                oscillation_counter_cut=forged,
+                recomputed_arrangements=(self.recomputed(),),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_internally_forged_audit_lineage_cannot_return_to_field(self):
+        revised, oscillation = self.prepared()
+        forged = replace(oscillation, departing_witness_id="state:invented")
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "audit lineage"):
+            return_oscillation_counter_cut_to_field(
+                field=revised,
+                substrate=self.substrate,
+                oscillation_counter_cut=forged,
+                recomputed_arrangements=(self.recomputed(),),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_same_oscillation_cannot_manufacture_repeated_field_revision(self):
+        returned = self.return_to_field()
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "cannot be returned"):
+            return_oscillation_counter_cut_to_field(
+                field=returned,
+                substrate=self.substrate,
+                oscillation_counter_cut=returned.oscillation_revisions[0].oscillation_counter_cut,
+                recomputed_arrangements=(
+                    self.recomputed(
+                        cut_id="cut:shared-after-oscillation-again",
+                        lineage_ids=("cut:shared-after-oscillation",),
+                    ),
+                ),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_oscillation_counter_cut_remains_open_to_later_disturbance(self):
+        returned = self.return_to_field()
+        self.substrate.enact_cut(
+            dependent_cut(
+                "cut:oscillation-field-dependent",
+                "cut:oscillation-counter",
+                "field projection dependency",
+            ),
+            delta_id="delta:oscillation-field-dependent",
+        )
+        disturbed = disturb_through_arrangement_difference(
+            field=returned.field,
+            substrate=self.substrate,
+            difference=ConsequentialDifference(
+                witness_alternative_id="cut:distributed",
+                contrasted_alternative_id="cut:shared-after-oscillation",
+                dimension=StructuralDimension.BURDEN,
+                measure=EffectMeasure.MAXIMUM_LOCAL_LOAD,
+            ),
+            enabling_cut_id="cut:oscillation-counter",
+            delta_id="delta:disturb-oscillation-counter",
+            triggering_trace_ids=("transport:disclosure",),
+        )
+        self.assertNotIn("cut:oscillation-counter", self.substrate.state.active_cut_ids)
+        self.assertEqual(
+            "cut:oscillation-counter", disturbed.disturbances[-1].enabling_cut_id
+        )
+
+    def test_returned_recomputation_can_act_as_a_fresh_witness(self):
+        returned = self.return_to_field()
+        reentered = reenter_recomputed_arrangement_difference(
+            field=returned,
+            substrate=self.substrate,
+            difference=ConsequentialDifference(
+                witness_alternative_id="cut:shared-after-oscillation",
+                contrasted_alternative_id="cut:distributed",
+                dimension=StructuralDimension.BURDEN,
+                measure=EffectMeasure.MAXIMUM_LOCAL_LOAD,
+            ),
+            enabling_cut_id="cut:enable-distributed",
+            delta_id="delta:oscillation-recomputed-reentry",
+            triggering_trace_ids=("transport:disclosure",),
+        )
+        self.assertEqual(
+            "cut:oscillation-counter",
+            reentered.reentries[-1].witness_counter_cut_id,
+        )
+        self.assertNotIn("cut:enable-distributed", self.substrate.state.active_cut_ids)
+
+    def test_forged_return_lineage_cannot_create_witness_authority(self):
+        returned = self.return_to_field()
+        affected = returned.oscillation_revisions[0].affected[0]
+        forged_affected = replace(
+            affected,
+            prior_alternative_id="cut:invented-prior",
+        )
+        forged_field_revision = replace(
+            returned.oscillation_revisions[0],
+            affected=(forged_affected,),
+        )
+        forged = replace(returned, oscillation_revisions=(forged_field_revision,))
+        before = self.substrate.state
+        with self.assertRaisesRegex(InvalidReconfiguration, "proposal lineage"):
+            reenter_recomputed_arrangement_difference(
+                field=forged,
+                substrate=self.substrate,
+                difference=ConsequentialDifference(
+                    witness_alternative_id="cut:shared-after-oscillation",
+                    contrasted_alternative_id="cut:distributed",
+                    dimension=StructuralDimension.BURDEN,
+                    measure=EffectMeasure.MAXIMUM_LOCAL_LOAD,
+                ),
+                enabling_cut_id="cut:enable-distributed",
+                delta_id="delta:forged-return-reentry",
+                triggering_trace_ids=("transport:disclosure",),
+            )
+        self.assertEqual(before, self.substrate.state)
+
+    def test_field_return_contains_no_ranking_or_protection_authority(self):
+        returned = self.return_to_field()
+        names = {
+            item.name
+            for record in (
+                returned,
+                returned.oscillation_revisions[0],
+                returned.oscillation_revisions[0].affected[0],
+            )
+            for item in fields(record)
+        }
+        self.assertTrue(names.isdisjoint({
+            "score", "rank", "ranking", "selected", "preferred", "winner",
+            "protected", "final", "settled", "iteration", "depth", "recency",
+        }))
+        self.assertFalse(hasattr(returned, "choose"))
 
 
 class CounterCutRevisionAdditionalValidationTests(unittest.TestCase):
