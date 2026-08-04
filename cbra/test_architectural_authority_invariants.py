@@ -8,6 +8,7 @@ from dataclasses import fields
 import unittest
 
 from cbra.reconfiguration import (
+    AccountableSituatedProposal,
     CompetingAlternatives,
     DimensionEffect,
     FeedbackDisposition,
@@ -101,6 +102,7 @@ class ArchitecturalAuthorityInvariantTests(unittest.TestCase):
     def test_situated_formation_records_trace_conditions_not_authority(self):
         for record_type in (
             ApparatusParticipation,
+            AccountableSituatedProposal,
             SituatedNoticing,
             SituatedCutProposal,
         ):

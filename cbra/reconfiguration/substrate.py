@@ -63,6 +63,38 @@ class ReconfigurationSubstrate:
         self._apply(delta, activated=(cut,))
         return delta
 
+    def enact_concurrent_cuts(
+        self, cuts: Sequence[CutEnactment], *, delta_id: str
+    ) -> ReconfigurationDelta:
+        """Atomically enact an unordered plurality of independently valid cuts."""
+
+        if len(cuts) < 2:
+            raise InvalidReconfiguration(
+                "concurrent enactment requires more than one cut"
+            )
+        cut_ids = [cut.cut_id for cut in cuts]
+        if len(cut_ids) != len(set(cut_ids)):
+            raise InvalidReconfiguration("concurrent cut ids must be unique")
+        concurrent_ids = set(cut_ids)
+        for cut in cuts:
+            if set(cut.dependency_ids).intersection(concurrent_ids):
+                raise InvalidReconfiguration(
+                    "concurrent cuts cannot hide proposal order through dependencies"
+                )
+            self._validate_new_cut(cut)
+        ordered = tuple(sorted(cuts, key=lambda cut: cut.cut_id))
+        triggering_trace_ids = tuple(
+            sorted({trace_id for cut in ordered for trace_id in cut.transport_basis})
+        )
+        delta = self._derive_delta(
+            delta_id=delta_id,
+            invalidated_ids=(),
+            activated=ordered,
+            triggering_trace_ids=triggering_trace_ids,
+        )
+        self._apply(delta, activated=ordered)
+        return delta
+
     def disturb(
         self,
         *,

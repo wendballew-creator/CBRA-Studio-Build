@@ -56,6 +56,14 @@ class SituatedCutProposal:
     position_groundings: Tuple[PositionGrounding, ...]
 
 
+@dataclass(frozen=True)
+class AccountableSituatedProposal:
+    proposal_id: str
+    formation: SituatedCutProposal
+    originating_participation_ids: Tuple[str, ...]
+    checking_participation_ids: Tuple[str, ...]
+
+
 class SituatedFormationBoundary:
     """Validate an inspectable proposal and enact its provisional local cut."""
 
@@ -219,3 +227,135 @@ class SituatedFormationBoundary:
     def _require_unique_refs(items: Sequence[object], label: str) -> None:
         if len(items) != len(set(items)):
             raise InvalidReconfiguration(f"{label} references must be unique")
+
+
+class PluralSituatedFormationBoundary:
+    """Enact materially different, cross-checked proposals without choosing one."""
+
+    def __init__(self, substrate: ReconfigurationSubstrate) -> None:
+        self._substrate = substrate
+        self._single = SituatedFormationBoundary(substrate)
+
+    def enact(
+        self,
+        proposals: Sequence[AccountableSituatedProposal],
+        *,
+        delta_id: str,
+    ):
+        if len(proposals) < 2:
+            raise InvalidReconfiguration(
+                "plural formation requires materially different proposals"
+            )
+        proposal_ids = [proposal.proposal_id for proposal in proposals]
+        if any(not proposal_id for proposal_id in proposal_ids) or len(
+            proposal_ids
+        ) != len(set(proposal_ids)):
+            raise InvalidReconfiguration("plural proposal ids must be nonempty and unique")
+
+        signatures = set()
+        shared_transport_basis = None
+        for account in proposals:
+            self._single._validate(account.formation)
+            self._validate_accountability(account)
+            transport_basis = frozenset(account.formation.cut.transport_basis)
+            if shared_transport_basis is None:
+                shared_transport_basis = transport_basis
+            elif transport_basis != shared_transport_basis:
+                raise InvalidReconfiguration(
+                    "plural proposals must remain grounded in the same material arrival basis"
+                )
+            signature = self._material_signature(account.formation.cut)
+            if signature in signatures:
+                raise InvalidReconfiguration(
+                    "plural proposals must differ materially, not only by ids or provenance"
+                )
+            signatures.add(signature)
+
+        return self._substrate.enact_concurrent_cuts(
+            tuple(account.formation.cut for account in proposals),
+            delta_id=delta_id,
+        )
+
+    @staticmethod
+    def _validate_accountability(account: AccountableSituatedProposal) -> None:
+        originators = account.originating_participation_ids
+        checkers = account.checking_participation_ids
+        SituatedFormationBoundary._require_unique_refs(
+            originators, "proposal origin participation"
+        )
+        SituatedFormationBoundary._require_unique_refs(
+            checkers, "proposal checking participation"
+        )
+        if not originators or not checkers:
+            raise InvalidReconfiguration(
+                "each plural proposal requires named origin and checking participation"
+            )
+        if set(originators).intersection(checkers):
+            raise InvalidReconfiguration(
+                "a proposal cannot be originated and checked by the same participation"
+            )
+        available = {
+            item.participation_id
+            for item in account.formation.apparatus_participations
+        }
+        if set(originators).union(checkers).difference(available):
+            raise InvalidReconfiguration(
+                "proposal origin and checking must reference participating apparatus"
+            )
+        participations = {
+            item.participation_id: item
+            for item in account.formation.apparatus_participations
+        }
+        origin_signatures = {
+            PluralSituatedFormationBoundary._apparatus_signature(
+                participations[participation_id]
+            )
+            for participation_id in originators
+        }
+        checking_signatures = {
+            PluralSituatedFormationBoundary._apparatus_signature(
+                participations[participation_id]
+            )
+            for participation_id in checkers
+        }
+        if origin_signatures.intersection(checking_signatures):
+            raise InvalidReconfiguration(
+                "proposal origin and checking require materially distinct apparatus participation"
+            )
+
+    @staticmethod
+    def _apparatus_signature(participation: ApparatusParticipation):
+        return (
+            participation.condition,
+            tuple(sorted(participation.trace_ids)),
+            tuple(sorted(participation.makes_perceptible)),
+            tuple(sorted(participation.obscures_or_excludes)),
+            tuple(sorted(participation.revision_conditions)),
+        )
+
+    @staticmethod
+    def _material_signature(cut: CutEnactment):
+        """Compare enacted structure while excluding ids, labels, and tuple order."""
+
+        return (
+            tuple(sorted(cut.transport_basis)),
+            len(cut.positions),
+            tuple(
+                sorted(
+                    (
+                        relation.relation_type,
+                        relation.source.position_key == relation.target.position_key,
+                    )
+                    for relation in cut.relations
+                )
+            ),
+            tuple(
+                sorted(
+                    (
+                        allocation.dimension.value,
+                        allocation.amount,
+                    )
+                    for allocation in cut.allocations
+                )
+            ),
+        )

@@ -18,9 +18,11 @@ from .models import (
     TransportTrace,
 )
 from .formation import (
+    AccountableSituatedProposal,
     ApparatusParticipation,
     EvidenceSpan,
     PositionGrounding,
+    PluralSituatedFormationBoundary,
     SituatedCutProposal,
     SituatedFormationBoundary,
     SituatedNoticing,
@@ -103,8 +105,10 @@ __all__ = [
     "compare_arrangements",
     "TransportTrace",
     "ApparatusParticipation",
+    "AccountableSituatedProposal",
     "EvidenceSpan",
     "PositionGrounding",
+    "PluralSituatedFormationBoundary",
     "SituatedCutProposal",
     "SituatedFormationBoundary",
     "SituatedNoticing",
