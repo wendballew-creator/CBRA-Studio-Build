@@ -69,15 +69,20 @@ Proposal order, fresh identifiers, cosmetic wording, and relabelled
 self-checking confer no plurality or authority; origin and checking apparatus
 participation must be materially distinct. Test fixtures still supply the
 descriptions, semantic positions, relations, cuts, constraints, and observed
-effects. The runtime does not yet generate plural formation proposals from
+effects. An inspectable origination field now requires materially distinct
+declared originating participation, reciprocal proposal-origin links,
+generative-difference accounts, unavailable or ungenerated possibilities, and
+reopening conditions. No one declared origin may span the complete submitted
+proposal field. The runtime does not yet generate proposal content from
 language, documents, tools, embodiment, material conditions, or model
-participation, and it cannot detect materially possible proposals omitted
-before submission. It does not form a public intervention, persist the new
-grammar, or expose it through an API or browser.
+participation. It also cannot prove that declared apparatus accounts have
+different hidden authors or detect a possibility that was never declared. It
+does not form a public intervention, persist the new grammar, or expose it
+through an API or browser.
 
-At this boundary, 27 focused situated-formation and authority-invariant tests
-pass. The complete dependency-free suite passes 316 tests. Broad discovery
-executes the same 316 tests and
+At this boundary, 32 focused situated-formation and authority-invariant tests
+pass. The complete dependency-free suite passes 326 tests. Broad discovery
+executes those 326 tests and
 reports seven unavailable modules because FastAPI and HTTPX are absent in this
 environment. Python compilation and diff checks pass. These results establish
 only the bounded behaviors exercised; they do not certify posthuman validity.
@@ -88,6 +93,7 @@ See [`CANONICAL_REDESIGN.md`](CANONICAL_REDESIGN.md),
 [`SITUATED_FORMATION_EVIDENCE_SLICE.md`](SITUATED_FORMATION_EVIDENCE_SLICE.md),
 [`SITUATED_FORMATION_GROUNDING_GRAPH_SLICE.md`](SITUATED_FORMATION_GROUNDING_GRAPH_SLICE.md),
 [`PLURAL_SITUATED_FORMATION_SLICE.md`](PLURAL_SITUATED_FORMATION_SLICE.md),
+[`INSPECTABLE_PLURAL_ORIGINATION_SLICE.md`](INSPECTABLE_PLURAL_ORIGINATION_SLICE.md),
 and
 [`BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md`](BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md).
 

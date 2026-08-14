@@ -5,8 +5,11 @@ from cbra.reconfiguration.formation import (
     AccountableSituatedProposal,
     ApparatusParticipation,
     EvidenceSpan,
+    InspectableOriginationField,
+    InspectablePluralOriginationBoundary,
     PositionGrounding,
     PluralSituatedFormationBoundary,
+    ProposalOrigination,
     SituatedCutProposal,
     SituatedFormationBoundary,
     SituatedNoticing,
@@ -115,6 +118,57 @@ def plural_fixture():
             "proposal-2", second, ("apparatus-1",), ("apparatus-check",)
         ),
     )
+
+
+def origination_fixture():
+    substrate, proposals = plural_fixture()
+    second_origin = ApparatusParticipation(
+        "apparatus-2",
+        "relation-sensitive reading of exact arrival material",
+        ("arrival-1",),
+        ("how wording may configure more than one local position",),
+        ("embodied and historical conditions unavailable to this reading",),
+        ("another apparatus relation changes what can be generated",),
+    )
+    first = proposals[0]
+    second = replace(
+        proposals[1],
+        formation=replace(
+            proposals[1].formation,
+            apparatus_participations=(
+                second_origin,
+                proposals[1].formation.apparatus_participations[1],
+            ),
+            noticings=(
+                replace(
+                    proposals[1].formation.noticings[0],
+                    apparatus_participation_ids=("apparatus-2", "apparatus-check"),
+                ),
+            ),
+        ),
+        originating_participation_ids=("apparatus-2",),
+    )
+    proposals = (first, second)
+    field = InspectableOriginationField(
+        "origin-field-1",
+        ("one arrival is opened through distinct apparatus relations",),
+        (first.formation.apparatus_participations[0], second_origin),
+        (
+            ProposalOrigination(
+                "proposal-1",
+                ("apparatus-1",),
+                ("forms one locally addressable position",),
+            ),
+            ProposalOrigination(
+                "proposal-2",
+                ("apparatus-2",),
+                ("forms a relation between two local positions",),
+            ),
+        ),
+        ("cuts requiring apparatus conditions not participating here",),
+        ("new participation or material arrival reopens proposal origination",),
+    )
+    return substrate, field, proposals
 
 
 class SituatedFormationTests(unittest.TestCase):
@@ -396,6 +450,165 @@ class PluralSituatedFormationTests(unittest.TestCase):
         with self.assertRaises(InvalidReconfiguration):
             PluralSituatedFormationBoundary(substrate).enact(
                 proposals, delta_id="plural-formation-1"
+            )
+        self.assertEqual((), substrate.state.active_cut_ids)
+        self.assertEqual((), substrate.state.deltas)
+
+
+class InspectablePluralOriginationTests(unittest.TestCase):
+    def test_distinct_origins_generate_concurrent_proposals(self):
+        substrate, field, proposals = origination_fixture()
+        delta = InspectablePluralOriginationBoundary(substrate).enact(
+            field, proposals, delta_id="originated-plurality-1"
+        )
+        self.assertEqual(("cut-1", "cut-2"), delta.activated_cut_ids)
+
+    def test_no_origin_may_control_complete_proposal_field(self):
+        substrate, field, proposals = origination_fixture()
+        controlled = replace(
+            field,
+            proposal_originations=tuple(
+                replace(
+                    origination,
+                    originating_participation_ids=("apparatus-1",),
+                )
+                for origination in field.proposal_originations
+            ),
+        )
+        second = replace(
+            proposals[1],
+            formation=replace(
+                proposals[1].formation,
+                apparatus_participations=(
+                    proposals[0].formation.apparatus_participations[0],
+                    proposals[1].formation.apparatus_participations[1],
+                ),
+                noticings=(replace(
+                    proposals[1].formation.noticings[0],
+                    apparatus_participation_ids=("apparatus-1", "apparatus-check"),
+                ),),
+            ),
+            originating_participation_ids=("apparatus-1",),
+        )
+        self.assert_atomic_rejection(substrate, controlled, (proposals[0], second))
+
+    def test_rejects_unaccounted_proposal_origination(self):
+        substrate, field, proposals = origination_fixture()
+        incomplete = replace(
+            field, proposal_originations=(field.proposal_originations[0],)
+        )
+        self.assert_atomic_rejection(substrate, incomplete, proposals)
+
+    def test_rejects_ornamental_originating_participation(self):
+        substrate, field, proposals = origination_fixture()
+        ornamental = replace(
+            field.originating_participations[0],
+            participation_id="apparatus-ornamental",
+            condition="another materially described apparatus condition",
+        )
+        self.assert_atomic_rejection(
+            substrate,
+            replace(
+                field,
+                originating_participations=field.originating_participations
+                + (ornamental,),
+            ),
+            proposals,
+        )
+
+    def test_rejects_relabelled_originating_participation(self):
+        substrate, field, proposals = origination_fixture()
+        relabelled = replace(
+            field.originating_participations[0], participation_id="apparatus-2"
+        )
+        self.assert_atomic_rejection(
+            substrate,
+            replace(
+                field,
+                originating_participations=(
+                    field.originating_participations[0],
+                    relabelled,
+                ),
+            ),
+            proposals,
+        )
+
+    def test_requires_inspectable_generative_difference(self):
+        substrate, field, proposals = origination_fixture()
+        originations = (
+            replace(field.proposal_originations[0], generative_differences=()),
+            field.proposal_originations[1],
+        )
+        self.assert_atomic_rejection(
+            substrate,
+            replace(field, proposal_originations=originations),
+            proposals,
+        )
+
+    def test_field_origin_cannot_rebind_proposal_apparatus(self):
+        substrate, field, proposals = origination_fixture()
+        rebound = replace(
+            field.originating_participations[0],
+            condition="a field-only account not present in the proposal",
+        )
+        self.assert_atomic_rejection(
+            substrate,
+            replace(
+                field,
+                originating_participations=(
+                    rebound,
+                    field.originating_participations[1],
+                ),
+            ),
+            proposals,
+        )
+
+    def test_requires_unavailable_possibilities_and_reopening_conditions(self):
+        substrate, field, proposals = origination_fixture()
+        self.assert_atomic_rejection(
+            substrate, replace(field, unavailable_or_ungenerated=()), proposals
+        )
+
+    def test_origination_order_confers_no_authority(self):
+        first_substrate, first_field, first_proposals = origination_fixture()
+        second_substrate, second_field, second_proposals = origination_fixture()
+        first_delta = InspectablePluralOriginationBoundary(first_substrate).enact(
+            first_field, first_proposals, delta_id="originated-plurality-1"
+        )
+        second_delta = InspectablePluralOriginationBoundary(second_substrate).enact(
+            replace(
+                second_field,
+                originating_participations=tuple(
+                    reversed(second_field.originating_participations)
+                ),
+                proposal_originations=tuple(
+                    reversed(second_field.proposal_originations)
+                ),
+            ),
+            tuple(reversed(second_proposals)),
+            delta_id="originated-plurality-1",
+        )
+        self.assertEqual(first_delta, second_delta)
+        self.assertEqual(first_substrate.state, second_substrate.state)
+
+    def test_origination_records_expose_no_coverage_or_chooser_authority(self):
+        forbidden = {
+            "accepted", "canonical", "chosen", "complete", "confidence",
+            "correct", "coverage", "preferred", "rank", "score", "selected",
+            "winner",
+        }
+        for record_type in (
+            ProposalOrigination,
+            InspectableOriginationField,
+            InspectablePluralOriginationBoundary,
+        ):
+            names = set(getattr(record_type, "__dataclass_fields__", ()))
+            self.assertTrue(names.isdisjoint(forbidden))
+
+    def assert_atomic_rejection(self, substrate, field, proposals):
+        with self.assertRaises(InvalidReconfiguration):
+            InspectablePluralOriginationBoundary(substrate).enact(
+                field, proposals, delta_id="originated-plurality-1"
             )
         self.assertEqual((), substrate.state.active_cut_ids)
         self.assertEqual((), substrate.state.deltas)

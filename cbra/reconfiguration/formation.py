@@ -64,6 +64,23 @@ class AccountableSituatedProposal:
     checking_participation_ids: Tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class ProposalOrigination:
+    proposal_id: str
+    originating_participation_ids: Tuple[str, ...]
+    generative_differences: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class InspectableOriginationField:
+    field_id: str
+    opening_conditions: Tuple[str, ...]
+    originating_participations: Tuple[ApparatusParticipation, ...]
+    proposal_originations: Tuple[ProposalOrigination, ...]
+    unavailable_or_ungenerated: Tuple[str, ...]
+    revision_conditions: Tuple[str, ...]
+
+
 class SituatedFormationBoundary:
     """Validate an inspectable proposal and enact its provisional local cut."""
 
@@ -359,3 +376,134 @@ class PluralSituatedFormationBoundary:
                 )
             ),
         )
+
+
+class InspectablePluralOriginationBoundary:
+    """Enact a plural field whose proposal origination remains inspectable."""
+
+    def __init__(self, substrate: ReconfigurationSubstrate) -> None:
+        self._plural = PluralSituatedFormationBoundary(substrate)
+
+    def enact(
+        self,
+        field: InspectableOriginationField,
+        proposals: Sequence[AccountableSituatedProposal],
+        *,
+        delta_id: str,
+    ):
+        self._validate(field, proposals)
+        return self._plural.enact(proposals, delta_id=delta_id)
+
+    @staticmethod
+    def _validate(
+        field: InspectableOriginationField,
+        proposals: Sequence[AccountableSituatedProposal],
+    ) -> None:
+        if not field.field_id or not field.opening_conditions:
+            raise InvalidReconfiguration(
+                "plural origination requires an identified field and opening conditions"
+            )
+        if not field.unavailable_or_ungenerated or not field.revision_conditions:
+            raise InvalidReconfiguration(
+                "plural origination must expose unavailable possibilities and remain revisable"
+            )
+
+        participations = SituatedFormationBoundary._unique_by_id(
+            field.originating_participations,
+            "participation_id",
+            "field originating participation",
+        )
+        if len(participations) < 2:
+            raise InvalidReconfiguration(
+                "plural origination requires multiple originating participations"
+            )
+        signatures = {
+            PluralSituatedFormationBoundary._apparatus_signature(item)
+            for item in participations.values()
+        }
+        if len(signatures) != len(participations):
+            raise InvalidReconfiguration(
+                "field originating participations must be materially distinct"
+            )
+
+        accounts = SituatedFormationBoundary._unique_by_id(
+            proposals, "proposal_id", "plural proposal"
+        )
+        originations = SituatedFormationBoundary._unique_by_id(
+            field.proposal_originations,
+            "proposal_id",
+            "proposal origination",
+        )
+        if set(originations) != set(accounts):
+            raise InvalidReconfiguration(
+                "every submitted proposal, and only a submitted proposal, requires origination"
+            )
+
+        participation_use = {
+            participation_id: set() for participation_id in participations
+        }
+        for proposal_id, origination in originations.items():
+            SituatedFormationBoundary._require_unique_refs(
+                origination.originating_participation_ids,
+                "proposal field origin participation",
+            )
+            if not origination.originating_participation_ids:
+                raise InvalidReconfiguration(
+                    "each proposal requires originating participation in the field"
+                )
+            if not origination.generative_differences or any(
+                not difference for difference in origination.generative_differences
+            ):
+                raise InvalidReconfiguration(
+                    "each proposal origination must expose a generative difference"
+                )
+            SituatedFormationBoundary._require_unique_refs(
+                origination.generative_differences,
+                "proposal generative difference",
+            )
+            unknown = set(origination.originating_participation_ids).difference(
+                participations
+            )
+            if unknown:
+                raise InvalidReconfiguration(
+                    "proposal origination references participation outside the opened field"
+                )
+            account_origins = set(accounts[proposal_id].originating_participation_ids)
+            if set(origination.originating_participation_ids) != account_origins:
+                raise InvalidReconfiguration(
+                    "field origination must equal the proposal's accountable origins"
+                )
+            formation_participations = {
+                item.participation_id: item
+                for item in accounts[
+                    proposal_id
+                ].formation.apparatus_participations
+            }
+            if any(
+                formation_participations.get(participation_id)
+                != participations[participation_id]
+                for participation_id in origination.originating_participation_ids
+            ):
+                raise InvalidReconfiguration(
+                    "field origins must equal their proposal apparatus participation"
+                )
+            for participation_id in origination.originating_participation_ids:
+                participation_use[participation_id].add(proposal_id)
+
+        complete_field = set(accounts)
+        if any(
+            proposal_ids == complete_field
+            for proposal_ids in participation_use.values()
+        ):
+            raise InvalidReconfiguration(
+                "no originating participation may control the complete proposal field"
+            )
+        unused = {
+            participation_id
+            for participation_id, proposal_ids in participation_use.items()
+            if not proposal_ids
+        }
+        if unused:
+            raise InvalidReconfiguration(
+                "every declared originating participation must generate a submitted proposal"
+            )
