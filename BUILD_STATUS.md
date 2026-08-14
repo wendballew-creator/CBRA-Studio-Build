@@ -76,16 +76,22 @@ reopening conditions. No one declared origin may span the complete submitted
 proposal field. Separately recorded proposal-emission transports can now
 contribute accountable proposals to an assembly, which derives the plural
 field before atomic enactment; the final enactment accepts no caller-supplied
-field or proposal set. The runtime does not yet generate proposal content from
+field or proposal set. Arrival-grounded unresolved relations can now open
+materially distinct participation invitations, and separately provenanced
+emissions may answer them asynchronously without a required stage order.
+Unanswered invitations do not block plural enactment and remain visible as
+ungenerated participation. Model-output transports must expose their provider,
+model, effective configuration, prompt and source dependencies, known limits,
+and human-centered training apparatus. The runtime does not yet generate proposal content from
 language, documents, tools, embodiment, material conditions, or model
 participation. It also cannot prove that declared apparatus accounts have
 different hidden authors or detect a possibility that was never declared. It
 does not form a public intervention, persist the new grammar, or expose it
 through an API or browser.
 
-At this boundary, 41 focused situated-formation and authority-invariant tests
-pass. The complete dependency-free suite passes 335 tests. Broad discovery
-executes those 335 tests and
+At this boundary, 53 focused situated-formation and authority-invariant tests
+pass. The complete dependency-free suite passes 347 tests. Broad discovery
+executes those 347 tests and
 reports seven unavailable modules because FastAPI and HTTPX are absent in this
 environment. Python compilation and diff checks pass. These results establish
 only the bounded behaviors exercised; they do not certify posthuman validity.
@@ -98,6 +104,7 @@ See [`CANONICAL_REDESIGN.md`](CANONICAL_REDESIGN.md),
 [`PLURAL_SITUATED_FORMATION_SLICE.md`](PLURAL_SITUATED_FORMATION_SLICE.md),
 [`INSPECTABLE_PLURAL_ORIGINATION_SLICE.md`](INSPECTABLE_PLURAL_ORIGINATION_SLICE.md),
 [`RECORDED_PLURAL_ORIGINATION_SLICE.md`](RECORDED_PLURAL_ORIGINATION_SLICE.md),
+[`DEPENDENCY_ACTIVATED_ORIGINATION_SLICE.md`](DEPENDENCY_ACTIVATED_ORIGINATION_SLICE.md),
 and
 [`BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md`](BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md).
 

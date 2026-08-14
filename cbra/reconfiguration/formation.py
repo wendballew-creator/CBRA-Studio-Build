@@ -653,6 +653,22 @@ class RecordedPluralOriginationAssembly:
                 raise InvalidReconfiguration(
                     "proposal emission references unknown transport"
                 )
+            if trace.channel == "model-output":
+                required_provenance = {
+                    "provider",
+                    "model",
+                    "effective_configuration",
+                    "prompt_dependencies",
+                    "source_dependencies",
+                    "known_limits",
+                    "human_centered_training_apparatus",
+                }
+                if required_provenance.difference(trace.provenance) or any(
+                    not trace.provenance[key] for key in required_provenance
+                ):
+                    raise InvalidReconfiguration(
+                        "model proposal emission requires inspectable apparatus provenance"
+                    )
             if span.trace_id in arrival_basis:
                 raise InvalidReconfiguration(
                     "arrival evidence cannot masquerade as a proposal emission"

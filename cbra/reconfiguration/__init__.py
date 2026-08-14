@@ -32,6 +32,12 @@ from .formation import (
     SituatedFormationBoundary,
     SituatedNoticing,
 )
+from .activation import (
+    DependencyActivatedOriginationAssembly,
+    OriginationActivationTrace,
+    ProposalParticipationInvitation,
+    UnresolvedArrivalRelation,
+)
 from .arrangements import (
     ArrangementComparison,
     ArrangementExplorer,
@@ -122,6 +128,10 @@ __all__ = [
     "SituatedCutProposal",
     "SituatedFormationBoundary",
     "SituatedNoticing",
+    "DependencyActivatedOriginationAssembly",
+    "OriginationActivationTrace",
+    "ProposalParticipationInvitation",
+    "UnresolvedArrivalRelation",
     "CompetingAlternatives",
     "DimensionEffect",
     "EffectDirection",

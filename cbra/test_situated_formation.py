@@ -17,6 +17,12 @@ from cbra.reconfiguration.formation import (
     SituatedFormationBoundary,
     SituatedNoticing,
 )
+from cbra.reconfiguration.activation import (
+    DependencyActivatedOriginationAssembly,
+    OriginationActivationTrace,
+    ProposalParticipationInvitation,
+    UnresolvedArrivalRelation,
+)
 from cbra.reconfiguration.models import (
     CutEnactment,
     CutPosition,
@@ -180,12 +186,30 @@ def recorded_origination_fixture():
         TransportTrace(
             "emission-1", "model-output", "emission-digest-1",
             b"one locally addressable position", "now",
+            provenance={
+                "provider": "provider-a",
+                "model": "model-a",
+                "effective_configuration": "configuration-a",
+                "prompt_dependencies": ("prompt-a",),
+                "source_dependencies": ("arrival-1",),
+                "known_limits": ("text-only participation",),
+                "human_centered_training_apparatus": True,
+            },
         )
     )
     substrate.record_transport(
         TransportTrace(
             "emission-2", "model-output", "emission-digest-2",
             b"a relation between two local positions", "now",
+            provenance={
+                "provider": "provider-b",
+                "model": "model-b",
+                "effective_configuration": "configuration-b",
+                "prompt_dependencies": ("prompt-b",),
+                "source_dependencies": ("arrival-1",),
+                "known_limits": ("text-only participation",),
+                "human_centered_training_apparatus": True,
+            },
         )
     )
     assembly = RecordedPluralOriginationAssembly(
@@ -212,6 +236,58 @@ def recorded_origination_fixture():
         ),
     )
     return substrate, assembly, contributions
+
+
+def activated_origination_fixture(include_unanswered=False):
+    substrate, _, contributions = recorded_origination_fixture()
+    relation = UnresolvedArrivalRelation(
+        "relation-1",
+        (EvidenceSpan("arrival-1", 0, 27),),
+        "the arrival supports incompatible local formations",
+        ("relations unavailable outside the arrival bytes",),
+        ("later material changes the unresolved difference",),
+    )
+    invitations = [
+        ProposalParticipationInvitation(
+            "invitation-1",
+            ("relation-1",),
+            contributions[0].originating_participation,
+            "a locally addressable position",
+            ("cannot establish a singular intention",),
+            ("the unresolved relation is revised or invalidated",),
+        ),
+        ProposalParticipationInvitation(
+            "invitation-2",
+            ("relation-1",),
+            contributions[1].originating_participation,
+            "a relation among locally formed positions",
+            ("cannot establish an exhaustive arrangement",),
+            ("the unresolved relation is revised or invalidated",),
+        ),
+    ]
+    if include_unanswered:
+        invitations.append(ProposalParticipationInvitation(
+            "invitation-unanswered",
+            ("relation-1",),
+            replace(
+                contributions[0].originating_participation,
+                participation_id="apparatus-unanswered",
+                condition="embodied participation unavailable in this runtime",
+                makes_perceptible=("bodily response not available to text ingress",),
+            ),
+            "an embodied difference unavailable to recorded emissions",
+            ("no embodied sensor or report participates",),
+            ("embodied material enters the configuration",),
+        ))
+    assembly = DependencyActivatedOriginationAssembly(
+        substrate,
+        field_id="activated-field-1",
+        unresolved_relations=(relation,),
+        invitations=tuple(invitations),
+        unavailable_or_ungenerated=("apparatus relations not participating here",),
+        revision_conditions=("new arrival material reopens activation",),
+    )
+    return substrate, assembly, contributions, tuple(invitations)
 
 
 class SituatedFormationTests(unittest.TestCase):
@@ -682,6 +758,19 @@ class RecordedPluralOriginationTests(unittest.TestCase):
             assembly.record(disguised)
         self.assertEqual((), substrate.state.active_cut_ids)
 
+    def test_rejects_opaque_model_emission_provenance(self):
+        substrate, assembly, contributions = recorded_origination_fixture()
+        substrate.record_transport(TransportTrace(
+            "opaque-emission", "model-output", "opaque-digest",
+            b"opaque proposal", "now",
+        ))
+        opaque = replace(
+            contributions[0],
+            emission_evidence=(EvidenceSpan("opaque-emission", 0, 15),),
+        )
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.record(opaque)
+
     def test_rejects_one_emission_originating_multiple_proposals(self):
         substrate, assembly, contributions = recorded_origination_fixture()
         assembly.record(contributions[0])
@@ -751,6 +840,169 @@ class RecordedPluralOriginationTests(unittest.TestCase):
         _, assembly, contributions = recorded_origination_fixture()
         assembly.record(contributions[0])
         self.assertTrue(set(vars(assembly)).isdisjoint(forbidden))
+
+
+class DependencyActivatedOriginationTests(unittest.TestCase):
+    def test_activation_trace_exposes_participation_without_evaluation(self):
+        _, assembly, contributions, _ = activated_origination_fixture(
+            include_unanswered=True
+        )
+        self.assertEqual(
+            ("invitation-1", "invitation-2", "invitation-unanswered"),
+            assembly.activation_trace.unanswered_invitation_ids,
+        )
+        assembly.record(invitation_id="invitation-2", contribution=contributions[1])
+        self.assertEqual(
+            ("invitation-2",),
+            assembly.activation_trace.answered_invitation_ids,
+        )
+        self.assertEqual(
+            ("invitation-1", "invitation-unanswered"),
+            assembly.activation_trace.unanswered_invitation_ids,
+        )
+
+    def test_unresolved_relation_activates_distinct_proposal_participation(self):
+        substrate, assembly, contributions, _ = activated_origination_fixture()
+        assembly.record(invitation_id="invitation-1", contribution=contributions[0])
+        assembly.record(invitation_id="invitation-2", contribution=contributions[1])
+        delta = assembly.enact(delta_id="activated-plurality-1")
+        self.assertEqual(("cut-1", "cut-2"), delta.activated_cut_ids)
+        self.assertEqual(("cut-1", "cut-2"), substrate.state.active_cut_ids)
+
+    def test_unanswered_invitation_does_not_create_fixed_stage_barrier(self):
+        _, assembly, contributions, _ = activated_origination_fixture(
+            include_unanswered=True
+        )
+        assembly.record(invitation_id="invitation-1", contribution=contributions[0])
+        assembly.record(invitation_id="invitation-2", contribution=contributions[1])
+        assembly.enact(delta_id="activated-plurality-1")
+        self.assertEqual(
+            ("invitation-unanswered",),
+            assembly.activation_trace.unanswered_invitation_ids,
+        )
+
+    def test_one_invitation_answer_cannot_enact_semantic_field(self):
+        substrate, assembly, contributions, _ = activated_origination_fixture()
+        assembly.record(invitation_id="invitation-1", contribution=contributions[0])
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.enact(delta_id="activated-plurality-1")
+        self.assertEqual((), substrate.state.active_cut_ids)
+
+    def test_one_emission_cannot_answer_multiple_invitations(self):
+        substrate, assembly, contributions, _ = activated_origination_fixture()
+        assembly.record(invitation_id="invitation-1", contribution=contributions[0])
+        reused = replace(
+            contributions[1], emission_evidence=contributions[0].emission_evidence
+        )
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.record(invitation_id="invitation-2", contribution=reused)
+        self.assertEqual((), substrate.state.active_cut_ids)
+
+    def test_contribution_id_cannot_be_rebound_across_invitations(self):
+        substrate, assembly, contributions, _ = activated_origination_fixture()
+        assembly.record(invitation_id="invitation-1", contribution=contributions[0])
+        rebound = replace(
+            contributions[1], contribution_id=contributions[0].contribution_id
+        )
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.record(invitation_id="invitation-2", contribution=rebound)
+        self.assertEqual(
+            ("invitation-1",), assembly.activation_trace.answered_invitation_ids
+        )
+        self.assertEqual((), substrate.state.active_cut_ids)
+
+    def test_proposal_must_answer_its_invited_apparatus(self):
+        substrate, assembly, contributions, _ = activated_origination_fixture()
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.record(
+                invitation_id="invitation-1", contribution=contributions[1]
+            )
+        self.assertEqual((), substrate.state.active_cut_ids)
+
+    def test_rejects_invitation_detached_from_unresolved_evidence(self):
+        substrate, _, contributions, invitations = activated_origination_fixture()
+        detached = replace(
+            invitations[1],
+            participation=replace(
+                invitations[1].participation, trace_ids=("emission-2",)
+            ),
+        )
+        with self.assertRaises(InvalidReconfiguration):
+            DependencyActivatedOriginationAssembly(
+                substrate,
+                field_id="activated-field-1",
+                unresolved_relations=(UnresolvedArrivalRelation(
+                    "relation-1",
+                    (EvidenceSpan("arrival-1", 0, 27),),
+                    "an unresolved local difference",
+                    ("unavailable relations",),
+                    ("later material revises the relation",),
+                ),),
+                invitations=(invitations[0], detached),
+                unavailable_or_ungenerated=("other participation",),
+                revision_conditions=("new material reopens activation",),
+            )
+
+    def test_rejects_materially_identical_invitations(self):
+        substrate, _, _, invitations = activated_origination_fixture()
+        duplicate = replace(
+            invitations[0], invitation_id="invitation-2"
+        )
+        with self.assertRaises(InvalidReconfiguration):
+            DependencyActivatedOriginationAssembly(
+                substrate,
+                field_id="activated-field-1",
+                unresolved_relations=(UnresolvedArrivalRelation(
+                    "relation-1",
+                    (EvidenceSpan("arrival-1", 0, 27),),
+                    "an unresolved local difference",
+                    ("unavailable relations",),
+                    ("later material revises the relation",),
+                ),),
+                invitations=(invitations[0], duplicate),
+                unavailable_or_ungenerated=("other participation",),
+                revision_conditions=("new material reopens activation",),
+            )
+
+    def test_activation_records_expose_no_priority_or_stage_authority(self):
+        forbidden = {
+            "accepted", "complete", "confidence", "correct", "next_stage",
+            "preferred", "priority", "rank", "score", "selected", "winner",
+        }
+        for record_type in (
+            UnresolvedArrivalRelation,
+            ProposalParticipationInvitation,
+            OriginationActivationTrace,
+            DependencyActivatedOriginationAssembly,
+        ):
+            names = set(getattr(record_type, "__dataclass_fields__", ()))
+            self.assertTrue(names.isdisjoint(forbidden))
+
+    def test_invitation_and_answer_order_confer_no_activation_authority(self):
+        first_substrate, first_assembly, first, _ = activated_origination_fixture()
+        second_substrate, _, second, invitations = activated_origination_fixture()
+        second_assembly = DependencyActivatedOriginationAssembly(
+            second_substrate,
+            field_id="activated-field-1",
+            unresolved_relations=(UnresolvedArrivalRelation(
+                "relation-1",
+                (EvidenceSpan("arrival-1", 0, 27),),
+                "the arrival supports incompatible local formations",
+                ("relations unavailable outside the arrival bytes",),
+                ("later material changes the unresolved difference",),
+            ),),
+            invitations=tuple(reversed(invitations)),
+            unavailable_or_ungenerated=("apparatus relations not participating here",),
+            revision_conditions=("new arrival material reopens activation",),
+        )
+        first_assembly.record(invitation_id="invitation-1", contribution=first[0])
+        first_assembly.record(invitation_id="invitation-2", contribution=first[1])
+        second_assembly.record(invitation_id="invitation-2", contribution=second[1])
+        second_assembly.record(invitation_id="invitation-1", contribution=second[0])
+        first_delta = first_assembly.enact(delta_id="activated-plurality-1")
+        second_delta = second_assembly.enact(delta_id="activated-plurality-1")
+        self.assertEqual(first_delta, second_delta)
+        self.assertEqual(first_substrate.state, second_substrate.state)
 
 
 if __name__ == "__main__":
