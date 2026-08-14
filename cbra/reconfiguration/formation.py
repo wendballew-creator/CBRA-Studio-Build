@@ -81,6 +81,15 @@ class InspectableOriginationField:
     revision_conditions: Tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class RecordedProposalContribution:
+    contribution_id: str
+    proposal: AccountableSituatedProposal
+    originating_participation: ApparatusParticipation
+    emission_evidence: Tuple[EvidenceSpan, ...]
+    generative_differences: Tuple[str, ...]
+
+
 class SituatedFormationBoundary:
     """Validate an inspectable proposal and enact its provisional local cut."""
 
@@ -507,3 +516,148 @@ class InspectablePluralOriginationBoundary:
             raise InvalidReconfiguration(
                 "every declared originating participation must generate a submitted proposal"
             )
+
+
+class RecordedPluralOriginationAssembly:
+    """Assemble a plural field from separately recorded proposal emissions."""
+
+    def __init__(
+        self,
+        substrate: ReconfigurationSubstrate,
+        *,
+        field_id: str,
+        opening_conditions: Sequence[str],
+        unavailable_or_ungenerated: Sequence[str],
+        revision_conditions: Sequence[str],
+    ) -> None:
+        if not field_id or not opening_conditions:
+            raise InvalidReconfiguration(
+                "recorded origination requires a field id and opening conditions"
+            )
+        if not unavailable_or_ungenerated or not revision_conditions:
+            raise InvalidReconfiguration(
+                "recorded origination must retain unavailable possibilities and revision conditions"
+            )
+        self._substrate = substrate
+        self._field_id = field_id
+        self._opening_conditions = tuple(opening_conditions)
+        self._unavailable_or_ungenerated = tuple(unavailable_or_ungenerated)
+        self._revision_conditions = tuple(revision_conditions)
+        self._contributions = {}
+
+    def record(self, contribution: RecordedProposalContribution) -> None:
+        if (
+            not contribution.contribution_id
+            or contribution.contribution_id in self._contributions
+        ):
+            raise InvalidReconfiguration(
+                "proposal contribution ids must be nonempty and cannot be rebound"
+            )
+        self._validate_contribution(contribution)
+        existing_proposal_ids = {
+            item.proposal.proposal_id for item in self._contributions.values()
+        }
+        if contribution.proposal.proposal_id in existing_proposal_ids:
+            raise InvalidReconfiguration(
+                "each recorded contribution must form a distinct proposal"
+            )
+        existing_emission_traces = {
+            span.trace_id
+            for item in self._contributions.values()
+            for span in item.emission_evidence
+        }
+        if existing_emission_traces.intersection(
+            span.trace_id for span in contribution.emission_evidence
+        ):
+            raise InvalidReconfiguration(
+                "one recorded emission cannot originate multiple proposals"
+            )
+        self._contributions[contribution.contribution_id] = contribution
+
+    def enact(self, *, delta_id: str):
+        contributions = tuple(self._contributions.values())
+        if len(contributions) < 2:
+            raise InvalidReconfiguration(
+                "recorded plural origination requires multiple contributions"
+            )
+        field = InspectableOriginationField(
+            field_id=self._field_id,
+            opening_conditions=self._opening_conditions,
+            originating_participations=tuple(
+                item.originating_participation for item in contributions
+            ),
+            proposal_originations=tuple(
+                ProposalOrigination(
+                    proposal_id=item.proposal.proposal_id,
+                    originating_participation_ids=(
+                        item.originating_participation.participation_id,
+                    ),
+                    generative_differences=item.generative_differences,
+                )
+                for item in contributions
+            ),
+            unavailable_or_ungenerated=self._unavailable_or_ungenerated,
+            revision_conditions=self._revision_conditions,
+        )
+        return InspectablePluralOriginationBoundary(self._substrate).enact(
+            field,
+            tuple(item.proposal for item in contributions),
+            delta_id=delta_id,
+        )
+
+    def _validate_contribution(
+        self, contribution: RecordedProposalContribution
+    ) -> None:
+        if not contribution.emission_evidence:
+            raise InvalidReconfiguration(
+                "proposal contribution requires exact emission evidence"
+            )
+        SituatedFormationBoundary._require_unique_refs(
+            contribution.emission_evidence, "proposal emission evidence"
+        )
+        if not contribution.generative_differences or any(
+            not difference for difference in contribution.generative_differences
+        ):
+            raise InvalidReconfiguration(
+                "proposal contribution must expose its generative difference"
+            )
+        SituatedFormationBoundary._require_unique_refs(
+            contribution.generative_differences,
+            "proposal contribution generative difference",
+        )
+        proposal = contribution.proposal
+        participation = contribution.originating_participation
+        SituatedFormationBoundary(self._substrate)._validate(proposal.formation)
+        PluralSituatedFormationBoundary._validate_accountability(proposal)
+        if proposal.originating_participation_ids != (
+            participation.participation_id,
+        ):
+            raise InvalidReconfiguration(
+                "recorded contribution must be the proposal's sole declared origin"
+            )
+        formation_participations = {
+            item.participation_id: item
+            for item in proposal.formation.apparatus_participations
+        }
+        if (
+            formation_participations.get(participation.participation_id)
+            != participation
+        ):
+            raise InvalidReconfiguration(
+                "recorded contribution origin must equal proposal apparatus participation"
+            )
+        arrival_basis = set(proposal.formation.cut.transport_basis)
+        for span in contribution.emission_evidence:
+            trace = self._substrate.state.transports.get(span.trace_id)
+            if trace is None:
+                raise InvalidReconfiguration(
+                    "proposal emission references unknown transport"
+                )
+            if span.trace_id in arrival_basis:
+                raise InvalidReconfiguration(
+                    "arrival evidence cannot masquerade as a proposal emission"
+                )
+            if span.start < 0 or span.end <= span.start or span.end > len(trace.payload):
+                raise InvalidReconfiguration(
+                    "proposal emission must use a nonempty exact transport span"
+                )

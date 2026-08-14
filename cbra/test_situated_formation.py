@@ -1,4 +1,5 @@
 from dataclasses import replace
+import inspect
 import unittest
 
 from cbra.reconfiguration.formation import (
@@ -10,6 +11,8 @@ from cbra.reconfiguration.formation import (
     PositionGrounding,
     PluralSituatedFormationBoundary,
     ProposalOrigination,
+    RecordedPluralOriginationAssembly,
+    RecordedProposalContribution,
     SituatedCutProposal,
     SituatedFormationBoundary,
     SituatedNoticing,
@@ -169,6 +172,46 @@ def origination_fixture():
         ("new participation or material arrival reopens proposal origination",),
     )
     return substrate, field, proposals
+
+
+def recorded_origination_fixture():
+    substrate, field, proposals = origination_fixture()
+    substrate.record_transport(
+        TransportTrace(
+            "emission-1", "model-output", "emission-digest-1",
+            b"one locally addressable position", "now",
+        )
+    )
+    substrate.record_transport(
+        TransportTrace(
+            "emission-2", "model-output", "emission-digest-2",
+            b"a relation between two local positions", "now",
+        )
+    )
+    assembly = RecordedPluralOriginationAssembly(
+        substrate,
+        field_id=field.field_id,
+        opening_conditions=field.opening_conditions,
+        unavailable_or_ungenerated=field.unavailable_or_ungenerated,
+        revision_conditions=field.revision_conditions,
+    )
+    contributions = (
+        RecordedProposalContribution(
+            "contribution-1",
+            proposals[0],
+            field.originating_participations[0],
+            (EvidenceSpan("emission-1", 0, 32),),
+            field.proposal_originations[0].generative_differences,
+        ),
+        RecordedProposalContribution(
+            "contribution-2",
+            proposals[1],
+            field.originating_participations[1],
+            (EvidenceSpan("emission-2", 0, 38),),
+            field.proposal_originations[1].generative_differences,
+        ),
+    )
+    return substrate, assembly, contributions
 
 
 class SituatedFormationTests(unittest.TestCase):
@@ -612,6 +655,102 @@ class InspectablePluralOriginationTests(unittest.TestCase):
             )
         self.assertEqual((), substrate.state.active_cut_ids)
         self.assertEqual((), substrate.state.deltas)
+
+
+class RecordedPluralOriginationTests(unittest.TestCase):
+    def test_enactment_derives_field_from_separate_recorded_emissions(self):
+        substrate, assembly, contributions = recorded_origination_fixture()
+        assembly.record(contributions[0])
+        assembly.record(contributions[1])
+        delta = assembly.enact(delta_id="recorded-plurality-1")
+        self.assertEqual(("cut-1", "cut-2"), delta.activated_cut_ids)
+
+    def test_final_enactment_accepts_no_caller_supplied_field(self):
+        _, assembly, _ = recorded_origination_fixture()
+        self.assertEqual(
+            ("delta_id",),
+            tuple(inspect.signature(assembly.enact).parameters),
+        )
+
+    def test_rejects_arrival_as_proposal_emission(self):
+        substrate, assembly, contributions = recorded_origination_fixture()
+        disguised = replace(
+            contributions[0],
+            emission_evidence=(EvidenceSpan("arrival-1", 0, 10),),
+        )
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.record(disguised)
+        self.assertEqual((), substrate.state.active_cut_ids)
+
+    def test_rejects_one_emission_originating_multiple_proposals(self):
+        substrate, assembly, contributions = recorded_origination_fixture()
+        assembly.record(contributions[0])
+        reused = replace(
+            contributions[1],
+            emission_evidence=contributions[0].emission_evidence,
+        )
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.record(reused)
+        self.assertEqual((), substrate.state.active_cut_ids)
+
+    def test_rejects_rebound_contribution_id(self):
+        _, assembly, contributions = recorded_origination_fixture()
+        assembly.record(contributions[0])
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.record(replace(
+                contributions[1], contribution_id="contribution-1"
+            ))
+
+    def test_invalid_proposal_is_not_retained_as_a_contribution(self):
+        _, assembly, contributions = recorded_origination_fixture()
+        invalid = replace(
+            contributions[0],
+            proposal=replace(
+                contributions[0].proposal,
+                formation=replace(
+                    contributions[0].proposal.formation,
+                    noticings=(),
+                ),
+            ),
+        )
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.record(invalid)
+        assembly.record(contributions[0])
+
+    def test_cannot_enact_one_recorded_contribution(self):
+        substrate, assembly, contributions = recorded_origination_fixture()
+        assembly.record(contributions[0])
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.enact(delta_id="recorded-plurality-1")
+        self.assertEqual((), substrate.state.active_cut_ids)
+
+    def test_contribution_order_confers_no_authority(self):
+        first_substrate, first_assembly, first = recorded_origination_fixture()
+        second_substrate, second_assembly, second = recorded_origination_fixture()
+        for contribution in first:
+            first_assembly.record(contribution)
+        for contribution in reversed(second):
+            second_assembly.record(contribution)
+        first_delta = first_assembly.enact(delta_id="recorded-plurality-1")
+        second_delta = second_assembly.enact(delta_id="recorded-plurality-1")
+        self.assertEqual(first_delta, second_delta)
+        self.assertEqual(first_substrate.state, second_substrate.state)
+
+    def test_record_shapes_expose_no_selection_or_certification(self):
+        forbidden = {
+            "accepted", "certified", "chosen", "complete", "confidence",
+            "correct", "coverage", "preferred", "rank", "score", "selected",
+            "winner",
+        }
+        for record_type in (
+            RecordedProposalContribution,
+            RecordedPluralOriginationAssembly,
+        ):
+            names = set(getattr(record_type, "__dataclass_fields__", ()))
+            self.assertTrue(names.isdisjoint(forbidden))
+        _, assembly, contributions = recorded_origination_fixture()
+        assembly.record(contributions[0])
+        self.assertTrue(set(vars(assembly)).isdisjoint(forbidden))
 
 
 if __name__ == "__main__":
