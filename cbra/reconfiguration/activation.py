@@ -160,11 +160,64 @@ class FormationCounterParticipant(Protocol):
 class RelationMaterialActivationContribution:
     contribution_id: str
     participation: ApparatusParticipation
+    apparatus_participations: Tuple[ApparatusParticipation, ...]
+    emission_evidence: Tuple[EvidenceSpan, ...]
     triggering_evidence: Tuple[EvidenceSpan, ...]
     unresolved_relation_ids: Tuple[str, ...]
     differences_made: Tuple[str, ...]
     exclusions: Tuple[str, ...]
     revision_conditions: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RelationMaterialActivationRequest:
+    later_material: Tuple[InvitationEvidence, ...]
+    unresolved_relations: Tuple[UnresolvedArrivalRelation, ...]
+    participation: ApparatusParticipation
+
+
+class RelationMaterialActivationParticipant(Protocol):
+    def emit(
+        self, request: RelationMaterialActivationRequest
+    ) -> ProposalEmissionMaterial: ...
+
+
+@dataclass(frozen=True)
+class RelationMaterialTransformationRequest:
+    activation: RelationMaterialActivationRequest
+    emission_evidence: InvitationEvidence
+    transformation_participation: ApparatusParticipation
+
+
+@dataclass(frozen=True)
+class ProposedRelationMaterialActivation:
+    unresolved_relation_ids: Tuple[str, ...]
+    differences_made: Tuple[str, ...]
+    exclusions: Tuple[str, ...]
+    revision_conditions: Tuple[str, ...]
+
+
+class RelationMaterialActivationTransformer(Protocol):
+    def transform(
+        self, request: RelationMaterialTransformationRequest
+    ) -> ProposedRelationMaterialActivation: ...
+
+
+@dataclass(frozen=True)
+class RelationMaterialActivationChallenge:
+    checking_participation: ApparatusParticipation
+    relation_ids: Tuple[str, ...]
+    complications: Tuple[str, ...]
+    additional_exclusions: Tuple[str, ...]
+    reopening_conditions: Tuple[str, ...]
+
+
+class RelationMaterialActivationCounterParticipant(Protocol):
+    def challenge(
+        self,
+        request: RelationMaterialTransformationRequest,
+        proposed: ProposedRelationMaterialActivation,
+    ) -> RelationMaterialActivationChallenge: ...
 
 
 class InspectableReopeningActivationAssembly:
@@ -257,6 +310,292 @@ class InspectableReopeningActivationAssembly:
             revision_conditions=self._revision_conditions,
             delta_id=delta_id,
         )
+
+
+class ExecutableReopeningActivationAssembly:
+    """Form activation contributions from recorded opaque participant emissions."""
+
+    def __init__(
+        self,
+        formation: DependencyActivatedOriginationAssembly,
+        *,
+        field_id: str,
+        reopening_id: str,
+        later_material_evidence: Sequence[EvidenceSpan],
+        unavailable_or_ungenerated: Sequence[str],
+        revision_conditions: Sequence[str],
+    ) -> None:
+        if not later_material_evidence:
+            raise InvalidReconfiguration(
+                "executable reopening activation requires later material evidence"
+            )
+        SituatedFormationBoundary._require_unique_refs(
+            later_material_evidence, "executable activation later evidence"
+        )
+        self._formation = formation
+        self._later_material_evidence = tuple(later_material_evidence)
+        self._assembly = InspectableReopeningActivationAssembly(
+            formation,
+            field_id=field_id,
+            reopening_id=reopening_id,
+            unavailable_or_ungenerated=unavailable_or_ungenerated,
+            revision_conditions=revision_conditions,
+        )
+        self._emissions = {}
+        self._validate_later_material()
+
+    @property
+    def contributions(self) -> Tuple[RelationMaterialActivationContribution, ...]:
+        return self._assembly.contributions
+
+    def invoke(
+        self,
+        *,
+        participation: ApparatusParticipation,
+        participant: RelationMaterialActivationParticipant,
+        trace_id: str,
+        observed_at: str,
+    ) -> EvidenceSpan:
+        if not trace_id or trace_id in self._formation._substrate.state.transports:
+            raise InvalidReconfiguration(
+                "activation emission trace id must be new and nonempty"
+            )
+        request = self._request(participation)
+        emission = participant.emit(request)
+        if (
+            not isinstance(emission, ProposalEmissionMaterial)
+            or not emission.channel
+            or not isinstance(emission.payload, bytes)
+            or not emission.payload
+            or not isinstance(emission.provenance, Mapping)
+        ):
+            raise InvalidReconfiguration(
+                "activation participant must emit nonempty opaque transport material"
+            )
+        provenance = dict(emission.provenance)
+        later_trace_ids = tuple(sorted({
+            item.trace_id for item in self._later_material_evidence
+        }))
+        provenance.update({
+            "activation_field_id": self._assembly._field_id,
+            "later_material_trace_ids": later_trace_ids,
+        })
+        if emission.channel == "model-output":
+            required = {
+                "provider", "model", "effective_configuration",
+                "prompt_dependencies", "source_dependencies", "known_limits",
+                "human_centered_training_apparatus",
+            }
+            if required.difference(provenance) or any(
+                not provenance[key] for key in required
+            ):
+                raise InvalidReconfiguration(
+                    "model activation participant must expose complete apparatus provenance"
+                )
+            request_trace_ids = set(later_trace_ids).union({
+                span.trace_id
+                for relation in request.unresolved_relations
+                for span in relation.evidence
+            })
+            if set(provenance["source_dependencies"]) != request_trace_ids:
+                raise InvalidReconfiguration(
+                    "model activation source dependencies must equal relation and later material"
+                )
+        trace = TransportTrace(
+            trace_id=trace_id,
+            channel=emission.channel,
+            digest=sha256(emission.payload).hexdigest(),
+            payload=emission.payload,
+            observed_at=observed_at,
+            provenance=provenance,
+        )
+        self._formation._substrate.record_transport(trace)
+        self._emissions[trace_id] = (participation, request)
+        return EvidenceSpan(trace_id, 0, len(emission.payload))
+
+    def transform_and_record(
+        self,
+        *,
+        emission_trace_id: str,
+        transformer: RelationMaterialActivationTransformer,
+        transformation_participation: ApparatusParticipation,
+        counter_participant: RelationMaterialActivationCounterParticipant,
+        contribution_id: str,
+    ) -> RelationMaterialActivationContribution:
+        emitted = self._emissions.get(emission_trace_id)
+        if emitted is None:
+            raise InvalidReconfiguration(
+                "activation transformation requires an emission from this field"
+            )
+        originating_participation, activation_request = emitted
+        trace = self._formation._substrate.state.transports[emission_trace_id]
+        expected_basis = set(originating_participation.trace_ids).union(
+            {emission_trace_id}
+        )
+        if (
+            not transformation_participation.condition
+            or set(transformation_participation.trace_ids) != expected_basis
+            or not transformation_participation.makes_perceptible
+            or not transformation_participation.obscures_or_excludes
+            or not transformation_participation.revision_conditions
+            or PluralSituatedFormationBoundary._apparatus_signature(
+                transformation_participation
+            ) == PluralSituatedFormationBoundary._apparatus_signature(
+                originating_participation
+            )
+        ):
+            raise InvalidReconfiguration(
+                "activation transformation must expose later and emission apparatus"
+            )
+        request = RelationMaterialTransformationRequest(
+            activation=activation_request,
+            emission_evidence=InvitationEvidence(
+                emission_trace_id, 0, len(trace.payload), trace.payload
+            ),
+            transformation_participation=transformation_participation,
+        )
+        proposed = transformer.transform(request)
+        if not isinstance(proposed, ProposedRelationMaterialActivation):
+            raise InvalidReconfiguration(
+                "activation transformer must return provisional activation material"
+            )
+        self._validate_proposed(proposed)
+        challenge = counter_participant.challenge(request, proposed)
+        self._validate_challenge(request, proposed, challenge)
+        contribution = RelationMaterialActivationContribution(
+            contribution_id=contribution_id,
+            participation=originating_participation,
+            apparatus_participations=(
+                originating_participation,
+                transformation_participation,
+                challenge.checking_participation,
+            ),
+            emission_evidence=(
+                EvidenceSpan(emission_trace_id, 0, len(trace.payload)),
+            ),
+            triggering_evidence=self._later_material_evidence,
+            unresolved_relation_ids=tuple(dict.fromkeys(
+                proposed.unresolved_relation_ids + challenge.relation_ids
+            )),
+            differences_made=tuple(dict.fromkeys(
+                proposed.differences_made + challenge.complications
+            )),
+            exclusions=tuple(dict.fromkeys(
+                proposed.exclusions + challenge.additional_exclusions
+            )),
+            revision_conditions=tuple(dict.fromkeys(
+                proposed.revision_conditions + challenge.reopening_conditions
+            )),
+        )
+        self._assembly.record(contribution)
+        del self._emissions[emission_trace_id]
+        return contribution
+
+    def enact(self, *, delta_id: str) -> FormationReopeningTrace:
+        return self._assembly.enact(delta_id=delta_id)
+
+    def _validate_later_material(self) -> None:
+        substrate = self._formation._substrate
+        for span in self._later_material_evidence:
+            trace = substrate.state.transports.get(span.trace_id)
+            if trace is None or span.start < 0 or span.end <= span.start or span.end > len(trace.payload):
+                raise InvalidReconfiguration(
+                    "executable activation requires exact recorded later material"
+                )
+        if {span.trace_id for span in self._later_material_evidence}.intersection(
+            self._formation._shared_arrival_basis()
+        ):
+            raise InvalidReconfiguration(
+                "original arrival evidence cannot become executable later material"
+            )
+
+    def _request(
+        self, participation: ApparatusParticipation
+    ) -> RelationMaterialActivationRequest:
+        trace_ids = {span.trace_id for span in self._later_material_evidence}.union(
+            self._formation._shared_arrival_basis()
+        )
+        if (
+            not participation.condition
+            or set(participation.trace_ids) != trace_ids
+            or not participation.makes_perceptible
+            or not participation.obscures_or_excludes
+            or not participation.revision_conditions
+        ):
+            raise InvalidReconfiguration(
+                "activation participation must expose the exact later-material apparatus"
+            )
+        evidence = tuple(
+            InvitationEvidence(
+                span.trace_id,
+                span.start,
+                span.end,
+                self._formation._substrate.state.transports[
+                    span.trace_id
+                ].payload[span.start:span.end],
+            )
+            for span in self._later_material_evidence
+        )
+        return RelationMaterialActivationRequest(
+            later_material=evidence,
+            unresolved_relations=tuple(self._formation._relations.values()),
+            participation=participation,
+        )
+
+    def _validate_proposed(self, proposed: ProposedRelationMaterialActivation) -> None:
+        if (
+            not proposed.unresolved_relation_ids
+            or set(proposed.unresolved_relation_ids).difference(
+                self._formation._relations
+            )
+            or not proposed.differences_made
+            or not proposed.exclusions
+            or not proposed.revision_conditions
+        ):
+            raise InvalidReconfiguration(
+                "provisional activation requires known relations, differences, limits, and revision"
+            )
+
+    @staticmethod
+    def _validate_challenge(
+        request: RelationMaterialTransformationRequest,
+        proposed: ProposedRelationMaterialActivation,
+        challenge: RelationMaterialActivationChallenge,
+    ) -> None:
+        if (
+            not isinstance(challenge, RelationMaterialActivationChallenge)
+            or not challenge.relation_ids
+            or set(challenge.relation_ids) != set(proposed.unresolved_relation_ids)
+            or not challenge.complications
+            or not challenge.additional_exclusions
+            or not challenge.reopening_conditions
+        ):
+            raise InvalidReconfiguration(
+                "activation counter-participation must materially complicate every proposed relation"
+            )
+        checker = challenge.checking_participation
+        expected_checker_basis = {
+            item.trace_id for item in request.activation.later_material
+        }.union({
+            span.trace_id
+            for relation in request.activation.unresolved_relations
+            for span in relation.evidence
+        })
+        if (
+            set(checker.trace_ids)
+            != expected_checker_basis
+            or not checker.condition
+            or not checker.makes_perceptible
+            or not checker.obscures_or_excludes
+            or not checker.revision_conditions
+            or PluralSituatedFormationBoundary._apparatus_signature(checker)
+            == PluralSituatedFormationBoundary._apparatus_signature(
+                request.activation.participation
+            )
+        ):
+            raise InvalidReconfiguration(
+                "activation checking participation must be materially distinct and later-grounded"
+            )
 
 
 class DependencyActivatedOriginationAssembly:
@@ -615,7 +954,8 @@ class DependencyActivatedOriginationAssembly:
         self, contribution: RelationMaterialActivationContribution
     ) -> None:
         if (
-            not contribution.triggering_evidence
+            not contribution.apparatus_participations
+            or not contribution.triggering_evidence
             or not contribution.unresolved_relation_ids
             or not contribution.differences_made
             or not contribution.exclusions
@@ -625,6 +965,28 @@ class DependencyActivatedOriginationAssembly:
             raise InvalidReconfiguration(
                 "relation-material activation requires evidence, relations, differences, limits, and revision"
             )
+        apparatus = SituatedFormationBoundary._unique_by_id(
+            contribution.apparatus_participations,
+            "participation_id",
+            "relation-material activation apparatus participation",
+        )
+        if apparatus.get(contribution.participation.participation_id) != contribution.participation:
+            raise InvalidReconfiguration(
+                "activation contribution must retain its originating participation"
+            )
+        apparatus_trace_ids = set()
+        for item in apparatus.values():
+            if (
+                not item.condition
+                or not item.trace_ids
+                or not item.makes_perceptible
+                or not item.obscures_or_excludes
+                or not item.revision_conditions
+            ):
+                raise InvalidReconfiguration(
+                    "activation apparatus participation must remain inspectable"
+                )
+            apparatus_trace_ids.update(item.trace_ids)
         SituatedFormationBoundary._require_unique_refs(
             contribution.triggering_evidence, "reopening activation evidence"
         )
@@ -651,14 +1013,37 @@ class DependencyActivatedOriginationAssembly:
                     "reopening activation requires nonempty exact transport spans"
                 )
             trace_ids.add(span.trace_id)
+        emission_trace_ids = set()
+        for span in contribution.emission_evidence:
+            trace = self._substrate.state.transports.get(span.trace_id)
+            if trace is None or span.start < 0 or span.end <= span.start or span.end > len(trace.payload):
+                raise InvalidReconfiguration(
+                    "activation contribution requires exact recorded emission evidence"
+                )
+            emission_trace_ids.add(span.trace_id)
+        if apparatus_trace_ids.difference(
+            set(self._substrate.state.transports)
+        ) or not emission_trace_ids.issubset(apparatus_trace_ids):
+            raise InvalidReconfiguration(
+                "activation apparatus must remain grounded in recorded material"
+            )
+        if len(apparatus) > 1 and not emission_trace_ids:
+            raise InvalidReconfiguration(
+                "formed activation contribution must retain its emission evidence"
+            )
         if trace_ids.intersection(self._shared_arrival_basis()):
             raise InvalidReconfiguration(
                 "original arrival evidence cannot masquerade as later disturbance"
             )
         participation = contribution.participation
+        relation_trace_ids = {
+            span.trace_id
+            for relation_id in contribution.unresolved_relation_ids
+            for span in self._relations[relation_id].evidence
+        }
         if (
             not participation.condition
-            or set(participation.trace_ids) != trace_ids
+            or set(participation.trace_ids) != trace_ids.union(relation_trace_ids)
             or not participation.makes_perceptible
             or not participation.obscures_or_excludes
             or not participation.revision_conditions

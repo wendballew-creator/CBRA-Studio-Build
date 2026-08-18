@@ -20,6 +20,7 @@ from cbra.reconfiguration.formation import (
 )
 from cbra.reconfiguration.activation import (
     DependencyActivatedOriginationAssembly,
+    ExecutableReopeningActivationAssembly,
     FormationChallengeMaterial,
     FormationReopeningTrace,
     FormationTransformationRequest,
@@ -29,6 +30,10 @@ from cbra.reconfiguration.activation import (
     ProposalEmissionMaterial,
     ProposalParticipationRequest,
     RelationMaterialActivationContribution,
+    RelationMaterialActivationChallenge,
+    RelationMaterialActivationRequest,
+    RelationMaterialTransformationRequest,
+    ProposedRelationMaterialActivation,
     ProposedFormationMaterial,
     ProposedNoticingMaterial,
     ProposalParticipationInvitation,
@@ -396,6 +401,67 @@ class SemanticFormerParticipant:
         return self.contribution
 
 
+class FixtureActivationParticipant:
+    def __init__(self, payload, provider, model):
+        self.payload = payload
+        self.provider = provider
+        self.model = model
+        self.requests = []
+
+    def emit(self, request):
+        self.requests.append(request)
+        return ProposalEmissionMaterial(
+            channel="model-output",
+            payload=self.payload,
+            provenance={
+                "provider": self.provider,
+                "model": self.model,
+                "effective_configuration": "activation-fixture-configuration",
+                "prompt_dependencies": ("activation-fixture-prompt",),
+                "source_dependencies": tuple(
+                    sorted(
+                        {item.trace_id for item in request.later_material}.union({
+                            span.trace_id
+                            for relation in request.unresolved_relations
+                            for span in relation.evidence
+                        })
+                    )
+                ),
+                "known_limits": ("text-only activation participation",),
+                "human_centered_training_apparatus": True,
+            },
+        )
+
+
+class FixtureActivationTransformer:
+    def __init__(self, difference):
+        self.difference = difference
+        self.requests = []
+
+    def transform(self, request):
+        self.requests.append(request)
+        return ProposedRelationMaterialActivation(
+            unresolved_relation_ids=("relation-1",),
+            differences_made=(self.difference,),
+            exclusions=("relations not expressed by this transformation",),
+            revision_conditions=("another transformation reopens this account",),
+        )
+
+
+class FixtureActivationCounterParticipant:
+    def __init__(self, participation):
+        self.participation = participation
+
+    def challenge(self, request, proposed):
+        return RelationMaterialActivationChallenge(
+            checking_participation=self.participation,
+            relation_ids=proposed.unresolved_relation_ids,
+            complications=("counter-participation complicates the activation",),
+            additional_exclusions=("counter-material remains partial",),
+            reopening_conditions=("further counter-material reopens activation",),
+        )
+
+
 class FixtureFormationTransformer:
     def __init__(self, source_contribution):
         self.source = source_contribution
@@ -536,22 +602,82 @@ def reopening_activation(
     if reverse:
         specs = tuple(reversed(specs))
     for index, condition in specs:
+        participation = ApparatusParticipation(
+            f"reopening-apparatus-{index}",
+            condition,
+            tuple(sorted({trace_id, "arrival-1"})),
+            (f"difference {index} in how later material disturbs relation-1",),
+            (f"conditions unavailable to reopening account {index}",),
+            (f"different participation reopens account {index}",),
+        )
         activation.record(RelationMaterialActivationContribution(
             contribution_id=f"reopening-account-{index}",
-            participation=ApparatusParticipation(
-                f"reopening-apparatus-{index}",
-                condition,
-                (trace_id,),
-                (f"difference {index} in how later material disturbs relation-1",),
-                (f"conditions unavailable to reopening account {index}",),
-                (f"different participation reopens account {index}",),
-            ),
+            participation=participation,
+            apparatus_participations=(participation,),
+            emission_evidence=(),
             triggering_evidence=(EvidenceSpan(trace_id, 0, 45),),
             unresolved_relation_ids=("relation-1",),
             differences_made=(f"relation-material difference {index}",),
             exclusions=(f"excluded activation possibility {index}",),
             revision_conditions=(f"later difference reopens account {index}",),
         ))
+    return activation
+
+
+def executable_reopening_activation(substrate, assembly, contribution_count=2):
+    activation = ExecutableReopeningActivationAssembly(
+        assembly,
+        field_id="executable-reopening-field-1",
+        reopening_id="executable-reopening-1",
+        later_material_evidence=(EvidenceSpan("later-material", 0, 45),),
+        unavailable_or_ungenerated=("activation apparatus not participating",),
+        revision_conditions=("further material reopens executable activation",),
+    )
+    for index in range(1, contribution_count + 1):
+        origin = ApparatusParticipation(
+            f"activation-origin-{index}",
+            f"activation origin condition {index}",
+            ("arrival-1", "later-material"),
+            (f"origin difference {index}",),
+            (f"origin exclusion {index}",),
+            (f"origin revision {index}",),
+        )
+        emission_id = f"activation-emission-{index}"
+        activation.invoke(
+            participation=origin,
+            participant=FixtureActivationParticipant(
+                f"activation emission {index}".encode(),
+                f"provider-{index}",
+                f"model-{index}",
+            ),
+            trace_id=emission_id,
+            observed_at="later",
+        )
+        transformation = ApparatusParticipation(
+            f"activation-transform-{index}",
+            f"activation transformation condition {index}",
+            ("arrival-1", "later-material", emission_id),
+            (f"transformed difference {index}",),
+            (f"transformation exclusion {index}",),
+            (f"transformation revision {index}",),
+        )
+        checker = ApparatusParticipation(
+            f"activation-check-{index}",
+            f"activation counter condition {index}",
+            ("arrival-1", "later-material"),
+            (f"counter difference {index}",),
+            (f"counter exclusion {index}",),
+            (f"counter revision {index}",),
+        )
+        activation.transform_and_record(
+            emission_trace_id=emission_id,
+            transformer=FixtureActivationTransformer(
+                f"relation-material transformation {index}"
+            ),
+            transformation_participation=transformation,
+            counter_participant=FixtureActivationCounterParticipant(checker),
+            contribution_id=f"executable-activation-contribution-{index}",
+        )
     return activation
 
 
@@ -1591,6 +1717,82 @@ class DependencyActivatedOriginationTests(unittest.TestCase):
             ).parameters)[1:],
         )
 
+    def test_executable_participants_form_plural_activation(self):
+        substrate, assembly, _, _ = activated_origination_fixture()
+        self.record_later_material(substrate)
+        activation = executable_reopening_activation(substrate, assembly)
+        trace = activation.enact(delta_id="executable-reopening-delta-1")
+        self.assertEqual(
+            (
+                "executable-activation-contribution-1",
+                "executable-activation-contribution-2",
+            ),
+            trace.activation_contribution_ids,
+        )
+
+    def test_raw_activation_emission_cannot_reopen_relation(self):
+        substrate, assembly, _, _ = activated_origination_fixture()
+        self.record_later_material(substrate)
+        activation = ExecutableReopeningActivationAssembly(
+            assembly,
+            field_id="raw-activation-field",
+            reopening_id="raw-reopening",
+            later_material_evidence=(EvidenceSpan("later-material", 0, 45),),
+            unavailable_or_ungenerated=("unformed activation",),
+            revision_conditions=("formation remains open",),
+        )
+        origin = ApparatusParticipation(
+            "raw-activation-origin", "raw activation condition",
+            ("arrival-1", "later-material"), ("raw difference",), ("raw limit",),
+            ("raw revision",),
+        )
+        activation.invoke(
+            participation=origin,
+            participant=FixtureActivationParticipant(
+                b"raw activation", "provider-raw", "model-raw"
+            ),
+            trace_id="raw-activation-emission",
+            observed_at="later",
+        )
+        self.assertEqual((), activation.contributions)
+        self.assertEqual((), assembly.reopening_traces)
+
+    def test_executable_activation_retains_emission_and_forming_apparatus(self):
+        substrate, assembly, _, _ = activated_origination_fixture()
+        self.record_later_material(substrate)
+        activation = executable_reopening_activation(
+            substrate, assembly, contribution_count=1
+        )
+        contribution = activation.contributions[0]
+        self.assertEqual(("activation-emission-1",), tuple(
+            span.trace_id for span in contribution.emission_evidence
+        ))
+        self.assertEqual(3, len(contribution.apparatus_participations))
+        self.assertEqual(
+            {"arrival-1", "later-material"},
+            set(substrate.state.transports[
+                "activation-emission-1"
+            ].provenance["source_dependencies"]),
+        )
+
+    def test_one_executable_activation_cannot_reopen_complete_field(self):
+        substrate, assembly, _, _ = activated_origination_fixture()
+        self.record_later_material(substrate)
+        activation = executable_reopening_activation(
+            substrate, assembly, contribution_count=1
+        )
+        with self.assertRaises(InvalidReconfiguration):
+            activation.enact(delta_id="incomplete-executable-reopening")
+        self.assertEqual((), assembly.reopening_traces)
+
+    def test_executable_reopening_enactment_accepts_only_delta(self):
+        self.assertEqual(
+            ("delta_id",),
+            tuple(inspect.signature(
+                ExecutableReopeningActivationAssembly.enact
+            ).parameters)[1:],
+        )
+
     def test_one_participation_cannot_supply_complete_activation_field(self):
         substrate, assembly, _, _ = activated_origination_fixture()
         self.record_later_material(substrate)
@@ -1727,6 +1929,10 @@ class DependencyActivatedOriginationTests(unittest.TestCase):
         for record_type in (
             FormationReopeningTrace,
             RelationMaterialActivationContribution,
+            RelationMaterialActivationRequest,
+            RelationMaterialTransformationRequest,
+            ProposedRelationMaterialActivation,
+            RelationMaterialActivationChallenge,
         ):
             self.assertTrue(
                 set(record_type.__dataclass_fields__).isdisjoint(forbidden)

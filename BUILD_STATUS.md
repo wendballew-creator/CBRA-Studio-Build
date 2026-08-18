@@ -2,9 +2,9 @@
 
 Status date: 2026-08-18
 
-Status boundary: plural inspectable relation-to-material activation for
-formation reopening after the shared recursive-reconfiguration checkpoint at
-`b0a5974`.
+Status boundary: executable, counter-grounded relation-to-material activation
+for formation reopening after the shared recursive-reconfiguration checkpoint
+at `b0a5974`.
 
 ## Current conclusion
 
@@ -103,14 +103,21 @@ recorded, materially distinct apparatus contributions. Every reopened relation
 requires plural participation, pending contributions remain inspectable, and
 the final reopening call accepts only a mechanical delta identifier. It derives
 the later transports and relations from the recorded field rather than taking
-them from one caller or model emission. The runtime still cannot prove that declared
+them from one caller or model emission. Independently provenanced activation
+participants can now receive exact later material and unresolved relation
+records and emit opaque transport inside the runtime. Raw emission cannot
+activate or reopen a relation. Explicit transformation and materially distinct
+counter-participation must form each contribution, which retains arrival,
+later-material, emission, and apparatus evidence. Model provenance must expose
+both the later transports and the arrival transports grounding the relations
+it encounters. The runtime still cannot prove that declared
 apparatus accounts have different hidden authors or detect a possibility that
 was never declared. It does not form a public intervention, persist the new
 grammar, or expose it through an API or browser.
 
-At this boundary, 81 focused situated-formation and authority-invariant tests
-pass. The complete dependency-free suite passes 375 tests. Broad discovery
-executes those 375 tests and
+At this boundary, 86 focused situated-formation and authority-invariant tests
+pass. The complete dependency-free suite passes 380 tests. Broad discovery
+executes those 380 tests and
 reports seven unavailable modules because FastAPI and HTTPX are absent in this
 environment. Python compilation and diff checks pass. These results establish
 only the bounded behaviors exercised; they do not certify posthuman validity.
@@ -128,6 +135,7 @@ See [`CANONICAL_REDESIGN.md`](CANONICAL_REDESIGN.md),
 [`COUNTER_GROUNDED_FORMATION_TRANSFORMATION_SLICE.md`](COUNTER_GROUNDED_FORMATION_TRANSFORMATION_SLICE.md),
 [`FORMATION_REOPENING_INVALIDATION_SLICE.md`](FORMATION_REOPENING_INVALIDATION_SLICE.md),
 [`PLURAL_RELATION_MATERIAL_ACTIVATION_SLICE.md`](PLURAL_RELATION_MATERIAL_ACTIVATION_SLICE.md),
+[`EXECUTABLE_RELATION_MATERIAL_ACTIVATION_SLICE.md`](EXECUTABLE_RELATION_MATERIAL_ACTIVATION_SLICE.md),
 and
 [`BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md`](BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md).
 

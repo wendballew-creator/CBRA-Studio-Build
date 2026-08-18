@@ -50,9 +50,9 @@ failure state.
 ## Remaining boundary
 
 This is a plural inspectability boundary, not autonomous semantic discovery.
-Each contribution still arrives as structured material supplied to the
-runtime, and the runtime cannot prove that two declared apparatus accounts
-have different hidden authors. Executable activation participants, durable
+The structured-input limitation at this checkpoint is partially removed by
+the subsequent executable activation slice. The runtime still cannot prove
+that two declared apparatus accounts have different hidden authors. Durable
 persistence, public intervention reinsertion, and behavioral falsification
 remain later work.
 
