@@ -51,12 +51,10 @@ invalidation effects. It contains no acceptance, correctness, confidence,
 score, rank, winner, maturity, or failure field. Later material activates a
 revision condition; it does not certify a better account.
 
-The remaining authority boundary is explicit: a caller still identifies
-which unresolved relation the later transport disturbs. The runtime validates
-that claim and derives its consequences, but it does not yet form that
-relation-to-material connection through an independently inspectable
-apparatus. Reopening state is also runtime-local; durable persistence and
-public intervention reinsertion remain future work.
+The caller-supplied relation-to-material shortcut described at this checkpoint
+is removed by the subsequent plural activation slice. Reopening state remains
+runtime-local; durable persistence and public intervention reinsertion remain
+future work.
 
 ## Bounded verification
 

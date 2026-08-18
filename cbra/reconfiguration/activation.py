@@ -56,12 +56,16 @@ class OriginationActivationTrace:
 @dataclass(frozen=True)
 class FormationReopeningTrace:
     reopening_id: str
+    activation_field_id: str
+    activation_contribution_ids: Tuple[str, ...]
     triggering_trace_ids: Tuple[str, ...]
     reopened_relation_ids: Tuple[str, ...]
     invalidated_invitation_ids: Tuple[str, ...]
     invalidated_proposal_ids: Tuple[str, ...]
     invalidated_cut_ids: Tuple[str, ...]
     substrate_delta_id: str | None
+    activation_unavailable_or_ungenerated: Tuple[str, ...]
+    activation_revision_conditions: Tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -150,6 +154,109 @@ class FormationCounterParticipant(Protocol):
     def challenge(
         self, request: FormationChallengeRequest
     ) -> FormationChallengeMaterial: ...
+
+
+@dataclass(frozen=True)
+class RelationMaterialActivationContribution:
+    contribution_id: str
+    participation: ApparatusParticipation
+    triggering_evidence: Tuple[EvidenceSpan, ...]
+    unresolved_relation_ids: Tuple[str, ...]
+    differences_made: Tuple[str, ...]
+    exclusions: Tuple[str, ...]
+    revision_conditions: Tuple[str, ...]
+
+
+class InspectableReopeningActivationAssembly:
+    """Accumulate plural accounts of how later material disturbs relations."""
+
+    def __init__(
+        self,
+        formation: DependencyActivatedOriginationAssembly,
+        *,
+        field_id: str,
+        reopening_id: str,
+        unavailable_or_ungenerated: Sequence[str],
+        revision_conditions: Sequence[str],
+    ) -> None:
+        if (
+            not field_id
+            or not reopening_id
+            or not unavailable_or_ungenerated
+            or not revision_conditions
+        ):
+            raise InvalidReconfiguration(
+                "reopening activation requires field, reopening, unavailable, and revision material"
+            )
+        self._formation = formation
+        self._field_id = field_id
+        self._reopening_id = reopening_id
+        self._unavailable_or_ungenerated = tuple(unavailable_or_ungenerated)
+        self._revision_conditions = tuple(revision_conditions)
+        self._contributions = {}
+
+    @property
+    def contributions(self) -> Tuple[RelationMaterialActivationContribution, ...]:
+        return tuple(self._contributions.values())
+
+    def record(self, contribution: RelationMaterialActivationContribution) -> None:
+        if not isinstance(contribution, RelationMaterialActivationContribution):
+            raise InvalidReconfiguration(
+                "reopening activation requires a typed contribution"
+            )
+        if (
+            not contribution.contribution_id
+            or contribution.contribution_id in self._contributions
+        ):
+            raise InvalidReconfiguration(
+                "reopening activation contribution id must be new and nonempty"
+            )
+        self._formation._validate_reopening_activation_contribution(contribution)
+        signature = PluralSituatedFormationBoundary._apparatus_signature(
+            contribution.participation
+        )
+        if any(
+            existing.participation.participation_id
+            == contribution.participation.participation_id
+            for existing in self._contributions.values()
+        ):
+            raise InvalidReconfiguration(
+                "one participation cannot supply multiple reopening activation contributions"
+            )
+        if any(
+            PluralSituatedFormationBoundary._apparatus_signature(
+                existing.participation
+            ) == signature
+            for existing in self._contributions.values()
+        ):
+            raise InvalidReconfiguration(
+                "reopening activation participations must be materially distinct"
+            )
+        self._contributions[contribution.contribution_id] = contribution
+
+    def enact(self, *, delta_id: str) -> FormationReopeningTrace:
+        if len(self._contributions) < 2:
+            raise InvalidReconfiguration(
+                "relation-to-material activation requires plural participation"
+            )
+        relation_use = {}
+        for contribution in self._contributions.values():
+            for relation_id in contribution.unresolved_relation_ids:
+                relation_use.setdefault(relation_id, set()).add(
+                    contribution.participation.participation_id
+                )
+        if any(len(participation_ids) < 2 for participation_ids in relation_use.values()):
+            raise InvalidReconfiguration(
+                "every reopened relation requires materially plural activation"
+            )
+        return self._formation._reopen_from_activation(
+            field_id=self._field_id,
+            reopening_id=self._reopening_id,
+            contributions=tuple(self._contributions.values()),
+            unavailable_or_ungenerated=self._unavailable_or_ungenerated,
+            revision_conditions=self._revision_conditions,
+            delta_id=delta_id,
+        )
 
 
 class DependencyActivatedOriginationAssembly:
@@ -504,12 +611,70 @@ class DependencyActivatedOriginationAssembly:
         self.record(invitation_id=invitation_id, contribution=contribution)
         return contribution
 
-    def reopen(
+    def _validate_reopening_activation_contribution(
+        self, contribution: RelationMaterialActivationContribution
+    ) -> None:
+        if (
+            not contribution.triggering_evidence
+            or not contribution.unresolved_relation_ids
+            or not contribution.differences_made
+            or not contribution.exclusions
+            or not contribution.revision_conditions
+            or any(not item for item in contribution.differences_made)
+        ):
+            raise InvalidReconfiguration(
+                "relation-material activation requires evidence, relations, differences, limits, and revision"
+            )
+        SituatedFormationBoundary._require_unique_refs(
+            contribution.triggering_evidence, "reopening activation evidence"
+        )
+        SituatedFormationBoundary._require_unique_refs(
+            contribution.unresolved_relation_ids,
+            "reopening activation unresolved relation",
+        )
+        SituatedFormationBoundary._require_unique_refs(
+            contribution.differences_made, "reopening activation difference"
+        )
+        if set(contribution.unresolved_relation_ids).difference(self._relations):
+            raise InvalidReconfiguration(
+                "reopening activation references unknown unresolved relation"
+            )
+        trace_ids = set()
+        for span in contribution.triggering_evidence:
+            trace = self._substrate.state.transports.get(span.trace_id)
+            if trace is None:
+                raise InvalidReconfiguration(
+                    "reopening activation references unknown transport"
+                )
+            if span.start < 0 or span.end <= span.start or span.end > len(trace.payload):
+                raise InvalidReconfiguration(
+                    "reopening activation requires nonempty exact transport spans"
+                )
+            trace_ids.add(span.trace_id)
+        if trace_ids.intersection(self._shared_arrival_basis()):
+            raise InvalidReconfiguration(
+                "original arrival evidence cannot masquerade as later disturbance"
+            )
+        participation = contribution.participation
+        if (
+            not participation.condition
+            or set(participation.trace_ids) != trace_ids
+            or not participation.makes_perceptible
+            or not participation.obscures_or_excludes
+            or not participation.revision_conditions
+        ):
+            raise InvalidReconfiguration(
+                "reopening activation participation must expose its exact later-material apparatus"
+            )
+
+    def _reopen_from_activation(
         self,
         *,
+        field_id: str,
         reopening_id: str,
-        triggering_trace_ids: Sequence[str],
-        unresolved_relation_ids: Sequence[str],
+        contributions: Sequence[RelationMaterialActivationContribution],
+        unavailable_or_ungenerated: Sequence[str],
+        revision_conditions: Sequence[str],
         delta_id: str,
     ) -> FormationReopeningTrace:
         if (
@@ -523,36 +688,24 @@ class DependencyActivatedOriginationAssembly:
             raise InvalidReconfiguration(
                 "formation reopening delta id must be nonempty"
             )
-        if not triggering_trace_ids:
+        if not field_id or not unavailable_or_ungenerated or not revision_conditions:
             raise InvalidReconfiguration(
-                "formation reopening requires later material evidence"
+                "formation reopening requires an inspectable activation field"
             )
+        contribution_ids = [item.contribution_id for item in contributions]
         SituatedFormationBoundary._require_unique_refs(
-            triggering_trace_ids, "formation reopening trigger"
+            contribution_ids, "reopening activation contribution"
         )
-        unknown_traces = set(triggering_trace_ids).difference(
-            self._substrate.state.transports
-        )
-        if unknown_traces:
-            raise InvalidReconfiguration(
-                "formation reopening references unknown transport"
-            )
-        if set(triggering_trace_ids).intersection(self._shared_arrival_basis()):
-            raise InvalidReconfiguration(
-                "original arrival evidence cannot masquerade as later disturbance"
-            )
-        if not unresolved_relation_ids:
-            raise InvalidReconfiguration(
-                "formation reopening must identify a disturbed unresolved relation"
-            )
-        SituatedFormationBoundary._require_unique_refs(
-            unresolved_relation_ids, "reopened unresolved relation"
-        )
-        unknown_relations = set(unresolved_relation_ids).difference(self._relations)
-        if unknown_relations:
-            raise InvalidReconfiguration(
-                "formation reopening references unknown unresolved relation"
-            )
+        triggering_trace_ids = tuple(sorted({
+            span.trace_id
+            for contribution in contributions
+            for span in contribution.triggering_evidence
+        }))
+        unresolved_relation_ids = tuple(sorted({
+            relation_id
+            for contribution in contributions
+            for relation_id in contribution.unresolved_relation_ids
+        }))
         if set(unresolved_relation_ids).intersection(self._reopened_relation_ids):
             raise InvalidReconfiguration(
                 "an unresolved relation cannot be reopened twice in one assembly"
@@ -577,6 +730,8 @@ class DependencyActivatedOriginationAssembly:
 
         trace = FormationReopeningTrace(
             reopening_id=reopening_id,
+            activation_field_id=field_id,
+            activation_contribution_ids=tuple(sorted(contribution_ids)),
             triggering_trace_ids=tuple(sorted(triggering_trace_ids)),
             reopened_relation_ids=tuple(sorted(unresolved_relation_ids)),
             invalidated_invitation_ids=invalidated_invitation_ids,
@@ -585,6 +740,10 @@ class DependencyActivatedOriginationAssembly:
                 delta.invalidated_cut_ids if delta is not None else ()
             ),
             substrate_delta_id=(delta.delta_id if delta is not None else None),
+            activation_unavailable_or_ungenerated=tuple(
+                unavailable_or_ungenerated
+            ),
+            activation_revision_conditions=tuple(revision_conditions),
         )
         self._reopened_relation_ids.update(unresolved_relation_ids)
         self._invalidated_invitation_ids.update(invalidated_invitation_ids)

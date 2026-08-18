@@ -23,10 +23,12 @@ from cbra.reconfiguration.activation import (
     FormationChallengeMaterial,
     FormationReopeningTrace,
     FormationTransformationRequest,
+    InspectableReopeningActivationAssembly,
     InvitationEvidence,
     OriginationActivationTrace,
     ProposalEmissionMaterial,
     ProposalParticipationRequest,
+    RelationMaterialActivationContribution,
     ProposedFormationMaterial,
     ProposedNoticingMaterial,
     ProposalParticipationInvitation,
@@ -511,6 +513,46 @@ def transform_activated_contributions(assembly, contributions):
             contribution_id=f"transformed-contribution-{index}",
         ))
     return tuple(transformed)
+
+
+def reopening_activation(
+    assembly, trace_id="later-material", contribution_count=2, reverse=False
+):
+    activation = InspectableReopeningActivationAssembly(
+        assembly,
+        field_id="reopening-activation-field-1",
+        reopening_id="reopening-1",
+        unavailable_or_ungenerated=(
+            "later-material relations not made perceptible here",
+        ),
+        revision_conditions=(
+            "further material or participation reopens this activation",
+        ),
+    )
+    specs = tuple(enumerate((
+        "material-discursive reading of the later span",
+        "embodied counter-reading of the later span",
+    ), start=1))[:contribution_count]
+    if reverse:
+        specs = tuple(reversed(specs))
+    for index, condition in specs:
+        activation.record(RelationMaterialActivationContribution(
+            contribution_id=f"reopening-account-{index}",
+            participation=ApparatusParticipation(
+                f"reopening-apparatus-{index}",
+                condition,
+                (trace_id,),
+                (f"difference {index} in how later material disturbs relation-1",),
+                (f"conditions unavailable to reopening account {index}",),
+                (f"different participation reopens account {index}",),
+            ),
+            triggering_evidence=(EvidenceSpan(trace_id, 0, 45),),
+            unresolved_relation_ids=("relation-1",),
+            differences_made=(f"relation-material difference {index}",),
+            exclusions=(f"excluded activation possibility {index}",),
+            revision_conditions=(f"later difference reopens account {index}",),
+        ))
+    return activation
 
 
 class SituatedFormationTests(unittest.TestCase):
@@ -1509,11 +1551,8 @@ class DependencyActivatedOriginationTests(unittest.TestCase):
         transform_activated_contributions(assembly, contributions)
         assembly.enact(delta_id="transformed-plurality-1")
         self.record_later_material(substrate)
-        trace = assembly.reopen(
-            reopening_id="reopening-1",
-            triggering_trace_ids=("later-material",),
-            unresolved_relation_ids=("relation-1",),
-            delta_id="formation-reopening-1",
+        trace = reopening_activation(assembly).enact(
+            delta_id="formation-reopening-1"
         )
         self.assertIsInstance(trace, FormationReopeningTrace)
         self.assertEqual(("cut-1", "cut-2"), trace.invalidated_cut_ids)
@@ -1522,6 +1561,79 @@ class DependencyActivatedOriginationTests(unittest.TestCase):
             ("invitation-1", "invitation-2"),
             assembly.activation_trace.invalidated_invitation_ids,
         )
+        self.assertEqual(
+            ("reopening-account-1", "reopening-account-2"),
+            trace.activation_contribution_ids,
+        )
+
+    def test_relation_material_activation_requires_plural_contributions(self):
+        substrate, assembly, _, _ = activated_origination_fixture()
+        self.record_later_material(substrate)
+        activation = reopening_activation(assembly, contribution_count=1)
+        with self.assertRaises(InvalidReconfiguration):
+            activation.enact(delta_id="formation-reopening-1")
+        self.assertEqual((), assembly.reopening_traces)
+
+    def test_pending_relation_material_activation_is_inspectable(self):
+        substrate, assembly, _, _ = activated_origination_fixture()
+        self.record_later_material(substrate)
+        activation = reopening_activation(assembly)
+        self.assertEqual(
+            ("reopening-account-1", "reopening-account-2"),
+            tuple(item.contribution_id for item in activation.contributions),
+        )
+
+    def test_final_reopening_accepts_no_caller_supplied_semantic_field(self):
+        self.assertEqual(
+            ("delta_id",),
+            tuple(inspect.signature(
+                InspectableReopeningActivationAssembly.enact
+            ).parameters)[1:],
+        )
+
+    def test_one_participation_cannot_supply_complete_activation_field(self):
+        substrate, assembly, _, _ = activated_origination_fixture()
+        self.record_later_material(substrate)
+        activation = reopening_activation(assembly, contribution_count=1)
+        template = reopening_activation(assembly).contributions[1]
+        rebound = replace(
+            template,
+            participation=replace(
+                template.participation,
+                participation_id="reopening-apparatus-1",
+            ),
+        )
+        with self.assertRaises(InvalidReconfiguration):
+            activation.record(rebound)
+
+    def test_reopening_activation_requires_exact_later_material_apparatus(self):
+        substrate, assembly, _, _ = activated_origination_fixture()
+        self.record_later_material(substrate)
+        activation = InspectableReopeningActivationAssembly(
+            assembly,
+            field_id="reopening-activation-field-detached",
+            reopening_id="reopening-detached",
+            unavailable_or_ungenerated=("unavailable activation",),
+            revision_conditions=("later activation reopens this field",),
+        )
+        first = reopening_activation(assembly, contribution_count=1).contributions[0]
+        detached = replace(
+            first,
+            participation=replace(first.participation, trace_ids=("arrival-1",)),
+        )
+        with self.assertRaises(InvalidReconfiguration):
+            activation.record(detached)
+
+    def test_activation_order_confers_no_reopening_authority(self):
+        first_substrate, first_assembly, _, _ = activated_origination_fixture()
+        second_substrate, second_assembly, _, _ = activated_origination_fixture()
+        self.record_later_material(first_substrate)
+        self.record_later_material(second_substrate)
+        first_activation = reopening_activation(first_assembly)
+        second_activation = reopening_activation(second_assembly, reverse=True)
+        first_trace = first_activation.enact(delta_id="formation-reopening-1")
+        second_trace = second_activation.enact(delta_id="formation-reopening-1")
+        self.assertEqual(first_trace, second_trace)
 
     def test_reopening_recursively_invalidates_dependent_cut(self):
         substrate, assembly, contributions, _ = activated_origination_fixture()
@@ -1540,11 +1652,8 @@ class DependencyActivatedOriginationTests(unittest.TestCase):
             delta_id="dependent-enactment",
         )
         self.record_later_material(substrate)
-        trace = assembly.reopen(
-            reopening_id="reopening-1",
-            triggering_trace_ids=("later-material",),
-            unresolved_relation_ids=("relation-1",),
-            delta_id="formation-reopening-1",
+        trace = reopening_activation(assembly).enact(
+            delta_id="formation-reopening-1"
         )
         self.assertEqual(
             {"cut-1", "cut-2", "dependent-cut"},
@@ -1556,11 +1665,8 @@ class DependencyActivatedOriginationTests(unittest.TestCase):
         substrate, assembly, contributions, _ = activated_origination_fixture()
         transform_activated_contributions(assembly, contributions)
         self.record_later_material(substrate)
-        trace = assembly.reopen(
-            reopening_id="reopening-1",
-            triggering_trace_ids=("later-material",),
-            unresolved_relation_ids=("relation-1",),
-            delta_id="formation-reopening-1",
+        trace = reopening_activation(assembly).enact(
+            delta_id="formation-reopening-1"
         )
         self.assertEqual(("cut-1", "cut-2"), trace.invalidated_proposal_ids)
         self.assertEqual((), trace.invalidated_cut_ids)
@@ -1574,23 +1680,13 @@ class DependencyActivatedOriginationTests(unittest.TestCase):
         transform_activated_contributions(assembly, contributions)
         preserved_ids = set(substrate.state.transports)
         self.record_later_material(substrate)
-        assembly.reopen(
-            reopening_id="reopening-1",
-            triggering_trace_ids=("later-material",),
-            unresolved_relation_ids=("relation-1",),
-            delta_id="formation-reopening-1",
-        )
+        reopening_activation(assembly).enact(delta_id="formation-reopening-1")
         self.assertTrue(preserved_ids.issubset(substrate.state.transports))
 
     def test_invalidated_invitation_cannot_emit_or_transform_again(self):
         substrate, assembly, contributions, _ = activated_origination_fixture()
         self.record_later_material(substrate)
-        assembly.reopen(
-            reopening_id="reopening-1",
-            triggering_trace_ids=("later-material",),
-            unresolved_relation_ids=("relation-1",),
-            delta_id="formation-reopening-1",
-        )
+        reopening_activation(assembly).enact(delta_id="formation-reopening-1")
         with self.assertRaises(InvalidReconfiguration):
             assembly.invoke(
                 invitation_id="invitation-1",
@@ -1619,12 +1715,7 @@ class DependencyActivatedOriginationTests(unittest.TestCase):
         substrate, assembly, _, _ = activated_origination_fixture()
         before = substrate.state
         with self.assertRaises(InvalidReconfiguration):
-            assembly.reopen(
-                reopening_id="reopening-1",
-                triggering_trace_ids=("arrival-1",),
-                unresolved_relation_ids=("relation-1",),
-                delta_id="formation-reopening-1",
-            )
+            reopening_activation(assembly, trace_id="arrival-1")
         self.assertEqual(before, substrate.state)
         self.assertEqual((), assembly.reopening_traces)
 
@@ -1633,9 +1724,13 @@ class DependencyActivatedOriginationTests(unittest.TestCase):
             "accepted", "confidence", "correct", "failure", "maturity",
             "preferred", "rank", "score", "selected", "winner",
         }
-        self.assertTrue(
-            set(FormationReopeningTrace.__dataclass_fields__).isdisjoint(forbidden)
-        )
+        for record_type in (
+            FormationReopeningTrace,
+            RelationMaterialActivationContribution,
+        ):
+            self.assertTrue(
+                set(record_type.__dataclass_fields__).isdisjoint(forbidden)
+            )
 
     def test_raw_emission_does_not_answer_invitation_or_enact_cut(self):
         substrate, assembly, _, _ = activated_origination_fixture()

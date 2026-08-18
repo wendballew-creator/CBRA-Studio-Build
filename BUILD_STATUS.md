@@ -2,8 +2,9 @@
 
 Status date: 2026-08-18
 
-Status boundary: later-material formation reopening and recursive invalidation
-after the shared recursive-reconfiguration checkpoint at `b0a5974`.
+Status boundary: plural inspectable relation-to-material activation for
+formation reopening after the shared recursive-reconfiguration checkpoint at
+`b0a5974`.
 
 ## Current conclusion
 
@@ -96,17 +97,20 @@ formation relation, invalidate every invitation and provisional proposal in
 that shared formation field, and recursively withdraw enacted dependent cuts.
 Arrival and emission transports remain preserved as accountable history, and
 invalidated invitations cannot be reused. Reopening is recorded as structural
-change rather than acceptance, correctness, maturity, or failure. A caller
-still identifies which relation the later material disturbs; that connection
-is not yet formed by an independently inspectable apparatus. The runtime
-still cannot prove that declared
+change rather than acceptance, correctness, maturity, or failure. The
+relation-to-later-material connection must now be formed through separately
+recorded, materially distinct apparatus contributions. Every reopened relation
+requires plural participation, pending contributions remain inspectable, and
+the final reopening call accepts only a mechanical delta identifier. It derives
+the later transports and relations from the recorded field rather than taking
+them from one caller or model emission. The runtime still cannot prove that declared
 apparatus accounts have different hidden authors or detect a possibility that
 was never declared. It does not form a public intervention, persist the new
 grammar, or expose it through an API or browser.
 
-At this boundary, 75 focused situated-formation and authority-invariant tests
-pass. The complete dependency-free suite passes 369 tests. Broad discovery
-executes those 369 tests and
+At this boundary, 81 focused situated-formation and authority-invariant tests
+pass. The complete dependency-free suite passes 375 tests. Broad discovery
+executes those 375 tests and
 reports seven unavailable modules because FastAPI and HTTPX are absent in this
 environment. Python compilation and diff checks pass. These results establish
 only the bounded behaviors exercised; they do not certify posthuman validity.
@@ -123,6 +127,7 @@ See [`CANONICAL_REDESIGN.md`](CANONICAL_REDESIGN.md),
 [`EXECUTABLE_PROPOSAL_PARTICIPATION_SLICE.md`](EXECUTABLE_PROPOSAL_PARTICIPATION_SLICE.md),
 [`COUNTER_GROUNDED_FORMATION_TRANSFORMATION_SLICE.md`](COUNTER_GROUNDED_FORMATION_TRANSFORMATION_SLICE.md),
 [`FORMATION_REOPENING_INVALIDATION_SLICE.md`](FORMATION_REOPENING_INVALIDATION_SLICE.md),
+[`PLURAL_RELATION_MATERIAL_ACTIVATION_SLICE.md`](PLURAL_RELATION_MATERIAL_ACTIVATION_SLICE.md),
 and
 [`BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md`](BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md).
 
