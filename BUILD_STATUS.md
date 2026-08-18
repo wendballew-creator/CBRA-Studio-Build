@@ -2,9 +2,8 @@
 
 Status date: 2026-08-18
 
-Status boundary: executable, counter-grounded relation-to-material activation
-for formation reopening after the shared recursive-reconfiguration checkpoint
-at `b0a5974`.
+Status boundary: Milestone 2 situated formation complete after the shared
+recursive-reconfiguration checkpoint at `b0a5974`.
 
 ## Current conclusion
 
@@ -115,9 +114,19 @@ apparatus accounts have different hidden authors or detect a possibility that
 was never declared. It does not form a public intervention, persist the new
 grammar, or expose it through an API or browser.
 
-At this boundary, 86 focused situated-formation and authority-invariant tests
-pass. The complete dependency-free suite passes 380 tests. Broad discovery
-executes those 380 tests and
+Milestone 2 now closes the situated-formation boundary. Text, document,
+tool-result, and material-state arrivals can participate together as exact
+evidence in plural counter-grounded cut formation. After plural reopening,
+apparatus descriptions can be separately revised against invalidated
+invitations; the revised descriptions must encounter the old relation basis
+and later material, materially change, and cover the complete invalidated
+invitation field before a successor assembly can form. The final successor
+operation accepts no caller-supplied revision field. No additional record
+schema was added for this closure.
+
+At this boundary, 91 focused situated-formation and authority-invariant tests
+pass. The complete dependency-free suite passes 385 tests. Broad discovery
+executes those 385 tests and
 reports seven unavailable modules because FastAPI and HTTPX are absent in this
 environment. Python compilation and diff checks pass. These results establish
 only the bounded behaviors exercised; they do not certify posthuman validity.
@@ -136,6 +145,7 @@ See [`CANONICAL_REDESIGN.md`](CANONICAL_REDESIGN.md),
 [`FORMATION_REOPENING_INVALIDATION_SLICE.md`](FORMATION_REOPENING_INVALIDATION_SLICE.md),
 [`PLURAL_RELATION_MATERIAL_ACTIVATION_SLICE.md`](PLURAL_RELATION_MATERIAL_ACTIVATION_SLICE.md),
 [`EXECUTABLE_RELATION_MATERIAL_ACTIVATION_SLICE.md`](EXECUTABLE_RELATION_MATERIAL_ACTIVATION_SLICE.md),
+[`MILESTONE_2_FORMATION_COMPLETE.md`](MILESTONE_2_FORMATION_COMPLETE.md),
 and
 [`BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md`](BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md).
 

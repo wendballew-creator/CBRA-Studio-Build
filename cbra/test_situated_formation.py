@@ -487,6 +487,59 @@ class FixtureFormationTransformer:
         )
 
 
+class MixedArrivalFormationTransformer:
+    def __init__(self, cut_id, position_count):
+        self.cut_id = cut_id
+        self.position_count = position_count
+
+    def transform(self, request):
+        positions = tuple(
+            CutPosition(f"position-{index}", f"arrival-formed position {index}")
+            for index in range(1, self.position_count + 1)
+        )
+        relations = ()
+        if len(positions) > 1:
+            relations = (
+                Relation(
+                    "changes-with",
+                    LocalPositionRef(self.cut_id, positions[0].key),
+                    LocalPositionRef(self.cut_id, positions[1].key),
+                ),
+            )
+        noticing_id = "noticing-" + self.cut_id
+        return ProposedFormationMaterial(
+            cut=CutEnactment(
+                cut_id=self.cut_id,
+                transport_basis=tuple(sorted({
+                    item.trace_id for item in request.arrival_evidence
+                })),
+                dependency_ids=(),
+                lineage_ids=(),
+                positions=positions,
+                relations=relations,
+                revision_conditions=("later mixed arrival reopens this cut",),
+                exclusions=("mixed arrival relations not formed here",),
+            ),
+            noticings=(ProposedNoticingMaterial(
+                noticing_id=noticing_id,
+                evidence=tuple(
+                    EvidenceSpan(item.trace_id, item.start, item.end)
+                    for item in request.arrival_evidence
+                ),
+                became_perceptible="mixed arrivals participate in one local formation",
+                unavailable_or_excluded=("unrecorded material conditions",),
+                revision_conditions=("another arrival changes this noticing",),
+            ),),
+            position_groundings=tuple(
+                PositionGrounding(position.key, (noticing_id,))
+                for position in positions
+            ),
+            generative_differences=(
+                f"forms {self.position_count} locally related positions",
+            ),
+        )
+
+
 class FixtureFormationCounterParticipant:
     def __init__(self, checking_participation):
         self.checking_participation = checking_participation
@@ -1790,6 +1843,211 @@ class DependencyActivatedOriginationTests(unittest.TestCase):
             ("delta_id",),
             tuple(inspect.signature(
                 ExecutableReopeningActivationAssembly.enact
+            ).parameters)[1:],
+        )
+
+    def test_text_document_tool_and_material_arrivals_form_counter_grounded_cuts(self):
+        substrate = ReconfigurationSubstrate()
+        arrivals = (
+            ("arrival-text", "text/plain", b"a direct textual request"),
+            ("arrival-document", "application/pdf", b"document-extracted material"),
+            ("arrival-tool", "tool-result", b"tool returned a bounded observation"),
+            ("arrival-material", "material-state", b"the doorway is now locked"),
+        )
+        for trace_id, channel, payload in arrivals:
+            substrate.record_transport(TransportTrace(
+                trace_id, channel, sha256(payload).hexdigest(), payload, "now"
+            ))
+        evidence = tuple(
+            EvidenceSpan(trace_id, 0, len(payload))
+            for trace_id, _, payload in arrivals
+        )
+        trace_ids = tuple(sorted(trace_id for trace_id, _, _ in arrivals))
+        relation = UnresolvedArrivalRelation(
+            "mixed-arrival-relation",
+            evidence,
+            "the arrivals do not predeclare one semantic event",
+            ("bodily and historical relations unavailable to transport",),
+            ("another arrival changes the local relation",),
+        )
+        invitations = tuple(
+            ProposalParticipationInvitation(
+                f"mixed-invitation-{index}",
+                ("mixed-arrival-relation",),
+                ApparatusParticipation(
+                    f"mixed-origin-{index}",
+                    f"materially distinct mixed-arrival condition {index}",
+                    trace_ids,
+                    (f"mixed-arrival difference {index}",),
+                    (f"mixed-arrival exclusion {index}",),
+                    (f"mixed-arrival revision {index}",),
+                ),
+                f"mixed-arrival possibility {index}",
+                (f"mixed invitation limit {index}",),
+                (f"mixed invitation deactivation {index}",),
+            )
+            for index in (1, 2)
+        )
+        assembly = DependencyActivatedOriginationAssembly(
+            substrate,
+            field_id="mixed-arrival-field",
+            unresolved_relations=(relation,),
+            invitations=invitations,
+            unavailable_or_ungenerated=("other mixed-arrival formations",),
+            revision_conditions=("new mixed material reopens formation",),
+        )
+        for index, invitation in enumerate(invitations, start=1):
+            emission_id = f"mixed-emission-{index}"
+            assembly.invoke(
+                invitation_id=invitation.invitation_id,
+                participant=FixtureProposalParticipant(
+                    f"opaque mixed proposal {index}".encode(),
+                    f"mixed-provider-{index}",
+                    f"mixed-model-{index}",
+                ),
+                trace_id=emission_id,
+                observed_at="now",
+            )
+            transformer = ApparatusParticipation(
+                f"mixed-transform-{index}",
+                f"mixed transformation condition {index}",
+                tuple(sorted(set(trace_ids).union({emission_id}))),
+                (f"mixed transformation difference {index}",),
+                (f"mixed transformation exclusion {index}",),
+                (f"mixed transformation revision {index}",),
+            )
+            checker = ApparatusParticipation(
+                f"mixed-check-{index}",
+                f"mixed structural probe condition {index}",
+                trace_ids,
+                (f"counter-cut difference {index}",),
+                (f"counter-cut exclusion {index}",),
+                (f"counter-cut revision {index}",),
+            )
+            contribution = assembly.transform_and_record(
+                invitation_id=invitation.invitation_id,
+                emission_trace_id=emission_id,
+                transformer=MixedArrivalFormationTransformer(
+                    f"mixed-cut-{index}", index
+                ),
+                transformation_participation=transformer,
+                counter_participant=FixtureFormationCounterParticipant(checker),
+                proposal_id=f"mixed-cut-{index}",
+                contribution_id=f"mixed-contribution-{index}",
+            )
+            self.assertTrue(any(
+                position.key.startswith("counter-")
+                for position in contribution.proposal.formation.cut.positions
+            ))
+        delta = assembly.enact(delta_id="mixed-arrival-formation")
+        self.assertEqual(("mixed-cut-1", "mixed-cut-2"), delta.activated_cut_ids)
+        self.assertEqual(set(trace_ids), set(delta.triggering_trace_ids))
+
+    def test_reopening_revises_apparatus_descriptions_inside_relation_basis(self):
+        substrate, assembly, _, invitations = activated_origination_fixture()
+        self.record_later_material(substrate)
+        executable_reopening_activation(substrate, assembly).enact(
+            delta_id="apparatus-reopening-delta"
+        )
+        revisions = {}
+        for index, invitation in enumerate(invitations, start=1):
+            revisions[invitation.invitation_id] = ProposalParticipationInvitation(
+                f"revised-invitation-{index}",
+                invitation.unresolved_relation_ids,
+                ApparatusParticipation(
+                    f"revised-apparatus-{index}",
+                    invitation.participation.condition + " changed by later material",
+                    ("arrival-1", "later-material"),
+                    invitation.participation.makes_perceptible
+                    + ("the apparatus description is locally revisable",),
+                    invitation.participation.obscures_or_excludes,
+                    invitation.participation.revision_conditions,
+                ),
+                invitation.difference_opened,
+                invitation.limits,
+                invitation.deactivation_conditions,
+            )
+            assembly.record_apparatus_revision(
+                reopening_id="executable-reopening-1",
+                invalidated_invitation_id=invitation.invitation_id,
+                revised_invitation=revisions[invitation.invitation_id],
+            )
+        revised = assembly.reconfigure_after_reopening(
+            reopening_id="executable-reopening-1",
+            new_field_id="revised-apparatus-field",
+        )
+        participant = FixtureProposalParticipant(
+            b"proposal after apparatus revision", "provider-revised", "model-revised"
+        )
+        revised.invoke(
+            invitation_id="revised-invitation-1",
+            participant=participant,
+            trace_id="revised-emission-1",
+            observed_at="later",
+        )
+        self.assertEqual(
+            {"arrival-1", "later-material"},
+            {item.trace_id for item in participant.requests[0].evidence},
+        )
+
+    def test_reopening_rejects_cosmetic_apparatus_rebinding(self):
+        substrate, assembly, _, invitations = activated_origination_fixture()
+        self.record_later_material(substrate)
+        executable_reopening_activation(substrate, assembly).enact(
+            delta_id="apparatus-reopening-delta"
+        )
+        cosmetic = {
+            invitation.invitation_id: replace(
+                invitation,
+                invitation_id="cosmetic-" + invitation.invitation_id,
+                participation=replace(
+                    invitation.participation,
+                    participation_id="cosmetic-" + invitation.participation.participation_id,
+                    trace_ids=("arrival-1", "later-material"),
+                ),
+            )
+            for invitation in invitations
+        }
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.record_apparatus_revision(
+                reopening_id="executable-reopening-1",
+                invalidated_invitation_id="invitation-1",
+                revised_invitation=cosmetic["invitation-1"],
+            )
+
+    def test_incomplete_apparatus_revisions_cannot_reform_field(self):
+        substrate, assembly, _, invitations = activated_origination_fixture()
+        self.record_later_material(substrate)
+        executable_reopening_activation(substrate, assembly).enact(
+            delta_id="apparatus-reopening-delta"
+        )
+        invitation = invitations[0]
+        revised = replace(
+            invitation,
+            invitation_id="partial-revised-invitation",
+            participation=replace(
+                invitation.participation,
+                participation_id="partial-revised-apparatus",
+                condition="partial apparatus changed through later material",
+                trace_ids=("arrival-1", "later-material"),
+            ),
+        )
+        assembly.record_apparatus_revision(
+            reopening_id="executable-reopening-1",
+            invalidated_invitation_id=invitation.invitation_id,
+            revised_invitation=revised,
+        )
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.reconfigure_after_reopening(
+                reopening_id="executable-reopening-1",
+                new_field_id="partial-revised-field",
+            )
+
+    def test_final_apparatus_reconfiguration_accepts_no_revision_field(self):
+        self.assertEqual(
+            ("reopening_id", "new_field_id"),
+            tuple(inspect.signature(
+                DependencyActivatedOriginationAssembly.reconfigure_after_reopening
             ).parameters)[1:],
         )
 

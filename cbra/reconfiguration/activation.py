@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import sha256
 from typing import Any, Mapping, Protocol, Sequence, Tuple
 
@@ -632,6 +632,8 @@ class DependencyActivatedOriginationAssembly:
         self._invalidated_invitation_ids = set()
         self._reopened_relation_ids = set()
         self._reopening_traces = []
+        self._reopening_activation_contributions = {}
+        self._apparatus_revisions = {}
         self._validate_activation()
 
     @property
@@ -1136,6 +1138,9 @@ class DependencyActivatedOriginationAssembly:
         for invitation_id in invalidated_invitation_ids:
             self._invitation_emissions[invitation_id].clear()
         self._reopening_traces.append(trace)
+        self._reopening_activation_contributions[reopening_id] = tuple(
+            contributions
+        )
         return trace
 
     def enact(self, *, delta_id: str):
@@ -1174,6 +1179,122 @@ class DependencyActivatedOriginationAssembly:
         for contribution in self._answers.values():
             assembly.record(contribution)
         return assembly.enact(delta_id=delta_id)
+
+    def record_apparatus_revision(
+        self,
+        *,
+        reopening_id: str,
+        invalidated_invitation_id: str,
+        revised_invitation: ProposalParticipationInvitation,
+    ) -> None:
+        trace = next(
+            (
+                item
+                for item in self._reopening_traces
+                if item.reopening_id == reopening_id
+            ),
+            None,
+        )
+        if trace is None:
+            raise InvalidReconfiguration(
+                "apparatus revision requires a recorded reopening"
+            )
+        old = self._invitations.get(invalidated_invitation_id)
+        if old is None:
+            raise InvalidReconfiguration(
+                "apparatus revision must address an invalidated invitation"
+            )
+        revisions = self._apparatus_revisions.get(reopening_id, {})
+        if invalidated_invitation_id in revisions:
+            raise InvalidReconfiguration(
+                "an invalidated invitation cannot receive multiple apparatus revisions"
+            )
+        revised_relations = self._relations_after_reopening(reopening_id)
+        if (
+            revised_invitation.invitation_id in self._invitations
+            or revised_invitation.unresolved_relation_ids
+            != old.unresolved_relation_ids
+        ):
+            raise InvalidReconfiguration(
+                "revised invitation must be new and preserve its local relation address"
+            )
+        expected_basis = {
+            span.trace_id
+            for relation_id in revised_invitation.unresolved_relation_ids
+            for span in revised_relations[relation_id].evidence
+        }
+        if set(revised_invitation.participation.trace_ids) != expected_basis:
+            raise InvalidReconfiguration(
+                "revised apparatus must encounter relation and reopening material"
+            )
+        old_description = (
+            old.participation.condition,
+            old.participation.makes_perceptible,
+            old.participation.obscures_or_excludes,
+            old.participation.revision_conditions,
+        )
+        revised_description = (
+            revised_invitation.participation.condition,
+            revised_invitation.participation.makes_perceptible,
+            revised_invitation.participation.obscures_or_excludes,
+            revised_invitation.participation.revision_conditions,
+        )
+        if revised_description == old_description:
+            raise InvalidReconfiguration(
+                "apparatus revision must change its relational description"
+            )
+        updated = dict(revisions)
+        updated[invalidated_invitation_id] = revised_invitation
+        self._apparatus_revisions[reopening_id] = updated
+
+    def reconfigure_after_reopening(
+        self,
+        *,
+        reopening_id: str,
+        new_field_id: str,
+    ) -> DependencyActivatedOriginationAssembly:
+        if not new_field_id or new_field_id == self._field_id:
+            raise InvalidReconfiguration(
+                "apparatus reconfiguration requires a new field"
+            )
+        invitation_revisions = self._apparatus_revisions.get(reopening_id, {})
+        if set(invitation_revisions) != set(self._invitations):
+            raise InvalidReconfiguration(
+                "every invalidated invitation requires one recorded apparatus revision"
+            )
+        revised_relations = self._relations_after_reopening(reopening_id)
+
+        return DependencyActivatedOriginationAssembly(
+            self._substrate,
+            field_id=new_field_id,
+            unresolved_relations=tuple(revised_relations.values()),
+            invitations=tuple(invitation_revisions.values()),
+            unavailable_or_ungenerated=self._unavailable_or_ungenerated,
+            revision_conditions=tuple(dict.fromkeys(
+                self._revision_conditions
+                + ("apparatus field reopened by " + reopening_id,)
+            )),
+        )
+
+    def _relations_after_reopening(self, reopening_id: str):
+        contributions = self._reopening_activation_contributions.get(reopening_id)
+        if contributions is None:
+            raise InvalidReconfiguration(
+                "apparatus revision requires a recorded reopening activation"
+            )
+        revised_relations = {}
+        for relation_id, relation in self._relations.items():
+            additions = tuple(
+                span
+                for contribution in contributions
+                if relation_id in contribution.unresolved_relation_ids
+                for span in contribution.triggering_evidence
+            )
+            revised_relations[relation_id] = replace(
+                relation,
+                evidence=tuple(dict.fromkeys(relation.evidence + additions)),
+            )
+        return revised_relations
 
     def _validate_activation(self) -> None:
         if not self._field_id or not self._relations:
