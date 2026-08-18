@@ -48,7 +48,20 @@ class OriginationActivationTrace:
     invitation_ids: Tuple[str, ...]
     answered_invitation_ids: Tuple[str, ...]
     unanswered_invitation_ids: Tuple[str, ...]
+    invalidated_invitation_ids: Tuple[str, ...]
+    reopened_relation_ids: Tuple[str, ...]
     revision_conditions: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FormationReopeningTrace:
+    reopening_id: str
+    triggering_trace_ids: Tuple[str, ...]
+    reopened_relation_ids: Tuple[str, ...]
+    invalidated_invitation_ids: Tuple[str, ...]
+    invalidated_proposal_ids: Tuple[str, ...]
+    invalidated_cut_ids: Tuple[str, ...]
+    substrate_delta_id: str | None
 
 
 @dataclass(frozen=True)
@@ -170,22 +183,36 @@ class DependencyActivatedOriginationAssembly:
         self._invitation_emissions = {
             invitation_id: set() for invitation_id in self._invitations
         }
+        self._invalidated_invitation_ids = set()
+        self._reopened_relation_ids = set()
+        self._reopening_traces = []
         self._validate_activation()
 
     @property
     def activation_trace(self) -> OriginationActivationTrace:
         invitation_ids = set(self._invitations)
         answered_ids = set(self._answers)
+        active_invitation_ids = invitation_ids.difference(
+            self._invalidated_invitation_ids
+        )
         return OriginationActivationTrace(
             field_id=self._field_id,
             unresolved_relation_ids=tuple(sorted(self._relations)),
             invitation_ids=tuple(sorted(invitation_ids)),
             answered_invitation_ids=tuple(sorted(answered_ids)),
             unanswered_invitation_ids=tuple(
-                sorted(invitation_ids.difference(answered_ids))
+                sorted(active_invitation_ids.difference(answered_ids))
             ),
+            invalidated_invitation_ids=tuple(
+                sorted(self._invalidated_invitation_ids)
+            ),
+            reopened_relation_ids=tuple(sorted(self._reopened_relation_ids)),
             revision_conditions=self._revision_conditions,
         )
+
+    @property
+    def reopening_traces(self) -> Tuple[FormationReopeningTrace, ...]:
+        return tuple(self._reopening_traces)
 
     def record(
         self,
@@ -198,6 +225,7 @@ class DependencyActivatedOriginationAssembly:
             raise InvalidReconfiguration(
                 "proposal contribution must answer an active invitation"
             )
+        self._require_active_invitation(invitation_id)
         if invitation_id in self._answers:
             raise InvalidReconfiguration(
                 "an invitation cannot be rebound to another proposal contribution"
@@ -269,6 +297,7 @@ class DependencyActivatedOriginationAssembly:
             raise InvalidReconfiguration(
                 "invitation emission trace id must be new and nonempty"
             )
+        self._require_active_invitation(invitation_id)
         request = self._participation_request(invitation_id)
         emission = participant.emit(request)
         if (
@@ -343,6 +372,7 @@ class DependencyActivatedOriginationAssembly:
             raise InvalidReconfiguration(
                 "formation transformation requires an active invitation"
             )
+        self._require_active_invitation(invitation_id)
         if emission_trace_id not in self._invitation_emissions[invitation_id]:
             raise InvalidReconfiguration(
                 "formation transformation requires emission from its invitation"
@@ -473,6 +503,96 @@ class DependencyActivatedOriginationAssembly:
         )
         self.record(invitation_id=invitation_id, contribution=contribution)
         return contribution
+
+    def reopen(
+        self,
+        *,
+        reopening_id: str,
+        triggering_trace_ids: Sequence[str],
+        unresolved_relation_ids: Sequence[str],
+        delta_id: str,
+    ) -> FormationReopeningTrace:
+        if (
+            not reopening_id
+            or any(trace.reopening_id == reopening_id for trace in self._reopening_traces)
+        ):
+            raise InvalidReconfiguration(
+                "formation reopening id must be new and nonempty"
+            )
+        if not delta_id:
+            raise InvalidReconfiguration(
+                "formation reopening delta id must be nonempty"
+            )
+        if not triggering_trace_ids:
+            raise InvalidReconfiguration(
+                "formation reopening requires later material evidence"
+            )
+        SituatedFormationBoundary._require_unique_refs(
+            triggering_trace_ids, "formation reopening trigger"
+        )
+        unknown_traces = set(triggering_trace_ids).difference(
+            self._substrate.state.transports
+        )
+        if unknown_traces:
+            raise InvalidReconfiguration(
+                "formation reopening references unknown transport"
+            )
+        if set(triggering_trace_ids).intersection(self._shared_arrival_basis()):
+            raise InvalidReconfiguration(
+                "original arrival evidence cannot masquerade as later disturbance"
+            )
+        if not unresolved_relation_ids:
+            raise InvalidReconfiguration(
+                "formation reopening must identify a disturbed unresolved relation"
+            )
+        SituatedFormationBoundary._require_unique_refs(
+            unresolved_relation_ids, "reopened unresolved relation"
+        )
+        unknown_relations = set(unresolved_relation_ids).difference(self._relations)
+        if unknown_relations:
+            raise InvalidReconfiguration(
+                "formation reopening references unknown unresolved relation"
+            )
+        if set(unresolved_relation_ids).intersection(self._reopened_relation_ids):
+            raise InvalidReconfiguration(
+                "an unresolved relation cannot be reopened twice in one assembly"
+            )
+
+        invalidated_invitation_ids = tuple(sorted(self._invitations))
+        invalidated_proposal_ids = tuple(
+            sorted(answer.proposal.proposal_id for answer in self._answers.values())
+        )
+        active_cut_ids = set(self._substrate.state.active_cut_ids)
+        active_roots = tuple(
+            sorted(set(invalidated_proposal_ids).intersection(active_cut_ids))
+        )
+        delta = None
+        if active_roots:
+            delta = self._substrate.disturb(
+                delta_id=delta_id,
+                triggering_trace_ids=tuple(triggering_trace_ids),
+                invalidated_root_ids=active_roots,
+                replacements=(),
+            )
+
+        trace = FormationReopeningTrace(
+            reopening_id=reopening_id,
+            triggering_trace_ids=tuple(sorted(triggering_trace_ids)),
+            reopened_relation_ids=tuple(sorted(unresolved_relation_ids)),
+            invalidated_invitation_ids=invalidated_invitation_ids,
+            invalidated_proposal_ids=invalidated_proposal_ids,
+            invalidated_cut_ids=(
+                delta.invalidated_cut_ids if delta is not None else ()
+            ),
+            substrate_delta_id=(delta.delta_id if delta is not None else None),
+        )
+        self._reopened_relation_ids.update(unresolved_relation_ids)
+        self._invalidated_invitation_ids.update(invalidated_invitation_ids)
+        self._answers.clear()
+        for invitation_id in invalidated_invitation_ids:
+            self._invitation_emissions[invitation_id].clear()
+        self._reopening_traces.append(trace)
+        return trace
 
     def enact(self, *, delta_id: str):
         if len(self._answers) < 2:
@@ -775,6 +895,7 @@ class DependencyActivatedOriginationAssembly:
             raise InvalidReconfiguration(
                 "proposal participation requires an active invitation"
             )
+        self._require_active_invitation(invitation_id)
         evidence = tuple(
             InvitationEvidence(
                 trace_id=span.trace_id,
@@ -809,3 +930,9 @@ class DependencyActivatedOriginationAssembly:
             "unresolved relation: " + relation.relation_id
             for relation in self._relations.values()
         )
+
+    def _require_active_invitation(self, invitation_id: str) -> None:
+        if invitation_id in self._invalidated_invitation_ids:
+            raise InvalidReconfiguration(
+                "later material has invalidated this participation invitation"
+            )

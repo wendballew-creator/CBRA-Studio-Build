@@ -21,6 +21,7 @@ from cbra.reconfiguration.formation import (
 from cbra.reconfiguration.activation import (
     DependencyActivatedOriginationAssembly,
     FormationChallengeMaterial,
+    FormationReopeningTrace,
     FormationTransformationRequest,
     InvitationEvidence,
     OriginationActivationTrace,
@@ -490,6 +491,26 @@ def transformation_participation(contribution, emission_trace_id):
         ("semantic relations not expressible through this transformation",),
         ("counter-participation or later material reopens the transformation",),
     )
+
+
+def transform_activated_contributions(assembly, contributions):
+    transformed = []
+    for index, contribution in enumerate(contributions, start=1):
+        emission_trace_id = f"activated-emission-{index}"
+        transformed.append(assembly.transform_and_record(
+            invitation_id=f"invitation-{index}",
+            emission_trace_id=emission_trace_id,
+            transformer=FixtureFormationTransformer(contribution),
+            transformation_participation=transformation_participation(
+                contribution, emission_trace_id
+            ),
+            counter_participant=FixtureFormationCounterParticipant(
+                contribution.proposal.formation.apparatus_participations[1]
+            ),
+            proposal_id=f"cut-{index}",
+            contribution_id=f"transformed-contribution-{index}",
+        ))
+    return tuple(transformed)
 
 
 class SituatedFormationTests(unittest.TestCase):
@@ -1045,6 +1066,16 @@ class RecordedPluralOriginationTests(unittest.TestCase):
 
 
 class DependencyActivatedOriginationTests(unittest.TestCase):
+    @staticmethod
+    def record_later_material(substrate, trace_id="later-material"):
+        substrate.record_transport(TransportTrace(
+            trace_id,
+            "text",
+            "later-digest-" + trace_id,
+            b"later material changes the available relation",
+            "later",
+        ))
+
     def test_activation_trace_exposes_participation_without_evaluation(self):
         _, assembly, contributions, _ = activated_origination_fixture(
             include_unanswered=True
@@ -1472,6 +1503,139 @@ class DependencyActivatedOriginationTests(unittest.TestCase):
             )
         self.assertEqual((), assembly.activation_trace.answered_invitation_ids)
         self.assertEqual((), substrate.state.active_cut_ids)
+
+    def test_later_material_reopens_enacted_formation(self):
+        substrate, assembly, contributions, _ = activated_origination_fixture()
+        transform_activated_contributions(assembly, contributions)
+        assembly.enact(delta_id="transformed-plurality-1")
+        self.record_later_material(substrate)
+        trace = assembly.reopen(
+            reopening_id="reopening-1",
+            triggering_trace_ids=("later-material",),
+            unresolved_relation_ids=("relation-1",),
+            delta_id="formation-reopening-1",
+        )
+        self.assertIsInstance(trace, FormationReopeningTrace)
+        self.assertEqual(("cut-1", "cut-2"), trace.invalidated_cut_ids)
+        self.assertEqual((), substrate.state.active_cut_ids)
+        self.assertEqual(
+            ("invitation-1", "invitation-2"),
+            assembly.activation_trace.invalidated_invitation_ids,
+        )
+
+    def test_reopening_recursively_invalidates_dependent_cut(self):
+        substrate, assembly, contributions, _ = activated_origination_fixture()
+        transform_activated_contributions(assembly, contributions)
+        assembly.enact(delta_id="transformed-plurality-1")
+        substrate.enact_cut(
+            CutEnactment(
+                cut_id="dependent-cut",
+                transport_basis=("arrival-1",),
+                dependency_ids=("cut-1",),
+                lineage_ids=(),
+                positions=(CutPosition("dependent", "dependent local position"),),
+                revision_conditions=("dependency disturbance reopens this cut",),
+                exclusions=("relations outside this dependent cut",),
+            ),
+            delta_id="dependent-enactment",
+        )
+        self.record_later_material(substrate)
+        trace = assembly.reopen(
+            reopening_id="reopening-1",
+            triggering_trace_ids=("later-material",),
+            unresolved_relation_ids=("relation-1",),
+            delta_id="formation-reopening-1",
+        )
+        self.assertEqual(
+            {"cut-1", "cut-2", "dependent-cut"},
+            set(trace.invalidated_cut_ids),
+        )
+        self.assertEqual((), substrate.state.active_cut_ids)
+
+    def test_reopening_withdraws_provisional_answers_before_enactment(self):
+        substrate, assembly, contributions, _ = activated_origination_fixture()
+        transform_activated_contributions(assembly, contributions)
+        self.record_later_material(substrate)
+        trace = assembly.reopen(
+            reopening_id="reopening-1",
+            triggering_trace_ids=("later-material",),
+            unresolved_relation_ids=("relation-1",),
+            delta_id="formation-reopening-1",
+        )
+        self.assertEqual(("cut-1", "cut-2"), trace.invalidated_proposal_ids)
+        self.assertEqual((), trace.invalidated_cut_ids)
+        self.assertIsNone(trace.substrate_delta_id)
+        self.assertEqual((), assembly.activation_trace.answered_invitation_ids)
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.enact(delta_id="transformed-plurality-1")
+
+    def test_reopening_preserves_arrival_and_emission_transport_history(self):
+        substrate, assembly, contributions, _ = activated_origination_fixture()
+        transform_activated_contributions(assembly, contributions)
+        preserved_ids = set(substrate.state.transports)
+        self.record_later_material(substrate)
+        assembly.reopen(
+            reopening_id="reopening-1",
+            triggering_trace_ids=("later-material",),
+            unresolved_relation_ids=("relation-1",),
+            delta_id="formation-reopening-1",
+        )
+        self.assertTrue(preserved_ids.issubset(substrate.state.transports))
+
+    def test_invalidated_invitation_cannot_emit_or_transform_again(self):
+        substrate, assembly, contributions, _ = activated_origination_fixture()
+        self.record_later_material(substrate)
+        assembly.reopen(
+            reopening_id="reopening-1",
+            triggering_trace_ids=("later-material",),
+            unresolved_relation_ids=("relation-1",),
+            delta_id="formation-reopening-1",
+        )
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.invoke(
+                invitation_id="invitation-1",
+                participant=FixtureProposalParticipant(
+                    b"stale emission", "provider-c", "model-c"
+                ),
+                trace_id="stale-emission",
+                observed_at="later",
+            )
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.transform_and_record(
+                invitation_id="invitation-1",
+                emission_trace_id="activated-emission-1",
+                transformer=FixtureFormationTransformer(contributions[0]),
+                transformation_participation=transformation_participation(
+                    contributions[0], "activated-emission-1"
+                ),
+                counter_participant=FixtureFormationCounterParticipant(
+                    contributions[0].proposal.formation.apparatus_participations[1]
+                ),
+                proposal_id="cut-1",
+                contribution_id="stale-contribution",
+            )
+
+    def test_original_arrival_cannot_masquerade_as_reopening_material(self):
+        substrate, assembly, _, _ = activated_origination_fixture()
+        before = substrate.state
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.reopen(
+                reopening_id="reopening-1",
+                triggering_trace_ids=("arrival-1",),
+                unresolved_relation_ids=("relation-1",),
+                delta_id="formation-reopening-1",
+            )
+        self.assertEqual(before, substrate.state)
+        self.assertEqual((), assembly.reopening_traces)
+
+    def test_reopening_trace_exposes_no_failure_or_maturity_authority(self):
+        forbidden = {
+            "accepted", "confidence", "correct", "failure", "maturity",
+            "preferred", "rank", "score", "selected", "winner",
+        }
+        self.assertTrue(
+            set(FormationReopeningTrace.__dataclass_fields__).isdisjoint(forbidden)
+        )
 
     def test_raw_emission_does_not_answer_invitation_or_enact_cut(self):
         substrate, assembly, _, _ = activated_origination_fixture()
