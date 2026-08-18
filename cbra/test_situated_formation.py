@@ -1,4 +1,5 @@
 from dataclasses import replace
+from hashlib import sha256
 import inspect
 import unittest
 
@@ -19,7 +20,10 @@ from cbra.reconfiguration.formation import (
 )
 from cbra.reconfiguration.activation import (
     DependencyActivatedOriginationAssembly,
+    InvitationEvidence,
     OriginationActivationTrace,
+    ProposalEmissionMaterial,
+    ProposalParticipationRequest,
     ProposalParticipationInvitation,
     UnresolvedArrivalRelation,
 )
@@ -238,7 +242,11 @@ def recorded_origination_fixture():
     return substrate, assembly, contributions
 
 
-def activated_origination_fixture(include_unanswered=False):
+def activated_origination_fixture(
+    include_unanswered=False,
+    reverse_invitations=False,
+    reverse_invocations=False,
+):
     substrate, _, contributions = recorded_origination_fixture()
     relation = UnresolvedArrivalRelation(
         "relation-1",
@@ -279,15 +287,106 @@ def activated_origination_fixture(include_unanswered=False):
             ("no embodied sensor or report participates",),
             ("embodied material enters the configuration",),
         ))
+    invitation_sequence = tuple(invitations)
+    if reverse_invitations:
+        invitation_sequence = tuple(reversed(invitation_sequence))
     assembly = DependencyActivatedOriginationAssembly(
         substrate,
         field_id="activated-field-1",
         unresolved_relations=(relation,),
-        invitations=tuple(invitations),
+        invitations=invitation_sequence,
         unavailable_or_ungenerated=("apparatus relations not participating here",),
         revision_conditions=("new arrival material reopens activation",),
     )
+    invocation_specs = (
+        (
+            "invitation-1",
+            FixtureProposalParticipant(
+                b"one locally addressable position", "provider-a", "model-a"
+            ),
+            "activated-emission-1",
+        ),
+        (
+            "invitation-2",
+            FixtureProposalParticipant(
+                b"a relation between two local positions", "provider-b", "model-b"
+            ),
+            "activated-emission-2",
+        ),
+    )
+    if reverse_invocations:
+        invocation_specs = tuple(reversed(invocation_specs))
+    spans = {}
+    for invitation_id, participant, trace_id in invocation_specs:
+        spans[invitation_id] = assembly.invoke(
+            invitation_id=invitation_id,
+            participant=participant,
+            trace_id=trace_id,
+            observed_at="now",
+        )
+    contributions = (
+        replace(
+            contributions[0],
+            emission_evidence=(spans["invitation-1"],),
+        ),
+        replace(
+            contributions[1],
+            emission_evidence=(spans["invitation-2"],),
+        ),
+    )
     return substrate, assembly, contributions, tuple(invitations)
+
+
+class FixtureProposalParticipant:
+    def __init__(self, payload, provider, model):
+        self.payload = payload
+        self.provider = provider
+        self.model = model
+        self.requests = []
+
+    def emit(self, request):
+        self.requests.append(request)
+        return ProposalEmissionMaterial(
+            channel="model-output",
+            payload=self.payload,
+            provenance={
+                "provider": self.provider,
+                "model": self.model,
+                "effective_configuration": "fixture-configuration",
+                "prompt_dependencies": ("fixture-prompt",),
+                "source_dependencies": tuple(
+                    sorted({item.trace_id for item in request.evidence})
+                ),
+                "known_limits": ("fixture participation",),
+                "human_centered_training_apparatus": True,
+            },
+        )
+
+
+class FailingProposalParticipant:
+    def emit(self, request):
+        raise RuntimeError("participant unavailable")
+
+
+class OpaqueModelParticipant:
+    def emit(self, request):
+        return ProposalEmissionMaterial(
+            channel="model-output",
+            payload=b"opaque model proposal",
+            provenance={
+                "source_dependencies": tuple(
+                    sorted({item.trace_id for item in request.evidence})
+                ),
+            },
+        )
+
+
+class SemanticFormerParticipant:
+    def __init__(self, contribution):
+        self.contribution = contribution
+
+    def emit(self, request):
+        return self.contribution
 
 
 class SituatedFormationTests(unittest.TestCase):
@@ -980,20 +1079,11 @@ class DependencyActivatedOriginationTests(unittest.TestCase):
 
     def test_invitation_and_answer_order_confer_no_activation_authority(self):
         first_substrate, first_assembly, first, _ = activated_origination_fixture()
-        second_substrate, _, second, invitations = activated_origination_fixture()
-        second_assembly = DependencyActivatedOriginationAssembly(
-            second_substrate,
-            field_id="activated-field-1",
-            unresolved_relations=(UnresolvedArrivalRelation(
-                "relation-1",
-                (EvidenceSpan("arrival-1", 0, 27),),
-                "the arrival supports incompatible local formations",
-                ("relations unavailable outside the arrival bytes",),
-                ("later material changes the unresolved difference",),
-            ),),
-            invitations=tuple(reversed(invitations)),
-            unavailable_or_ungenerated=("apparatus relations not participating here",),
-            revision_conditions=("new arrival material reopens activation",),
+        second_substrate, second_assembly, second, _ = (
+            activated_origination_fixture(
+                reverse_invitations=True,
+                reverse_invocations=True,
+            )
         )
         first_assembly.record(invitation_id="invitation-1", contribution=first[0])
         first_assembly.record(invitation_id="invitation-2", contribution=first[1])
@@ -1003,6 +1093,99 @@ class DependencyActivatedOriginationTests(unittest.TestCase):
         second_delta = second_assembly.enact(delta_id="activated-plurality-1")
         self.assertEqual(first_delta, second_delta)
         self.assertEqual(first_substrate.state, second_substrate.state)
+
+    def test_invocation_receives_exact_unresolved_material_and_limits(self):
+        _, assembly, _, _ = activated_origination_fixture()
+        participant = FixtureProposalParticipant(
+            b"another provisional emission", "provider-c", "model-c"
+        )
+        assembly.invoke(
+            invitation_id="invitation-1",
+            participant=participant,
+            trace_id="activated-emission-3",
+            observed_at="later",
+        )
+        request = participant.requests[0]
+        self.assertIsInstance(request, ProposalParticipationRequest)
+        self.assertEqual(b"we need another arrangement", request.evidence[0].payload)
+        self.assertEqual(("relation-1",), request.unresolved_relation_ids)
+        self.assertEqual(("cannot establish a singular intention",), request.limits)
+
+    def test_invocation_records_runtime_bound_transport_provenance(self):
+        substrate, assembly, _, _ = activated_origination_fixture()
+        span = assembly.invoke(
+            invitation_id="invitation-1",
+            participant=FixtureProposalParticipant(
+                b"another provisional emission", "provider-c", "model-c"
+            ),
+            trace_id="activated-emission-3",
+            observed_at="later",
+        )
+        trace = substrate.state.transports[span.trace_id]
+        self.assertEqual("invitation-1", trace.provenance["invitation_id"])
+        self.assertEqual(("relation-1",), trace.provenance["unresolved_relation_ids"])
+        self.assertEqual(("arrival-1",), trace.provenance["arrival_trace_ids"])
+        self.assertEqual(sha256(trace.payload).hexdigest(), trace.digest)
+
+    def test_emission_cannot_cross_to_another_invitation(self):
+        substrate, assembly, contributions, _ = activated_origination_fixture()
+        crossed = replace(
+            contributions[1],
+            emission_evidence=contributions[0].emission_evidence,
+        )
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.record(invitation_id="invitation-2", contribution=crossed)
+        self.assertEqual((), substrate.state.active_cut_ids)
+
+    def test_failed_invocation_records_no_transport_or_answer(self):
+        substrate, assembly, _, _ = activated_origination_fixture()
+        before = substrate.state
+        with self.assertRaises(RuntimeError):
+            assembly.invoke(
+                invitation_id="invitation-1",
+                participant=FailingProposalParticipant(),
+                trace_id="failed-emission",
+                observed_at="later",
+            )
+        self.assertEqual(before, substrate.state)
+        self.assertEqual((), assembly.activation_trace.answered_invitation_ids)
+
+    def test_opaque_model_invocation_records_no_transport(self):
+        substrate, assembly, _, _ = activated_origination_fixture()
+        before = substrate.state
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.invoke(
+                invitation_id="invitation-1",
+                participant=OpaqueModelParticipant(),
+                trace_id="opaque-invocation",
+                observed_at="later",
+            )
+        self.assertEqual(before, substrate.state)
+
+    def test_participant_cannot_return_formed_semantic_contribution(self):
+        substrate, assembly, contributions, _ = activated_origination_fixture()
+        before = substrate.state
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.invoke(
+                invitation_id="invitation-1",
+                participant=SemanticFormerParticipant(contributions[0]),
+                trace_id="semantic-former-output",
+                observed_at="later",
+            )
+        self.assertEqual(before, substrate.state)
+
+    def test_raw_emission_does_not_answer_invitation_or_enact_cut(self):
+        substrate, assembly, _, _ = activated_origination_fixture()
+        assembly.invoke(
+            invitation_id="invitation-1",
+            participant=FixtureProposalParticipant(
+                b"unformed proposal material", "provider-c", "model-c"
+            ),
+            trace_id="activated-emission-3",
+            observed_at="later",
+        )
+        self.assertEqual((), assembly.activation_trace.answered_invitation_ids)
+        self.assertEqual((), substrate.state.active_cut_ids)
 
 
 if __name__ == "__main__":

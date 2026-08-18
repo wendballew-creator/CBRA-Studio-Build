@@ -34,7 +34,11 @@ from .formation import (
 )
 from .activation import (
     DependencyActivatedOriginationAssembly,
+    InvitationEvidence,
     OriginationActivationTrace,
+    ProposalEmissionMaterial,
+    ProposalGeneratingParticipant,
+    ProposalParticipationRequest,
     ProposalParticipationInvitation,
     UnresolvedArrivalRelation,
 )
@@ -129,7 +133,11 @@ __all__ = [
     "SituatedFormationBoundary",
     "SituatedNoticing",
     "DependencyActivatedOriginationAssembly",
+    "InvitationEvidence",
     "OriginationActivationTrace",
+    "ProposalEmissionMaterial",
+    "ProposalGeneratingParticipant",
+    "ProposalParticipationRequest",
     "ProposalParticipationInvitation",
     "UnresolvedArrivalRelation",
     "CompetingAlternatives",

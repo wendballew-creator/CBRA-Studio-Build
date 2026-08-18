@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence, Tuple
+from hashlib import sha256
+from typing import Any, Mapping, Protocol, Sequence, Tuple
 
 from .formation import (
     ApparatusParticipation,
@@ -14,6 +15,7 @@ from .formation import (
     SituatedFormationBoundary,
 )
 from .substrate import InvalidReconfiguration, ReconfigurationSubstrate
+from .models import TransportTrace
 
 
 @dataclass(frozen=True)
@@ -45,6 +47,38 @@ class OriginationActivationTrace:
     revision_conditions: Tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class InvitationEvidence:
+    trace_id: str
+    start: int
+    end: int
+    payload: bytes
+
+
+@dataclass(frozen=True)
+class ProposalParticipationRequest:
+    invitation_id: str
+    unresolved_relation_ids: Tuple[str, ...]
+    evidence: Tuple[InvitationEvidence, ...]
+    participation: ApparatusParticipation
+    difference_opened: str
+    limits: Tuple[str, ...]
+    deactivation_conditions: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ProposalEmissionMaterial:
+    channel: str
+    payload: bytes
+    provenance: Mapping[str, Any]
+
+
+class ProposalGeneratingParticipant(Protocol):
+    def emit(
+        self, request: ProposalParticipationRequest
+    ) -> ProposalEmissionMaterial: ...
+
+
 class DependencyActivatedOriginationAssembly:
     """Retain emissions answering plural invitations from unresolved relations."""
 
@@ -73,6 +107,9 @@ class DependencyActivatedOriginationAssembly:
         self._unavailable_or_ungenerated = tuple(unavailable_or_ungenerated)
         self._revision_conditions = tuple(revision_conditions)
         self._answers = {}
+        self._invitation_emissions = {
+            invitation_id: set() for invitation_id in self._invitations
+        }
         self._validate_activation()
 
     @property
@@ -121,6 +158,18 @@ class DependencyActivatedOriginationAssembly:
             raise InvalidReconfiguration(
                 "proposal contribution must use the invited apparatus participation"
             )
+        emission_trace_ids = {
+            span.trace_id for span in contribution.emission_evidence
+        }
+        if (
+            not emission_trace_ids
+            or emission_trace_ids.difference(
+                self._invitation_emissions[invitation_id]
+            )
+        ):
+            raise InvalidReconfiguration(
+                "proposal contribution must use emissions produced for its invitation"
+            )
         shared_basis = self._shared_arrival_basis()
         if set(contribution.proposal.formation.cut.transport_basis) != shared_basis:
             raise InvalidReconfiguration(
@@ -147,6 +196,76 @@ class DependencyActivatedOriginationAssembly:
         )
         validator.record(contribution)
         self._answers[invitation_id] = contribution
+
+    def invoke(
+        self,
+        *,
+        invitation_id: str,
+        participant: ProposalGeneratingParticipant,
+        trace_id: str,
+        observed_at: str,
+    ) -> EvidenceSpan:
+        if not trace_id or trace_id in self._substrate.state.transports:
+            raise InvalidReconfiguration(
+                "invitation emission trace id must be new and nonempty"
+            )
+        request = self._participation_request(invitation_id)
+        emission = participant.emit(request)
+        if (
+            not isinstance(emission, ProposalEmissionMaterial)
+            or not emission.channel
+            or not isinstance(emission.payload, bytes)
+            or not emission.payload
+            or not isinstance(emission.provenance, Mapping)
+        ):
+            raise InvalidReconfiguration(
+                "proposal participant must emit nonempty opaque transport material"
+            )
+        provenance = dict(emission.provenance)
+        provenance.update(
+            {
+                "invitation_id": invitation_id,
+                "unresolved_relation_ids": request.unresolved_relation_ids,
+                "arrival_trace_ids": tuple(
+                    sorted({evidence.trace_id for evidence in request.evidence})
+                ),
+            }
+        )
+        if emission.channel == "model-output":
+            required_provenance = {
+                "provider",
+                "model",
+                "effective_configuration",
+                "prompt_dependencies",
+                "source_dependencies",
+                "known_limits",
+                "human_centered_training_apparatus",
+            }
+            if required_provenance.difference(provenance) or any(
+                not provenance[key] for key in required_provenance
+            ):
+                raise InvalidReconfiguration(
+                    "model participant must expose its complete apparatus provenance"
+                )
+            source_dependencies = set(provenance.get("source_dependencies", ()))
+            arrival_trace_ids = {
+                evidence.trace_id for evidence in request.evidence
+            }
+            if source_dependencies != arrival_trace_ids:
+                raise InvalidReconfiguration(
+                    "model emission source dependencies must equal invitation evidence"
+                )
+        trace = TransportTrace(
+            trace_id=trace_id,
+            channel=emission.channel,
+            digest=sha256(emission.payload).hexdigest(),
+            payload=emission.payload,
+            observed_at=observed_at,
+            provenance=provenance,
+        )
+        self._substrate.record_transport(trace)
+        self._invitation_emissions[invitation_id].add(trace_id)
+        return EvidenceSpan(trace_id, 0, len(emission.payload))
 
     def enact(self, *, delta_id: str):
         if len(self._answers) < 2:
@@ -288,6 +407,36 @@ class DependencyActivatedOriginationAssembly:
             raise InvalidReconfiguration(
                 "dependency activation requires arrival transport evidence"
             )
+
+    def _participation_request(
+        self, invitation_id: str
+    ) -> ProposalParticipationRequest:
+        invitation = self._invitations.get(invitation_id)
+        if invitation is None:
+            raise InvalidReconfiguration(
+                "proposal participation requires an active invitation"
+            )
+        evidence = tuple(
+            InvitationEvidence(
+                trace_id=span.trace_id,
+                start=span.start,
+                end=span.end,
+                payload=self._substrate.state.transports[
+                    span.trace_id
+                ].payload[span.start:span.end],
+            )
+            for relation_id in invitation.unresolved_relation_ids
+            for span in self._relations[relation_id].evidence
+        )
+        return ProposalParticipationRequest(
+            invitation_id=invitation.invitation_id,
+            unresolved_relation_ids=invitation.unresolved_relation_ids,
+            evidence=evidence,
+            participation=invitation.participation,
+            difference_opened=invitation.difference_opened,
+            limits=invitation.limits,
+            deactivation_conditions=invitation.deactivation_conditions,
+        )
 
     def _shared_arrival_basis(self):
         return {
