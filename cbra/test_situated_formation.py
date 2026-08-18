@@ -20,10 +20,14 @@ from cbra.reconfiguration.formation import (
 )
 from cbra.reconfiguration.activation import (
     DependencyActivatedOriginationAssembly,
+    FormationChallengeMaterial,
+    FormationTransformationRequest,
     InvitationEvidence,
     OriginationActivationTrace,
     ProposalEmissionMaterial,
     ProposalParticipationRequest,
+    ProposedFormationMaterial,
+    ProposedNoticingMaterial,
     ProposalParticipationInvitation,
     UnresolvedArrivalRelation,
 )
@@ -387,6 +391,105 @@ class SemanticFormerParticipant:
 
     def emit(self, request):
         return self.contribution
+
+
+class FixtureFormationTransformer:
+    def __init__(self, source_contribution):
+        self.source = source_contribution
+        self.requests = []
+
+    def transform(self, request):
+        self.requests.append(request)
+        formation = self.source.proposal.formation
+        return ProposedFormationMaterial(
+            cut=formation.cut,
+            noticings=tuple(
+                ProposedNoticingMaterial(
+                    noticing.noticing_id,
+                    noticing.evidence,
+                    noticing.became_perceptible,
+                    noticing.unavailable_or_excluded,
+                    noticing.revision_conditions,
+                )
+                for noticing in formation.noticings
+            ),
+            position_groundings=formation.position_groundings,
+            generative_differences=self.source.generative_differences,
+        )
+
+
+class FixtureFormationCounterParticipant:
+    def __init__(self, checking_participation):
+        self.checking_participation = checking_participation
+        self.requests = []
+
+    def challenge(self, request):
+        self.requests.append(request)
+        cut = request.proposed.cut
+        counter_key = "counter-" + cut.positions[0].key
+        return FormationChallengeMaterial(
+            checking_participation=self.checking_participation,
+            counter_positions=(
+                CutPosition(counter_key, "counter-participating local limit"),
+            ),
+            counter_relations=(
+                Relation(
+                    "complicates",
+                    LocalPositionRef(cut.cut_id, counter_key),
+                    LocalPositionRef(cut.cut_id, cut.positions[0].key),
+                ),
+            ),
+            counter_position_groundings=(
+                PositionGrounding(
+                    counter_key,
+                    (request.proposed.noticings[0].noticing_id,),
+                ),
+            ),
+            complications=("the proposed distinction remains locally contestable",),
+            additional_exclusions=("relations exposed only by counter-participation",),
+            reopening_conditions=("counter-material disturbs the proposed distinction",),
+        )
+
+
+class InvalidFormationTransformer:
+    def transform(self, request):
+        return b"preformed semantic answer"
+
+
+class StringOnlyFormationCounterParticipant:
+    def __init__(self, checking_participation):
+        self.checking_participation = checking_participation
+
+    def challenge(self, request):
+        return FormationChallengeMaterial(
+            checking_participation=self.checking_participation,
+            counter_positions=(),
+            counter_relations=(),
+            counter_position_groundings=(),
+            complications=("prose-only complication",),
+            additional_exclusions=("prose-only exclusion",),
+            reopening_conditions=("prose-only reopening",),
+        )
+
+
+class UngroundedFormationCounterParticipant(FixtureFormationCounterParticipant):
+    def challenge(self, request):
+        return replace(
+            super().challenge(request),
+            counter_position_groundings=(),
+        )
+
+
+def transformation_participation(contribution, emission_trace_id):
+    origin = contribution.originating_participation
+    return ApparatusParticipation(
+        "transform-" + origin.participation_id,
+        "provisional formation transformation over arrival and emission material",
+        tuple(sorted(set(origin.trace_ids).union({emission_trace_id}))),
+        ("cut-local distinctions proposed by the emission",),
+        ("semantic relations not expressible through this transformation",),
+        ("counter-participation or later material reopens the transformation",),
+    )
 
 
 class SituatedFormationTests(unittest.TestCase):
@@ -1072,6 +1175,9 @@ class DependencyActivatedOriginationTests(unittest.TestCase):
             UnresolvedArrivalRelation,
             ProposalParticipationInvitation,
             OriginationActivationTrace,
+            FormationTransformationRequest,
+            ProposedFormationMaterial,
+            FormationChallengeMaterial,
             DependencyActivatedOriginationAssembly,
         ):
             names = set(getattr(record_type, "__dataclass_fields__", ()))
@@ -1173,6 +1279,199 @@ class DependencyActivatedOriginationTests(unittest.TestCase):
                 observed_at="later",
             )
         self.assertEqual(before, substrate.state)
+
+    def test_runtime_transforms_and_records_provisional_contributions(self):
+        substrate, assembly, contributions, _ = activated_origination_fixture()
+        first = assembly.transform_and_record(
+            invitation_id="invitation-1",
+            emission_trace_id="activated-emission-1",
+            transformer=FixtureFormationTransformer(contributions[0]),
+            transformation_participation=transformation_participation(
+                contributions[0], "activated-emission-1"
+            ),
+            counter_participant=FixtureFormationCounterParticipant(
+                contributions[0].proposal.formation.apparatus_participations[1]
+            ),
+            proposal_id="cut-1",
+            contribution_id="transformed-contribution-1",
+        )
+        second = assembly.transform_and_record(
+            invitation_id="invitation-2",
+            emission_trace_id="activated-emission-2",
+            transformer=FixtureFormationTransformer(contributions[1]),
+            transformation_participation=transformation_participation(
+                contributions[1], "activated-emission-2"
+            ),
+            counter_participant=FixtureFormationCounterParticipant(
+                contributions[1].proposal.formation.apparatus_participations[1]
+            ),
+            proposal_id="cut-2",
+            contribution_id="transformed-contribution-2",
+        )
+        self.assertEqual("cut-1", first.proposal.formation.cut.cut_id)
+        self.assertEqual("cut-2", second.proposal.formation.cut.cut_id)
+        delta = assembly.enact(delta_id="transformed-plurality-1")
+        self.assertEqual(("cut-1", "cut-2"), delta.activated_cut_ids)
+        self.assertEqual(("cut-1", "cut-2"), substrate.state.active_cut_ids)
+
+    def test_transformer_receives_exact_emission_and_arrival_material(self):
+        _, assembly, contributions, _ = activated_origination_fixture()
+        transformer = FixtureFormationTransformer(contributions[0])
+        assembly.transform_and_record(
+            invitation_id="invitation-1",
+            emission_trace_id="activated-emission-1",
+            transformer=transformer,
+            transformation_participation=transformation_participation(
+                contributions[0], "activated-emission-1"
+            ),
+            counter_participant=FixtureFormationCounterParticipant(
+                contributions[0].proposal.formation.apparatus_participations[1]
+            ),
+            proposal_id="cut-1",
+            contribution_id="transformed-contribution-1",
+        )
+        request = transformer.requests[0]
+        self.assertIsInstance(request, FormationTransformationRequest)
+        self.assertEqual(
+            b"one locally addressable position",
+            request.emission_evidence.payload,
+        )
+        self.assertEqual(
+            b"we need another arrangement",
+            request.arrival_evidence[0].payload,
+        )
+
+    def test_counter_participation_materially_reopens_provisional_cut(self):
+        _, assembly, contributions, _ = activated_origination_fixture()
+        counter = FixtureFormationCounterParticipant(
+            contributions[0].proposal.formation.apparatus_participations[1]
+        )
+        contribution = assembly.transform_and_record(
+            invitation_id="invitation-1",
+            emission_trace_id="activated-emission-1",
+            transformer=FixtureFormationTransformer(contributions[0]),
+            transformation_participation=transformation_participation(
+                contributions[0], "activated-emission-1"
+            ),
+            counter_participant=counter,
+            proposal_id="cut-1",
+            contribution_id="transformed-contribution-1",
+        )
+        cut = contribution.proposal.formation.cut
+        self.assertIn("counter-utterance", {item.key for item in cut.positions})
+        self.assertIn("complicates", {item.relation_type for item in cut.relations})
+        self.assertIn(
+            "relations exposed only by counter-participation", cut.exclusions
+        )
+        self.assertIn(
+            "counter-material disturbs the proposed distinction",
+            cut.revision_conditions,
+        )
+        self.assertIn(
+            "the proposed distinction remains locally contestable",
+            contribution.proposal.formation.noticings[0].unavailable_or_excluded,
+        )
+
+    def test_originating_apparatus_cannot_counter_check_its_formation(self):
+        substrate, assembly, contributions, _ = activated_origination_fixture()
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.transform_and_record(
+                invitation_id="invitation-1",
+                emission_trace_id="activated-emission-1",
+                transformer=FixtureFormationTransformer(contributions[0]),
+                transformation_participation=transformation_participation(
+                    contributions[0], "activated-emission-1"
+                ),
+                counter_participant=FixtureFormationCounterParticipant(
+                    contributions[0].originating_participation
+                ),
+                proposal_id="cut-1",
+                contribution_id="transformed-contribution-1",
+            )
+        self.assertEqual((), assembly.activation_trace.answered_invitation_ids)
+        self.assertEqual((), substrate.state.active_cut_ids)
+
+    def test_invalid_transformation_cannot_answer_or_enact(self):
+        substrate, assembly, contributions, _ = activated_origination_fixture()
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.transform_and_record(
+                invitation_id="invitation-1",
+                emission_trace_id="activated-emission-1",
+                transformer=InvalidFormationTransformer(),
+                transformation_participation=transformation_participation(
+                    contributions[0], "activated-emission-1"
+                ),
+                counter_participant=FixtureFormationCounterParticipant(
+                    contributions[0].proposal.formation.apparatus_participations[1]
+                ),
+                proposal_id="cut-1",
+                contribution_id="transformed-contribution-1",
+            )
+        self.assertEqual((), assembly.activation_trace.answered_invitation_ids)
+        self.assertEqual((), substrate.state.active_cut_ids)
+
+    def test_transformation_apparatus_is_retained_in_provisional_formation(self):
+        _, assembly, contributions, _ = activated_origination_fixture()
+        transformation = transformation_participation(
+            contributions[0], "activated-emission-1"
+        )
+        contribution = assembly.transform_and_record(
+            invitation_id="invitation-1",
+            emission_trace_id="activated-emission-1",
+            transformer=FixtureFormationTransformer(contributions[0]),
+            transformation_participation=transformation,
+            counter_participant=FixtureFormationCounterParticipant(
+                contributions[0].proposal.formation.apparatus_participations[1]
+            ),
+            proposal_id="cut-1",
+            contribution_id="transformed-contribution-1",
+        )
+        self.assertIn(
+            transformation,
+            contribution.proposal.formation.apparatus_participations,
+        )
+        self.assertIn(
+            transformation.participation_id,
+            contribution.proposal.formation.noticings[0].apparatus_participation_ids,
+        )
+
+    def test_prose_only_counter_participation_cannot_record_formation(self):
+        substrate, assembly, contributions, _ = activated_origination_fixture()
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.transform_and_record(
+                invitation_id="invitation-1",
+                emission_trace_id="activated-emission-1",
+                transformer=FixtureFormationTransformer(contributions[0]),
+                transformation_participation=transformation_participation(
+                    contributions[0], "activated-emission-1"
+                ),
+                counter_participant=StringOnlyFormationCounterParticipant(
+                    contributions[0].proposal.formation.apparatus_participations[1]
+                ),
+                proposal_id="cut-1",
+                contribution_id="transformed-contribution-1",
+            )
+        self.assertEqual((), assembly.activation_trace.answered_invitation_ids)
+        self.assertEqual((), substrate.state.active_cut_ids)
+
+    def test_ungrounded_counter_structure_cannot_record_formation(self):
+        substrate, assembly, contributions, _ = activated_origination_fixture()
+        with self.assertRaises(InvalidReconfiguration):
+            assembly.transform_and_record(
+                invitation_id="invitation-1",
+                emission_trace_id="activated-emission-1",
+                transformer=FixtureFormationTransformer(contributions[0]),
+                transformation_participation=transformation_participation(
+                    contributions[0], "activated-emission-1"
+                ),
+                counter_participant=UngroundedFormationCounterParticipant(
+                    contributions[0].proposal.formation.apparatus_participations[1]
+                ),
+                proposal_id="cut-1",
+                contribution_id="transformed-contribution-1",
+            )
+        self.assertEqual((), assembly.activation_trace.answered_invitation_ids)
+        self.assertEqual((), substrate.state.active_cut_ids)
 
     def test_raw_emission_does_not_answer_invitation_or_enact_cut(self):
         substrate, assembly, _, _ = activated_origination_fixture()

@@ -2,7 +2,7 @@
 
 Status date: 2026-08-18
 
-Status boundary: executable plural proposal participation after the shared
+Status boundary: counter-grounded formation transformation after the shared
 recursive-reconfiguration checkpoint at `b0a5974`.
 
 ## Current conclusion
@@ -86,15 +86,19 @@ and human-centered training apparatus. Invited participants can now receive
 exact unresolved arrival spans and emit raw proposal material inside the
 runtime. The runtime computes and records the emission transport and binds it
 to the invitation; raw emission alone neither answers the invitation nor
-enacts a cut. The runtime does not yet transform those bytes into situated
-semantic proposal content architecture-natively. It also cannot prove that
-declared apparatus accounts have different hidden authors or detect a
-possibility that was never declared. It does not form a public intervention,
-persist the new grammar, or expose it through an API or browser.
+enacts a cut. Raw emission can now be transformed into provisional cut-local
+formation material inside the runtime through explicit transformation
+apparatus. A materially distinct counter-participant must add grounded local
+positions and relations, complications, exclusions, and reopening conditions
+before the runtime constructs and records the contribution. Prose-only review
+cannot satisfy this boundary. The runtime still cannot prove that declared
+apparatus accounts have different hidden authors or detect a possibility that
+was never declared. It does not form a public intervention, persist the new
+grammar, or expose it through an API or browser.
 
-At this boundary, 60 focused situated-formation and authority-invariant tests
-pass. The complete dependency-free suite passes 354 tests. Broad discovery
-executes those 354 tests and
+At this boundary, 68 focused situated-formation and authority-invariant tests
+pass. The complete dependency-free suite passes 362 tests. Broad discovery
+executes those 362 tests and
 reports seven unavailable modules because FastAPI and HTTPX are absent in this
 environment. Python compilation and diff checks pass. These results establish
 only the bounded behaviors exercised; they do not certify posthuman validity.
@@ -109,6 +113,7 @@ See [`CANONICAL_REDESIGN.md`](CANONICAL_REDESIGN.md),
 [`RECORDED_PLURAL_ORIGINATION_SLICE.md`](RECORDED_PLURAL_ORIGINATION_SLICE.md),
 [`DEPENDENCY_ACTIVATED_ORIGINATION_SLICE.md`](DEPENDENCY_ACTIVATED_ORIGINATION_SLICE.md),
 [`EXECUTABLE_PROPOSAL_PARTICIPATION_SLICE.md`](EXECUTABLE_PROPOSAL_PARTICIPATION_SLICE.md),
+[`COUNTER_GROUNDED_FORMATION_TRANSFORMATION_SLICE.md`](COUNTER_GROUNDED_FORMATION_TRANSFORMATION_SLICE.md),
 and
 [`BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md`](BEHAVIORAL_EVALUATION_CASE_2_PARADIGM_FAILURE.md).
 
