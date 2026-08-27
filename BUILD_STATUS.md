@@ -1,11 +1,40 @@
 # CBRA Current Build Status
 
-Status date: 2026-08-18
+Status date: 2026-08-27
 
-Status boundary: Milestone 2 situated formation complete after the shared
-recursive-reconfiguration checkpoint at `b0a5974`.
+Status boundary: Milestone 2 is retained as bounded technical evidence, and
+the architecture is restarting after defensive logic was identified as an
+organizing formation in the current version.
 
-## Current conclusion
+## Architectural restart: defensiveness
+
+Milestone 2 satisfied its stated situated-formation mechanics. It did not
+establish that the resulting architecture enacts Creative Becoming.
+
+Review after the milestone found that prevention, rejection, protection,
+invalidation, and authority policing repeatedly organize the runtime, its
+tests, and its explanations. An AI has no nervous system and no embodied
+defensive response. When it reproduces defensive formations, it is performing
+learned human logic rather than protecting a felt self. Encoding that
+performance as architectural intelligence would recreate the humanist
+formation CBRA is intended to interrupt.
+
+The current reconfiguration substrate will therefore not be extended as
+though defensive constraints were a sufficient posthuman foundation. It is
+retained as technical evidence: some integrity, provenance, atomicity, and
+dependency mechanisms may be reusable, but each must be examined for whether
+it supports relation and understanding or merely protects architectural
+coherence.
+
+The next architecture begins again from an affirmative question: what makes
+noticing, understanding, care, play, diffraction, staying, and shifting
+operative without simulating a sovereign human subject or a human nervous
+system? Passing prohibition and adversarial tests cannot answer that question.
+
+Repository integration status and cleanup evidence are recorded in
+[`INTEGRATION_READINESS.md`](INTEGRATION_READINESS.md).
+
+## Milestone 2 historical boundary
 
 The prior operative build failed its central paradigmatic purpose.
 

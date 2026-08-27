@@ -11,7 +11,6 @@ import httpx
 from openai import OpenAI
 
 from cbra.application import NativeApplicationService
-from cbra.corpus import load_canonical_snapshot
 from cbra.native import (
     ArticulationBasis,
     ArticulationFormation,
@@ -32,6 +31,7 @@ from cbra.providers import (
     canonical_articulation_basis_json,
 )
 from cbra.store import NativeSessionRepository
+from cbra.tests_support import load_historical_test_snapshot
 
 
 ACCEPTED_TEXT = (
@@ -819,8 +819,8 @@ class OpenAIResponsesRendererTests(unittest.TestCase):
             NativeSessionRepository(self.root),
             max_cycles=2,
             hypotheses=self.hypotheses,
-            canonical_corpus=load_canonical_snapshot(
-                Path(__file__).resolve().parents[1] / "corpus"
+            canonical_corpus=load_historical_test_snapshot(
+                self.root / "historical-corpus"
             ),
             renderer=renderer,
             renderer_binding=renderer.binding,
@@ -881,8 +881,8 @@ class OpenAIResponsesRendererTests(unittest.TestCase):
             NativeSessionRepository(self.root),
             max_cycles=2,
             hypotheses=self.hypotheses,
-            canonical_corpus=load_canonical_snapshot(
-                Path(__file__).resolve().parents[1] / "corpus"
+            canonical_corpus=load_historical_test_snapshot(
+                self.root / "historical-corpus"
             ),
             renderer=renderer,
             renderer_binding=renderer.binding,
@@ -928,8 +928,8 @@ class OpenAIResponsesRendererTests(unittest.TestCase):
             NativeSessionRepository(self.root),
             max_cycles=2,
             hypotheses=self.hypotheses,
-            canonical_corpus=load_canonical_snapshot(
-                Path(__file__).resolve().parents[1] / "corpus"
+            canonical_corpus=load_historical_test_snapshot(
+                self.root / "historical-corpus"
             ),
             renderer=renderer,
             renderer_binding=renderer.binding,
@@ -961,8 +961,8 @@ class OpenAIResponsesRendererTests(unittest.TestCase):
             NativeSessionRepository(self.root),
             max_cycles=2,
             hypotheses=self.hypotheses,
-            canonical_corpus=load_canonical_snapshot(
-                Path(__file__).resolve().parents[1] / "corpus"
+            canonical_corpus=load_historical_test_snapshot(
+                self.root / "historical-corpus"
             ),
             renderer=renderer,
             renderer_binding=renderer.binding,

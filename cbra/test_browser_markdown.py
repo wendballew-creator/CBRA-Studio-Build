@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from cbra.app import create_app
+from cbra.tests_support import write_legacy_corpus
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -37,9 +38,10 @@ class BrowserMarkdownRenderingTests(unittest.TestCase):
 
     def test_renderer_asset_is_served_as_javascript(self):
         with tempfile.TemporaryDirectory() as root:
+            root_path = Path(root)
             application = create_app(
-                session_root=Path(root),
-                corpus_root=PROJECT_ROOT / "corpus",
+                session_root=root_path / "sessions",
+                corpus_root=write_legacy_corpus(root_path / "corpus"),
             )
             with TestClient(application) as client:
                 response = client.get("/ui/markdown.js")

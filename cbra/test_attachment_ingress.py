@@ -1,10 +1,12 @@
 """Transactional native attachment-ingress contracts."""
 
 import io
+import os
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest.mock import patch
 
 from docx import Document
 from fastapi.testclient import TestClient
@@ -25,6 +27,7 @@ from cbra.attachments import (
     build_attachment_streams,
 )
 from cbra.store import NativeSessionRepository
+from cbra.tests_support import write_legacy_corpus
 
 
 THREAD_A = "thread:{0}".format("a" * 32)
@@ -91,6 +94,12 @@ class AttachmentIngressApiTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
+        self.corpus = write_legacy_corpus(self.root / "legacy-corpus")
+        self.environment = patch.dict(
+            os.environ,
+            {"CBRA_CORPUS_ROOT": str(self.corpus)},
+        )
+        self.environment.start()
         self.application = create_app(session_root=self.root)
         self.client = TestClient(
             self.application,
@@ -99,6 +108,7 @@ class AttachmentIngressApiTests(unittest.TestCase):
 
     def tearDown(self):
         self.client.close()
+        self.environment.stop()
         self.temporary.cleanup()
 
     def _create(

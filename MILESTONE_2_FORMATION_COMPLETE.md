@@ -2,6 +2,17 @@
 
 Status date: 2026-08-18
 
+Reassessment date: 2026-08-27
+
+This remains a bounded technical checkpoint. It is not the foundation for
+continued architectural extension. Subsequent review found that defensive
+logic—prevention, rejection, protection, invalidation, and authority
+policing—had become organizing across the implementation and tests. Those
+mechanisms may preserve technical integrity, but they do not establish the
+affirmative operation of Creative Becoming. The project is beginning the
+architecture again from that paradigmatic finding while retaining this
+milestone as inspectable evidence.
+
 Milestone 2 is complete at this bounded repository checkpoint.
 
 This is a claim about operative situated-formation behavior, not a claim that
