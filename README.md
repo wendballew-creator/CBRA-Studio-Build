@@ -31,6 +31,17 @@ nervous system or embodied defensiveness.
 See [BUILD_STATUS.md](BUILD_STATUS.md) for the full boundary and
 [INTEGRATION_READINESS.md](INTEGRATION_READINESS.md) for the repository audit.
 
+## Enactment slice (November 2026)
+
+`cbra/enactment/` is the first vertical slice of the dynamic coding method
+that CBRA Kernel v13 calls for: cuts enacted at runtime into a live
+dependency graph, care and play derived from arrangements, release
+constraints inside formation, effect return, local persistence. It is built
+clean, apart from the Milestone 2 substrate, and it reports bounded lifecycle
+facts only. [ENACTMENT_SLICE.md](ENACTMENT_SLICE.md) records what it enacts,
+what it records, what it does not establish, and its claim boundary. The
+2 November 2026 canon that specifies it is not yet in this repository.
+
 ## Repository layers
 
 - `cbra/reconfiguration/` contains the Milestone 2 situated-formation
