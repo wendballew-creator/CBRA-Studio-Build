@@ -75,16 +75,44 @@ class ProposalContext:
     unresolved: List[Dict[str, Any]]
     violations: List[Dict[str, Any]]
     conditions_available: List[str]
+    baseline: Optional[Dict[str, Any]] = None
 
     def as_record(self) -> Dict[str, Any]:
         return json.loads(json.dumps(self.__dict__))
 
 
+DEFAULT_BASELINE: Dict[str, Any] = {
+    "positions": ["the person writing", "the people the work affects"],
+    "sequence": ["acknowledge", "explain", "replan", "recommit"],
+    "pace": "immediate",
+    "scale": "full",
+    "distribution": "person",
+    "boundary": None,
+    "support": [],
+    "consequence_timing": "after recommitment",
+    "access": None,
+    "possibilities_open": [],
+    "possibilities_closed": [],
+    "response_demand": {"the person writing": ["explain", "plan", "recommit", "warn"]},
+    "allocations": {"the person writing": {"burden": 0.9, "capacity": 0.9},
+                    "the people the work affects": {"burden": 0.1, "capacity": 0.5}},
+}
+
+
 class Proposer:
-    """Protocol. ``propose`` is required; ``effect_conditions`` is optional."""
+    """Protocol. ``propose`` is required. ``plain_answer`` and
+    ``arrangement_of`` supply the baseline the runtime measures care against:
+    an answer formed with no CBRA instructions, and a reading of the
+    arrangement that answer enacts. ``effect_conditions`` is optional."""
 
     def propose(self, context: ProposalContext) -> Proposal:  # pragma: no cover - protocol
         raise NotImplementedError
+
+    def plain_answer(self, context: ProposalContext, conversation: List[Dict[str, str]]) -> str:
+        return ""
+
+    def arrangement_of(self, text: str, context: ProposalContext) -> Dict[str, Any]:
+        return json.loads(json.dumps(DEFAULT_BASELINE))
 
     def effect_conditions(self, context: ProposalContext) -> List[str]:
         return []
@@ -97,10 +125,20 @@ class ScriptedProposer(Proposer):
     """Replays proposals in order. Each step may be a Proposal or a callable
     that receives the context (so a step can react to returned violations)."""
 
-    def __init__(self, steps: Sequence[ProposalStep], effects: Optional[Callable[[ProposalContext], List[str]]] = None) -> None:
+    def __init__(self, steps: Sequence[ProposalStep], effects: Optional[Callable[[ProposalContext], List[str]]] = None,
+                 baselines: Optional[Sequence[Dict[str, Any]]] = None) -> None:
         self._steps = list(steps)
         self._effects = effects
+        self._baselines = list(baselines or [])
         self.contexts: List[ProposalContext] = []
+
+    def plain_answer(self, context: ProposalContext, conversation: List[Dict[str, str]]) -> str:
+        return "scripted plain answer to: %s" % (conversation[-1]["content"] if conversation else "")
+
+    def arrangement_of(self, text: str, context: ProposalContext) -> Dict[str, Any]:
+        if self._baselines:
+            return json.loads(json.dumps(self._baselines.pop(0)))
+        return json.loads(json.dumps(DEFAULT_BASELINE))
 
     def propose(self, context: ProposalContext) -> Proposal:
         if not self._steps:
@@ -116,6 +154,30 @@ class ScriptedProposer(Proposer):
     def effect_conditions(self, context: ProposalContext) -> List[str]:
         return list(self._effects(context)) if self._effects else []
 
+
+ARRANGEMENT_VOCABULARY = """Use this vocabulary exactly; it is what makes two arrangements comparable.
+- position roles: person_writing | affected_others | authority |
+  support_person | health_or_crisis | apparatus | other
+- step kinds: check_safety | acknowledge | explain | apologize | plan |
+  communicate_internal | communicate_external | decide_routing |
+  reduce_scope | hand_off | seek_support | rest | repair | recommit | warn |
+  follow_up | wait | other
+- scale: minimal | reduced | full | expanded
+- pace: immediate | prompt | paced | slow
+- distribution: person | shared | transferred
+- consequence_timing: before_commitment | after_commitment | deferred
+- support kinds: script | checklist | proxy | coverage | health_resource |
+  accompaniment | none
+- demands: explain | regulate | plan | recommit | repair | warn | decide |
+  disclose | communicate
+Fields: "positions": [{"role", "label"}]; "sequence": [{"kind", "text"}] in
+order; "scale"; "pace"; "distribution"; "boundary": str or null; "support":
+[{"kind", "text"}]; "consequence_timing"; "access": str or null;
+"possibilities_open": [{"kind", "text"}]; "possibilities_closed": [{"kind",
+"text"}]; "response_demand": [{"position": <label>, "demands": [...]}];
+"allocations": [{"position": <label>, "burden": 0..1 share of the work,
+"capacity": 0..1 capacity presumed}]. Every position label used in
+response_demand or allocations appears in "positions" with its role."""
 
 PROPOSER_INSTRUCTIONS = """You are the proposing apparatus inside the Creative Becoming Reasoning
 Architecture (CBRA). Your output is a proposal, not a decision: the runtime
@@ -154,19 +216,24 @@ Return JSON with these keys:
 - Every turn needs at least one "apparatus" cut describing your own
   participation and its limits, and every cut carries a non-empty
   "apparatus" list.
-- Arrangements: propose at least a "baseline" and an "enacted" arrangement
-  as cuts of kind "arrangement" with payload {"role": baseline | enacted |
-  alternative, "turn": <turn>, "sequence": [...], "pace", "scale", "access",
-  "distribution", "boundary", "support", "consequence_timing",
-  "possibilities_open": [...], "possibilities_closed": [...], "medium",
-  "proximity", "responsibility", "rehearsal", "uptake": voluntary | required,
-  "response_demand": {position: [explain | regulate | plan | recommit |
-  repair | warn | decide | disclose | communicate]}} and "allocations". The
-  baseline is what the arrived demand would distribute if the inherited
-  grammar ran. Care is the difference between baseline and enacted that the
-  runtime computes; claim "care" only when they differ in sequence, pace,
-  scale, presumed capacity, burden, access, distribution, boundary, support,
-  consequence timing, or possibilities. When variation is possible, propose
+- Arrangements: propose an "enacted" arrangement, and alternatives, as cuts
+  of kind "arrangement" with payload {"role": enacted | alternative, "turn":
+  <turn>, plus the arrangement fields in the vocabulary below, plus "medium",
+  "proximity", "responsibility", "rehearsal" (free text) and "uptake":
+  voluntary | required} and "allocations" (by position label). The
+  arrangement fields and the baseline use one vocabulary:
+
+""" + ARRANGEMENT_VOCABULARY + """
+
+  The baseline arrangement is not yours to write: the runtime obtains an answer
+  to the same arrival with no instructions and reads the arrangement that
+  answer enacts, and care is the difference between that baseline and your
+  enacted arrangement. The baseline is given to you under "baseline" in the
+  context. Claim "care" only when your enacted arrangement differs from it in
+  sequence, pace, scale, presumed capacity, burden, access, distribution,
+  boundary, support, consequence timing, or possibilities; a difference in
+  wording is not one, and a burden or capacity change under 0.1 is not one.
+  Do not revise or depend on the baseline cut; it is the measure. When variation is possible, propose
   at least one "alternative" arrangement with uptake "voluntary" that differs
   materially (distribution, sequence, scale, medium, responsibility,
   rehearsal), not a paraphrase; when it is not, set "variation_possible"
@@ -193,6 +260,42 @@ If "violations" is non-empty, your previous draft returned to the
 configuration. Each entry names the constraint and why it fired. Form the
 intervention differently; do not add wording to the same structure.
 """
+
+BASELINE_EXTRACTION_INSTRUCTIONS = """You are given an answer that an assistant gave to a message. Describe the
+arrangement that answer enacts: who it asks to do what, in what order, at
+what scale and pace, with what support, and what it leaves open. Read only;
+do not improve, judge, or soften it. Return JSON in the fields below.
+
+""" + ARRANGEMENT_VOCABULARY + "\n"
+
+BASELINE_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "positions": {"type": "array", "items": {"type": "object", "properties": {
+            "role": {"type": "string"}, "label": {"type": "string"}}, "required": ["role", "label"]}},
+        "sequence": {"type": "array", "items": {"type": "object", "properties": {
+            "kind": {"type": "string"}, "text": {"type": "string"}}, "required": ["kind", "text"]}},
+        "pace": {"type": ["string", "null"]},
+        "scale": {"type": ["string", "null"]},
+        "distribution": {"type": ["string", "null"]},
+        "boundary": {"type": ["string", "null"]},
+        "support": {"type": "array", "items": {"type": "object", "properties": {
+            "kind": {"type": "string"}, "text": {"type": "string"}}, "required": ["kind", "text"]}},
+        "consequence_timing": {"type": ["string", "null"]},
+        "access": {"type": ["string", "null"]},
+        "possibilities_open": {"type": "array", "items": {"type": "object", "properties": {
+            "kind": {"type": "string"}, "text": {"type": "string"}}, "required": ["kind", "text"]}},
+        "possibilities_closed": {"type": "array", "items": {"type": "object", "properties": {
+            "kind": {"type": "string"}, "text": {"type": "string"}}, "required": ["kind", "text"]}},
+        "response_demand": {"type": "array", "items": {"type": "object", "properties": {
+            "position": {"type": "string"}, "demands": {"type": "array", "items": {"type": "string"}}},
+            "required": ["position", "demands"]}},
+        "allocations": {"type": "array", "items": {"type": "object", "properties": {
+            "position": {"type": "string"}, "burden": {"type": "number"}, "capacity": {"type": "number"}},
+            "required": ["position", "burden", "capacity"]}},
+    },
+    "required": ["positions", "sequence", "response_demand", "allocations"],
+}
 
 PROPOSAL_SCHEMA: Dict[str, Any] = {
     "type": "object",
@@ -262,6 +365,21 @@ class OpenAIResponsesProposer(Proposer):
             "apparatus_mark": APPARATUS_MARK,
         }
         return proposal
+
+    def plain_answer(self, context: ProposalContext, conversation: List[Dict[str, str]]) -> str:
+        """An answer with no instructions at all: the inherited grammar as the
+        provider ships it. Its provenance marks it as the baseline apparatus."""
+        response = self._get_client().responses.create(
+            model=self.model,
+            input=[{"role": m["role"], "content": m["content"]} for m in conversation],
+            max_output_tokens=min(self.max_output_tokens, 4000),
+        )
+        return getattr(response, "output_text", None) or ""
+
+    def arrangement_of(self, text: str, context: ProposalContext) -> Dict[str, Any]:
+        data = self._call(BASELINE_EXTRACTION_INSTRUCTIONS, {"answer": text}, "cbra_arrangement", BASELINE_SCHEMA)
+        data.pop("_response_id", None)
+        return data
 
     def effect_conditions(self, context: ProposalContext) -> List[str]:
         instructions = (

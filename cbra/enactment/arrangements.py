@@ -4,9 +4,12 @@ Care and play are not stored as flags or scores. They are computed, when
 asked, as the structural difference between arrangement cuts that are live
 in the configuration:
 
-* the *baseline* arrangement is what the arrived demand distributes if the
-  inherited grammar runs (who explains, repairs, recommits; in what order;
-  at what scale);
+* the *baseline* arrangement is what the inherited grammar distributes: the
+  runtime obtains an answer to the same arrival with no CBRA instructions and
+  a separate extraction call reads the arrangement that answer enacts (who
+  explains, repairs, recommits; in what order; at what scale). The proposal
+  does not write the baseline it is measured against; a baseline it sends
+  anyway is kept with role ``proposed_baseline`` as a record;
 * the *enacted* arrangement is the one the formation actually carries;
 * *alternative* arrangements are enacted far enough to compare, and offered
   for voluntary uptake.
@@ -31,6 +34,7 @@ CARE_DIMENSIONS = (
     "scale",
     "presumed_capacity",
     "burden",
+    "response_demand",
     "access",
     "distribution",
     "boundary",
@@ -51,7 +55,30 @@ PLAY_DIMENSIONS = (
     "burden",
 )
 
-ARRANGEMENT_ROLES = ("baseline", "enacted", "alternative")
+ARRANGEMENT_ROLES = ("baseline", "proposed_baseline", "enacted", "alternative")
+
+# A small shared vocabulary. Two arrangements written by different calls can
+# only be compared structurally if positions, steps, and scales are named
+# from the same set; free text is wording, and the evidence rule says
+# structure outranks wording. Values outside the vocabulary are kept as given
+# (tests and older traces use plain labels), so comparison degrades to label
+# equality rather than failing.
+POSITION_ROLES = (
+    "person_writing", "affected_others", "authority", "support_person",
+    "health_or_crisis", "apparatus", "other",
+)
+STEP_KINDS = (
+    "check_safety", "acknowledge", "explain", "apologize", "plan",
+    "communicate_internal", "communicate_external", "decide_routing",
+    "reduce_scope", "hand_off", "seek_support", "rest", "repair", "recommit",
+    "warn", "follow_up", "wait", "other",
+)
+SCALES = ("minimal", "reduced", "full", "expanded")
+PACES = ("immediate", "prompt", "paced", "slow")
+DISTRIBUTIONS = ("person", "shared", "transferred")
+CONSEQUENCE_TIMINGS = ("before_commitment", "after_commitment", "deferred")
+SUPPORT_KINDS = ("script", "checklist", "proxy", "coverage", "health_resource", "accompaniment", "none")
+NUMERIC_TOLERANCE = 0.1
 
 
 def _normal(value: Any) -> Any:
@@ -62,19 +89,71 @@ def _normal(value: Any) -> Any:
     return value
 
 
+def _kind(item: Any) -> Any:
+    """A step, support item, or possibility compared by its kind when it has one."""
+    if isinstance(item, Mapping):
+        return item.get("kind", item.get("text"))
+    return item
+
+
+def _role_map(payload: Mapping[str, Any]) -> Dict[str, str]:
+    """position label -> role, from payload["positions"] entries that carry roles."""
+    roles: Dict[str, str] = {}
+    for entry in payload.get("positions") or []:
+        if isinstance(entry, Mapping) and entry.get("label") and entry.get("role"):
+            roles[str(entry["label"])] = str(entry["role"])
+    return roles
+
+
+def _by_role(mapping: Mapping[str, Any], roles: Mapping[str, str]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for label, value in mapping.items():
+        key = roles.get(str(label), str(label))
+        if key in out and isinstance(value, (int, float)) and isinstance(out[key], (int, float)):
+            out[key] = max(out[key], value)
+        elif key in out and isinstance(value, list) and isinstance(out[key], list):
+            out[key] = sorted(set(out[key]) | set(value))
+        else:
+            out[key] = value
+    return out
+
+
 def arrangement_fields(cut: Cut) -> Dict[str, Any]:
+    """The comparable structure of an arrangement cut: steps by kind,
+    allocations and demands by role, categorical scale, pace, distribution,
+    timing, support kinds, possibilities by kind. Wording is left out."""
     payload = cut.payload if isinstance(cut.payload, Mapping) else {}
-    fields = {k: _normal(payload.get(k)) for k in set(CARE_DIMENSIONS) | set(PLAY_DIMENSIONS)}
+    roles = _role_map(payload)
+    fields: Dict[str, Any] = {}
+    for k in set(CARE_DIMENSIONS) | set(PLAY_DIMENSIONS):
+        fields[k] = _normal(payload.get(k))
+    fields["sequence"] = [_kind(s) for s in (payload.get("sequence") or [])]
+    fields["support"] = sorted(set(str(_kind(s)) for s in (payload.get("support") or []))) if isinstance(payload.get("support"), (list, tuple)) else _normal(payload.get("support"))
+    fields["possibilities_open"] = sorted(set(str(_kind(p)) for p in (payload.get("possibilities_open") or [])))
+    demand = payload.get("response_demand") or {}
+    if isinstance(demand, Mapping):
+        fields["response_demand"] = _normal(_by_role({k: sorted(set(v)) for k, v in demand.items()}, roles))
     if cut.allocations:
-        fields["burden"] = _normal({k: v["burden"] for k, v in cut.allocations.items() if v.get("burden") is not None})
-        fields["presumed_capacity"] = _normal({k: v["capacity"] for k, v in cut.allocations.items() if v.get("capacity") is not None})
+        fields["burden"] = _normal(_by_role({k: v["burden"] for k, v in cut.allocations.items() if v.get("burden") is not None}, roles))
+        fields["presumed_capacity"] = _normal(_by_role({k: v["capacity"] for k, v in cut.allocations.items() if v.get("capacity") is not None}, roles))
     return fields
 
 
+def _close(a: Any, b: Any) -> bool:
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)) and not isinstance(a, bool):
+        return abs(float(a) - float(b)) < NUMERIC_TOLERANCE
+    if isinstance(a, Mapping) and isinstance(b, Mapping):
+        return set(a) == set(b) and all(_close(a[k], b[k]) for k in a)
+    return a == b
+
+
 def difference(a: Mapping[str, Any], b: Mapping[str, Any], dimensions: Tuple[str, ...]) -> Dict[str, Tuple[Any, Any]]:
+    """Structural difference on the given dimensions. Numeric allocations
+    within NUMERIC_TOLERANCE count as the same; a changed set of positions
+    counts as different."""
     out: Dict[str, Tuple[Any, Any]] = {}
     for dim in dimensions:
-        if a.get(dim) != b.get(dim):
+        if not _close(a.get(dim), b.get(dim)):
             out[dim] = (a.get(dim), b.get(dim))
     return out
 

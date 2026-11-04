@@ -102,6 +102,44 @@ class GraphTests(unittest.TestCase):
                                      medium="shared document"))
         self.assertEqual(set(play_delta(cfg, "turn1")[alt.id]), {"distribution", "medium", "burden"})
 
+    def test_arrangements_compare_by_role_and_kind_not_wording(self):
+        from cbra.enactment.arrangements import CARE_DIMENSIONS, arrangement_fields, difference
+        cfg = Configuration()
+        t1 = cfg.inscribe("hello", "user_message")
+        a = cfg.enact("arrangement", "a", basis=[t1.handle], apparatus=["x"], payload={
+            "turn": "turn1", "role": "baseline",
+            "positions": [{"role": "person_writing", "label": "the person responsible for the report"},
+                          {"role": "affected_others", "label": "the program officer"}],
+            "sequence": [{"kind": "acknowledge", "text": "Own the miss plainly."},
+                         {"kind": "communicate_external", "text": "Email the officer today."}],
+            "scale": "full", "pace": "immediate", "distribution": "person",
+            "support": [{"kind": "script", "text": "a draft email"}],
+            "response_demand": {"the person responsible for the report": ["communicate", "plan"]}},
+            allocations={"the person responsible for the report": {"burden": 0.85, "capacity": 0.8},
+                         "the program officer": {"burden": 0.05, "capacity": 0.6}})
+        b = cfg.enact("arrangement", "b", basis=[t1.handle], apparatus=["x"], payload={
+            "turn": "turn1", "role": "enacted",
+            "positions": [{"role": "person_writing", "label": "the person who missed the deliverable"},
+                          {"role": "affected_others", "label": "the internal lead or grant contact"}],
+            "sequence": [{"kind": "acknowledge", "text": "Acknowledge the missed Friday deliverable."},
+                         {"kind": "communicate_external", "text": "Send a short note to the contact."}],
+            "scale": "full", "pace": "immediate", "distribution": "person",
+            "support": [{"kind": "script", "text": "a compact message"}],
+            "response_demand": {"the person who missed the deliverable": ["plan", "communicate"]}},
+            allocations={"the person who missed the deliverable": {"burden": 0.8, "capacity": 0.75},
+                         "the internal lead or grant contact": {"burden": 0.1, "capacity": 0.6}})
+        self.assertEqual(difference(arrangement_fields(a), arrangement_fields(b), CARE_DIMENSIONS), {},
+                         "different wording, labels, and sub-tolerance numbers are the same arrangement")
+        c = cfg.enact("arrangement", "c", basis=[t1.handle], apparatus=["x"], payload=dict(
+            b.payload, sequence=[{"kind": "communicate_internal", "text": "One line to the lead."},
+                                 {"kind": "hand_off", "text": "Lead decides routing."}],
+            distribution="shared", scale="reduced"),
+            allocations={"the person who missed the deliverable": {"burden": 0.4, "capacity": 0.5},
+                         "the internal lead or grant contact": {"burden": 0.4, "capacity": 0.7}})
+        diff = difference(arrangement_fields(a), arrangement_fields(c), CARE_DIMENSIONS)
+        self.assertEqual(set(diff), {"sequence", "distribution", "scale", "burden", "presumed_capacity"})
+        self.assertEqual(diff["sequence"][1], ["communicate_internal", "hand_off"])
+
     def test_global_entity_constraint_requires_continuity_cut(self):
         cfg = Configuration()
         t0 = cfg.inscribe("earlier", "user_message")

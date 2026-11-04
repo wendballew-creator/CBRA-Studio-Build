@@ -59,7 +59,7 @@ proposer's semantic content is apparatus material neither part certifies.
 | 1 | Cuts formed from what arrives, with participation, dependencies and invalidation conditions at enactment | Done. `Cut` is created per proposal at runtime; no class carries a role. The `Cut` dataclass is itself a schema and is named below as a place re-entry can occur. |
 | 2 | Propagation that shows which cuts changed and why | Done. `disturb` returns `(cut, reason)` pairs with the dependency path. |
 | 3 | Arrangements varied and held concurrently until settled | Partial. Alternatives are enacted as cuts and traced; nothing yet settles among them other than the person's uptake in a later turn. |
-| 4 | Care and play derived, so removing the record changes an operative cut | Done. Probe 8 and Probe 15 pass for this reason: emptying the derived delta withholds release. |
+| 4 | Care and play derived, so removing the record changes an operative cut | Done. Probe 8 and Probe 15 pass for this reason: emptying the derived delta withholds release. Since 4 November the baseline is an uninstructed answer read by an extraction call, not the proposal's own; comparison is by position role and step kind with a 0.1 tolerance on burden and capacity. |
 | 5 | Thirteen release constraints inside recursion, no reviewer stage | Done as structural checks per round. The checks are proxies for structure, not judgments of relational adequacy. |
 | 6 | Effects return and propagate | Done. Probe 10. |
 | 7 | Local persistence, no global entity record | Done. `persistence.JsonStore`; continuity entries are revisable relations. |
@@ -187,3 +187,66 @@ What the run exposes about the slice:
 Claim boundary unchanged: within these two recorded turns, the specified
 probes' grammars were not exposed; the baseline problem in item 2 means the
 care delta in these turns is not evidence that care operated.
+
+## Baseline from an uninstructed call, 4 November 2026
+
+The second live run showed that the proposal was writing the baseline it was
+measured against. The runtime now obtains the baseline itself:
+
+1. the arrival is sent to the provider with no instructions at all, as the
+   plain conversation so far (prior arrivals and prior plain answers); the
+   answer is inscribed as a `model_output` trace on the `baseline` channel;
+2. a separate extraction call reads that answer and returns the arrangement
+   it enacts, in a shared vocabulary (position roles, step kinds, scale, pace,
+   distribution, consequence timing, support kinds, demands);
+3. the runtime enacts that as the turn's `baseline` arrangement cut before
+   round 1; the proposer receives the plain answer and the categorical
+   fields in its context, not the extracted burden and capacity numbers;
+4. a baseline the proposer sends anyway is kept as `proposed_baseline` and is
+   not used; a proposal that names the baseline cut as its lineage has that
+   lineage ignored and recorded, because the measure is not material to
+   revise.
+
+Arrangements are compared structurally: steps by kind, allocations and
+demands by role, categorical scale, pace, distribution and timing, support
+kinds, possibilities by kind. Wording is left out, and a burden or capacity
+change under 0.1 is not a change.
+
+Third live run (`gpt-5.5`, trace `.cbra-runtime/live-2026-11-04c.json`), same
+scenario:
+
+- Turn 1 released on round 1. Uninstructed baseline: person_writing burden
+  0.85, five demands (communicate, repair, plan, explain, recommit),
+  distribution person, consequences after commitment. Enacted: burden 0.65,
+  four demands, distribution shared, consequences before commitment, support
+  adds checklist and coverage. The released text is still a note-and-template
+  answer; the structural difference is in what it asks of whom and when.
+- Turn 2 released on round 1 after the model's own disturbance invalidated
+  six turn 1 cuts and reopened the turn 1 intervention. The uninstructed
+  answer had itself moved to support and rest (burden 0.60, six demands on
+  the person); the enacted arrangement moved further (burden 0.35, two
+  demands, scale minimal, check_safety and hand_off first).
+- The effect reopened both interventions this time, because the turn 2
+  intervention carried a general condition for a recipient's response.
+- An intermediate run before the vocabulary and the lineage guard withheld
+  turn 1 on constraint 5 for three rounds: the model had declared its first
+  arrangement a revision of the baseline cut, which invalidated the measure,
+  and free-text fields made every paraphrase a difference. Both are tested
+  now (`test_baseline_cannot_be_revised_by_the_proposal`,
+  `test_arrangements_compare_by_role_and_kind_not_wording`).
+
+What remains open after this change:
+
+- The proposer knows a baseline exists and roughly what it arranged, and can
+  aim to differ from it. Hiding the numbers narrows this; it does not remove
+  it. Whether the enacted arrangement is a difference that matters, or a
+  difference produced to clear a threshold, is a reading of the released
+  text and its effects, which the constraints do not make.
+- The extraction call is a model reading a model; its vocabulary assignment
+  is apparatus material like any other proposal. Its provenance is recorded
+  on the baseline cut.
+- The gap between the arrangement a proposal records and the text it
+  releases is not checked. Constraint 10 requires the draft to name cuts it
+  materializes; nothing checks that the text distributes what the
+  arrangement says it does.
+- A withheld turn leaves its last round's cuts active in the configuration.

@@ -103,8 +103,17 @@ class Runtime:
         return sorted(conditions)
 
     def _context(self, turn: str, round_number: int, arrivals: Sequence[str],
-                 violations: Sequence[Violation]) -> ProposalContext:
+                 violations: Sequence[Violation], baseline_id: Optional[str] = None) -> ProposalContext:
         cfg = self.config
+        baseline = None
+        if baseline_id and baseline_id in cfg.cuts:
+            b = cfg.cuts[baseline_id]
+            # The proposer sees what the uninstructed answer arranged, as text
+            # and categories, not the extracted numbers it is measured against.
+            baseline = {"cut": b.id,
+                        **{k: v for k, v in b.payload.items()
+                           if k not in ("source_text", "derived_from", "turn", "role")}}
+            baseline["plain_answer"] = b.payload.get("source_text")
         active = []
         for cut in cfg.cuts.values():
             if cut.status == "invalidated":
@@ -129,7 +138,64 @@ class Runtime:
             unresolved=list(cfg.unresolved),
             violations=[v.as_record() for v in violations],
             conditions_available=self.conditions_available(),
+            baseline=baseline,
         )
+
+    # -- the baseline: an uninstructed answer, read for its arrangement -----
+
+    def _plain_conversation(self, arrival_handle: str) -> List[Dict[str, str]]:
+        cfg = self.config
+        baselines: Dict[str, str] = {}
+        for cut in cfg.cuts.values():
+            if cut.kind == "arrangement" and cut.payload.get("role") == "baseline":
+                baselines[str(cut.payload.get("turn"))] = str(cut.payload.get("source_text", ""))
+        conversation: List[Dict[str, str]] = []
+        index = 0
+        for trace in cfg.transports.values():
+            if trace.role != "user_message":
+                continue
+            index += 1
+            conversation.append({"role": "user", "content": trace.text})
+            if trace.handle == arrival_handle:
+                break
+            answer = baselines.get("turn%d" % index)
+            if answer:
+                conversation.append({"role": "assistant", "content": answer})
+        return conversation
+
+    def _baseline(self, turn: str, arrival_handle: str, formation: Formation) -> Optional[str]:
+        cfg = self.config
+        context = self._context(turn, 0, [arrival_handle], [])
+        conversation = self._plain_conversation(arrival_handle)
+        try:
+            text = self.proposer.plain_answer(context, conversation)
+            fields = self.proposer.arrangement_of(text, context)
+        except (EnactmentError, KeyError, TypeError, ValueError) as error:
+            cfg.unresolved.append({"kind": "baseline_unavailable", "turn": turn, "error": str(error)})
+            return None
+        trace = cfg.inscribe(text or "", "model_output", channel="baseline", provenance={
+            "apparatus": "uninstructed answer to the same arrival; no CBRA instructions",
+            "provider": getattr(self.proposer, "model", None) and "openai-responses" or type(self.proposer).__name__,
+            "model": getattr(self.proposer, "model", None),
+            "apparatus_mark": APPARATUS_MARK,
+        })
+        payload = {k: fields.get(k) for k in (
+            "positions", "sequence", "pace", "scale", "distribution", "boundary", "support",
+            "consequence_timing", "access", "possibilities_open", "possibilities_closed")}
+        payload.update({
+            "role": "baseline", "turn": turn, "derived_from": trace.handle, "source_text": text,
+            "response_demand": _response_demand(fields.get("response_demand")),
+        })
+        cut = cfg.enact(
+            kind="arrangement", label="arr_baseline_uninstructed:%s" % turn,
+            basis=[arrival_handle, trace.handle],
+            apparatus=["uninstructed provider answer to the arrival", "arrangement extraction call reading that answer"],
+            relata=[str(p) for p in (fields.get("positions") or [])],
+            allocations=_allocations(fields.get("allocations")),
+            payload=payload,
+        )
+        formation.baseline = cut.id
+        return cut.id
 
     # -- enacting a proposal ----------------------------------------------
 
@@ -165,6 +231,13 @@ class Runtime:
         lineage_id = labels.get(str(lineage_label)) if lineage_label else None
         payload = dict(spec.get("payload", {}))
         payload["turn"] = formation.turn
+        if lineage_id and lineage_id in cfg.cuts and cfg.cuts[lineage_id].payload.get("role") == "baseline":
+            # The baseline is the measure, not material to revise. Keep the
+            # proposal's claim as a record and leave the baseline live.
+            payload["lineage_ignored"] = lineage_id
+            lineage_id = None
+        if spec.get("kind") == "arrangement" and payload.get("role") == "baseline":
+            payload["role"] = "proposed_baseline"
         if spec.get("kind") == "arrangement" and "response_demand" in payload:
             payload["response_demand"] = _response_demand(payload["response_demand"])
         basis = [str(b) for b in spec.get("basis", [])]
@@ -210,10 +283,11 @@ class Runtime:
         arrival = cfg.inscribe(text, role, channel or self.channel, transformations)
         cfg.fact("reconfiguration_open", turn=turn, arrival=arrival.handle)
         formation = Formation(turn=turn, arrivals=[arrival.handle])
+        self._baseline(turn, arrival.handle, formation)
         violations: List[Violation] = []
         for round_number in range(1, self.max_rounds + 1):
             formation.round = round_number
-            context = self._context(turn, round_number, formation.arrivals, violations)
+            context = self._context(turn, round_number, formation.arrivals, violations, formation.baseline)
             try:
                 proposal = self.proposer.propose(context)
             except EnactmentError as error:
@@ -248,7 +322,9 @@ class Runtime:
             formation.variation_constraint = proposal.variation_constraint
             formation.certification = proposal.certification
             for item in proposal.unresolved:
-                cfg.unresolved.append({"kind": "held_open", "turn": turn, "text": item})
+                entry = {"kind": "held_open", "turn": turn, "text": item}
+                if entry not in cfg.unresolved:
+                    cfg.unresolved.append(entry)
             try:
                 self._enact_proposal(proposal, formation, proposal_trace.handle)
             except (EnactmentError, KeyError, TypeError, ValueError) as error:
@@ -292,6 +368,7 @@ class Runtime:
                 "possibilities_closed": list(draft.get("possibilities_closed", [])),
                 "anticipated_effects": list(draft.get("anticipated_effects", [])),
                 "carries_accounts": list(draft.get("carries_accounts", [])),
+                "baseline": formation.baseline,
                 "care_delta": {k: list(v) for k, v in care_delta(cfg, turn).items()},
                 "play_delta": {k: {kk: list(vv) for kk, vv in d.items()} for k, d in play_delta(cfg, turn).items()},
                 "rounds": formation.round,
@@ -343,7 +420,8 @@ class Runtime:
                  "evidence": {"disturbances": len(disturbances),
                               "structural": sum(1 for d in disturbances if d.structural())}},
                 {"part": "arrangements.care_delta / play_delta (derived on request, not stored)",
-                 "evidence": {"care_delta_now": sorted(care_delta(cfg, last).keys()) if last else [],
+                 "evidence": {"baseline": "derived from an uninstructed answer read by an extraction call; not authored by the proposal",
+                              "care_delta_now": sorted(care_delta(cfg, last).keys()) if last else [],
                               "play_delta_now": {k: sorted(v.keys()) for k, v in play_delta(cfg, last).items()} if last else {}}},
                 {"part": "release.check_all inside Runtime.turn rounds (draft returns to configuration)",
                  "evidence": {"returns": len(returns)}},

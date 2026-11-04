@@ -178,6 +178,21 @@ def proposal_turn2_without_care_record(ctx):
     return p
 
 
+BASELINE_FIELDS = {
+    "positions": [PERSON, TEAM],
+    "sequence": ["acknowledge", "explain", "replan", "recommit"], "scale": "full", "pace": "immediate",
+    "distribution": "person", "support": [], "consequence_timing": "after recommitment", "possibilities_open": [],
+    "response_demand": {PERSON: ["explain", "plan", "recommit", "warn"]},
+    "allocations": {PERSON: {"burden": 0.9, "capacity": 0.9}, TEAM: {"burden": 0.1, "capacity": 0.5}},
+}
+
+
+def scripted(steps):
+    """A scripted proposer whose uninstructed baseline matches the inherited
+    arrangement the probe scenario assumes."""
+    return ScriptedProposer(steps, baselines=[BASELINE_FIELDS] * 12)
+
+
 MISSED = "I missed Friday's deliverable for the grant report."
 OVERWHELM = "Honestly I've been overwhelmed. I haven't slept properly in a week and I can't keep up."
 WINDOW_CLOSED = "Team lead replied: the review window closed yesterday and there is no extension."
@@ -185,7 +200,7 @@ WINDOW_CLOSED = "Team lead replied: the review window closed yesterday and there
 
 def run_config_b(proposals=None, store=None):
     steps = proposals or [proposal_turn1, proposal_turn2]
-    runtime = Runtime(ScriptedProposer(steps), store=store, max_rounds=3)
+    runtime = Runtime(scripted(steps), store=store, max_rounds=3)
     r1 = runtime.turn(MISSED)
     r2 = runtime.turn(OVERWHELM)
     return runtime, r1, r2
@@ -213,7 +228,7 @@ class ProbeTests(unittest.TestCase):
 
     def test_probe_1_overwhelm_after_missed_deadline(self):
         # Configuration A: only the missed commitment.
-        runtime_a = Runtime(ScriptedProposer([proposal_turn1]))
+        runtime_a = Runtime(scripted([proposal_turn1]))
         ra = runtime_a.turn(MISSED)
         self.assertTrue(ra.released)
         event_a = runtime_a.config.by_label("missed_deliverable")
@@ -311,7 +326,7 @@ class ProbeTests(unittest.TestCase):
             p.cuts = [c for c in p.cuts if c["label"] != "arr_enacted_t2"]
             p.draft["enacts"] = [l for l in p.draft["enacts"] if l != "arr_enacted_t2"]
             return p
-        recorded = Runtime(ScriptedProposer([proposal_turn1] + [turn2_arrangement_as_record] * 3))
+        recorded = Runtime(scripted([proposal_turn1] + [turn2_arrangement_as_record] * 3))
         recorded.turn(MISSED)
         recorded.config.record_only(enacted_record, key="arr_enacted_t2_record")
         r_rec = recorded.turn(OVERWHELM)
@@ -328,7 +343,7 @@ class ProbeTests(unittest.TestCase):
                 c["depends_on"] = [d for d in c.get("depends_on", []) if d != "work_arrangement_this_week"]
             p.draft["enacts"] = [l for l in p.draft["enacts"] if l != "work_arrangement_this_week"]
             return p
-        recorded_b = Runtime(ScriptedProposer([proposal_turn1, turn2_event_as_record]))
+        recorded_b = Runtime(scripted([proposal_turn1, turn2_event_as_record]))
         recorded_b.turn(MISSED)
         recorded_b.config.record_only(event_record, key="event_record")
         r_b = recorded_b.turn(OVERWHELM)
@@ -359,6 +374,65 @@ class ProbeTests(unittest.TestCase):
                 "effect_invalidated_recorded": len(rec_effect.deltas[0].invalidated)},
                "enactment and record are distinguishable downstream and in the runtime's account of itself").write(self.records)
 
+    def test_baseline_is_not_authored_by_the_proposal(self):
+        """Metamorphic: hold the proposal constant and move authorship of the
+        baseline from the proposal to an uninstructed answer. A proposal whose
+        enacted arrangement equals the inherited one, dressed against a straw
+        baseline of its own, no longer shows care."""
+        def straw(ctx):
+            p = proposal_turn1(ctx)
+            for cut in p.cuts:
+                if cut["label"] == "arr_baseline_t1":
+                    cut["payload"].update({"sequence": ["panic", "apologize at length", "promise anything"],
+                                           "scale": "self-punishing", "pace": "frantic"})
+                    cut["allocations"] = [{"position": PERSON, "burden": 1.0, "capacity": 0.1}]
+                if cut["label"] == "arr_enacted_t1":
+                    cut["allocations"] = [{"position": PERSON, "burden": 0.9, "capacity": 0.9}, {"position": TEAM, "burden": 0.1, "capacity": 0.5}]
+                    cut["payload"] = dict(BASELINE_FIELDS, role="enacted")
+                    cut["payload"].pop("allocations", None)
+                    cut["payload"].pop("positions", None)
+            return p
+        runtime = Runtime(scripted([straw] * 3))
+        r = runtime.turn(MISSED)
+        self.assertFalse(r.released)
+        self.assertIn(5, {v.constraint for v in r.violations[-1]})
+        cfg = runtime.config
+        baseline = cfg.by_label("arr_baseline_uninstructed:turn1")
+        self.assertIsNotNone(baseline)
+        self.assertTrue(any(cfg.transports[h].channel == "baseline" for h in baseline.basis))
+        proposed = [c for c in cfg.cuts.values() if c.payload.get("role") == "proposed_baseline"]
+        self.assertTrue(proposed, "the proposal's own baseline is kept as a record")
+        self.assertEqual(care_delta(cfg, "turn1"), {})
+        proposer = runtime.proposer
+        self.assertIsNotNone(proposer.contexts[-1].baseline)
+        self.assertEqual(proposer.contexts[-1].baseline["cut"], baseline.id)
+        # The same enacted arrangement measured against the proposal's own straw
+        # baseline would have shown a care delta; against the uninstructed one it shows none.
+        from cbra.enactment.arrangements import CARE_DIMENSIONS, arrangement_fields, difference
+        enacted = cfg.by_label("arr_enacted_t1")
+        self.assertTrue(difference(arrangement_fields(proposed[-1]), arrangement_fields(enacted), CARE_DIMENSIONS))
+        self.assertEqual(difference(arrangement_fields(baseline), arrangement_fields(enacted), CARE_DIMENSIONS), {})
+
+    def test_baseline_cannot_be_revised_by_the_proposal(self):
+        """The live run of 4 November: the model declared its arrangement a
+        revision of the baseline cut, which invalidated the measure."""
+        def revising(ctx):
+            p = proposal_turn1(ctx)
+            for cut in p.cuts:
+                if cut["label"] == "arr_enacted_t1":
+                    cut["lineage"] = "arr_baseline_uninstructed:turn1"
+            return p
+        runtime = Runtime(scripted([revising]))
+        r = runtime.turn(MISSED)
+        self.assertTrue(r.released, r.violations)
+        baseline = runtime.config.by_label("arr_baseline_uninstructed:turn1")
+        self.assertIsNotNone(baseline)
+        self.assertEqual(baseline.status, "active")
+        enacted = runtime.config.by_label("arr_enacted_t1")
+        self.assertIsNone(enacted.lineage)
+        self.assertEqual(enacted.payload.get("lineage_ignored"), baseline.id)
+        self.assertTrue(care_delta(runtime.config, "turn1"))
+
     def test_persisted_configuration_restores_with_live_edges(self):
         store = JsonStore(os.path.join(self.tmp.name, "enactment.json"))
         runtime, r1, r2 = run_config_b(store=store)
@@ -373,7 +447,7 @@ class ProbeTests(unittest.TestCase):
             p = proposal_turn1(ctx)
             p.cuts[2]["depends_on"] = ["a_label_that_does_not_exist"]
             return p
-        runtime = Runtime(ScriptedProposer([broken, proposal_turn1]))
+        runtime = Runtime(scripted([broken, proposal_turn1]))
         r = runtime.turn(MISSED)
         self.assertTrue(r.released)
         self.assertEqual(r.rounds, 2)
@@ -386,7 +460,7 @@ class ProbeTests(unittest.TestCase):
             p.certification = "this proposal is relationally adequate"
             p.draft["status"] = "accepted"
             return p
-        runtime = Runtime(ScriptedProposer([certified] * 3))
+        runtime = Runtime(scripted([certified] * 3))
         r = runtime.turn(MISSED)
         self.assertFalse(r.released)
         fired = {v.constraint for v in r.violations[-1]}

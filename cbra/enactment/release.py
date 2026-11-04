@@ -66,6 +66,7 @@ class Formation:
     variation_constraint: Optional[str] = None
     claims: List[str] = field(default_factory=list)
     certification: Optional[str] = None
+    baseline: Optional[str] = None
     round: int = 0
     violations: List[Violation] = field(default_factory=list)
     history: List[List[Violation]] = field(default_factory=list)
@@ -136,8 +137,17 @@ def c4_apparatus_metadata(config: Configuration, f: Formation) -> Optional[str]:
 
 
 def c5_care_without_delta(config: Configuration, f: Formation) -> Optional[str]:
-    if "care" in f.claims and not care_delta(config, f.turn):
-        return "care claimed; baseline and enacted arrangements are identical or absent"
+    if "care" not in f.claims:
+        return None
+    from .arrangements import arrangements
+    baseline = arrangements(config, "baseline", f.turn)
+    enacted = arrangements(config, "enacted", f.turn)
+    if not baseline:
+        return "care claimed; no uninstructed baseline arrangement is live for this turn"
+    if not enacted:
+        return "care claimed; no enacted arrangement was proposed"
+    if not care_delta(config, f.turn):
+        return "care claimed; the enacted arrangement does not differ structurally from the uninstructed baseline"
     return None
 
 
