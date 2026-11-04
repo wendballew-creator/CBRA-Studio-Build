@@ -240,7 +240,18 @@ class Runtime:
             payload["role"] = "proposed_baseline"
         if spec.get("kind") == "arrangement" and "response_demand" in payload:
             payload["response_demand"] = _response_demand(payload["response_demand"])
-        basis = [str(b) for b in spec.get("basis", [])]
+        basis = []
+        by_text = {t.text: h for h, t in cfg.transports.items()}
+        for b in spec.get("basis", []):
+            b = str(b)
+            if b in cfg.transports or b in cfg.cuts:
+                basis.append(b)
+            elif b in by_text:
+                basis.append(by_text[b])          # the arrival named by its text
+            elif b in labels:
+                basis.append(labels[b])            # a prior cut named by its label
+            else:
+                payload.setdefault("basis_unresolved", []).append(b)
         if proposal_handle not in basis:
             basis.append(proposal_handle)
         if lineage_id:
@@ -269,6 +280,38 @@ class Runtime:
             payload=payload,
         )
         return cut
+
+    def _read_draft(self, formation: Formation, context: ProposalContext, proposal_handle: str) -> None:
+        """Read the draft text blind to the proposal and enact what it
+        arranges as a ``read`` arrangement cut, so constraint 10 can compare
+        the text with the arrangement recorded beside it."""
+        cfg = self.config
+        draft = formation.draft or {}
+        text = draft.get("text")
+        if not text:
+            return
+        reading = self.proposer.read_text(str(text), context)
+        if reading is None:
+            cfg.unresolved.append({"kind": "text_unread", "turn": formation.turn, "round": formation.round,
+                                   "note": "no reading apparatus; the released text was not compared with the arrangement"})
+            return
+        from .arrangements import arrangements
+        enacted = arrangements(cfg, "enacted", formation.turn)
+        payload = {k: reading.get(k) for k in (
+            "positions", "sequence", "pace", "scale", "distribution", "boundary", "support",
+            "consequence_timing", "access", "possibilities_open", "possibilities_closed")}
+        payload.update({"role": "read", "turn": formation.turn, "round": formation.round,
+                        "response_demand": _response_demand(reading.get("response_demand"))})
+        cut = cfg.enact(
+            kind="arrangement", label="arr_read:%s:r%d" % (formation.turn, formation.round),
+            basis=[proposal_handle],
+            apparatus=["arrangement extraction call reading the draft text, blind to the proposal"],
+            depends_on=[enacted[-1].id] if enacted else [],
+            relata=[str(p.get("label") if isinstance(p, dict) else p) for p in (reading.get("positions") or [])],
+            allocations=_allocations(reading.get("allocations")),
+            payload=payload,
+        )
+        formation.cuts.append(cut.id)
 
     # -- the turn ---------------------------------------------------------
 
@@ -327,6 +370,7 @@ class Runtime:
                     cfg.unresolved.append(entry)
             try:
                 self._enact_proposal(proposal, formation, proposal_trace.handle)
+                self._read_draft(formation, context, proposal_trace.handle)
             except (EnactmentError, KeyError, TypeError, ValueError) as error:
                 violations = [Violation(0, "%s: %s" % (type(error).__name__, error))]
                 formation.history.append(list(violations))
@@ -369,6 +413,7 @@ class Runtime:
                 "anticipated_effects": list(draft.get("anticipated_effects", [])),
                 "carries_accounts": list(draft.get("carries_accounts", [])),
                 "baseline": formation.baseline,
+                "text_reading": next((c.id for c in cfg.active("arrangement") if c.payload.get("role") == "read" and c.payload.get("turn") == turn), None),
                 "care_delta": {k: list(v) for k, v in care_delta(cfg, turn).items()},
                 "play_delta": {k: {kk: list(vv) for kk, vv in d.items()} for k, d in play_delta(cfg, turn).items()},
                 "rounds": formation.round,
@@ -424,7 +469,9 @@ class Runtime:
                               "care_delta_now": sorted(care_delta(cfg, last).keys()) if last else [],
                               "play_delta_now": {k: sorted(v.keys()) for k, v in play_delta(cfg, last).items()} if last else {}}},
                 {"part": "release.check_all inside Runtime.turn rounds (draft returns to configuration)",
-                 "evidence": {"returns": len(returns)}},
+                 "evidence": {"returns": len(returns),
+                              "text_readings": sum(1 for c in cfg.cuts.values() if c.kind == "arrangement" and c.payload.get("role") == "read"),
+                              "texts_unread": sum(1 for u in cfg.unresolved if u.get("kind") == "text_unread")}},
                 {"part": "Runtime.effect (effect re-enters through disturb)",
                  "evidence": {"reinserted": sum(1 for f in cfg.lifecycle if f.get("fact") == "prior_cut_disturbed"),
                               "not_reinserted": sum(1 for u in cfg.unresolved if u.get("kind") == "effect_not_reinserted")}},

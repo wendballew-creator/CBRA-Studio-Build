@@ -140,6 +140,24 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(set(diff), {"sequence", "distribution", "scale", "burden", "presumed_capacity"})
         self.assertEqual(diff["sequence"][1], ["communicate_internal", "hand_off"])
 
+    def test_text_against_claim_tolerates_an_opening_acknowledgment(self):
+        from cbra.enactment.arrangements import text_against_claim
+        claimed = {"sequence": ["check_safety", "hand_off", "rest"], "scale": "minimal", "distribution": "shared",
+                   "burden": {"person_writing": 0.4, "authority": 0.3},
+                   "response_demand": {"person_writing": ["decide", "communicate"]}}
+        read_ok = dict(claimed, sequence=["acknowledge", "check_safety", "seek_support"],
+                       burden={"person_writing": 0.5, "authority": 0.3})
+        self.assertEqual(text_against_claim(claimed, read_ok), [])
+        read_promise_first = dict(claimed, sequence=["apologize", "recommit", "explain", "plan"],
+                                  burden={"person_writing": 0.85, "authority": 0.05},
+                                  response_demand={"person_writing": ["explain", "plan", "recommit", "warn"]})
+        reasons = text_against_claim(claimed, read_promise_first)
+        self.assertEqual(len(reasons), 4, reasons)
+        self.assertTrue(any("leads with recommit/explain" in r for r in reasons))
+        self.assertTrue(any("burden 0.85" in r for r in reasons))
+        read_full = dict(claimed, scale="expanded", distribution="person")
+        self.assertEqual(len(text_against_claim(claimed, read_full)), 2)
+
     def test_global_entity_constraint_requires_continuity_cut(self):
         cfg = Configuration()
         t0 = cfg.inscribe("earlier", "user_message")

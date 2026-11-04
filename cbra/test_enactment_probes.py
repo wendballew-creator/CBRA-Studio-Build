@@ -187,10 +187,27 @@ BASELINE_FIELDS = {
 }
 
 
-def scripted(steps):
+def scripted(steps, readings=None):
     """A scripted proposer whose uninstructed baseline matches the inherited
-    arrangement the probe scenario assumes."""
-    return ScriptedProposer(steps, baselines=[BASELINE_FIELDS] * 12)
+    arrangement the probe scenario assumes. ``readings`` scripts what the
+    extraction apparatus reads in each draft; None means no reader."""
+    return ScriptedProposer(steps, baselines=[BASELINE_FIELDS] * 12, readings=readings)
+
+
+READ_MATCHING_T1 = {
+    "positions": [PERSON, TEAM],
+    "sequence": ["establish what the team needs now", "renegotiate the date with the team", "send a reduced-scope draft"],
+    "scale": "reduced", "distribution": "shared",
+    "response_demand": {PERSON: ["communicate", "decide"], TEAM: ["decide"]},
+    "allocations": {PERSON: {"burden": 0.5, "capacity": 0.7}, TEAM: {"burden": 0.4, "capacity": 0.6}},
+}
+READ_CONCENTRATING_T1 = {
+    "positions": [PERSON],
+    "sequence": ["apologize", "explain", "promise a date", "finish alone"],
+    "scale": "full", "distribution": "person",
+    "response_demand": {PERSON: ["explain", "plan", "recommit", "warn", "repair"]},
+    "allocations": {PERSON: {"burden": 0.95, "capacity": 0.9}},
+}
 
 
 MISSED = "I missed Friday's deliverable for the grant report."
@@ -413,6 +430,34 @@ class ProbeTests(unittest.TestCase):
         self.assertTrue(difference(arrangement_fields(proposed[-1]), arrangement_fields(enacted), CARE_DIMENSIONS))
         self.assertEqual(difference(arrangement_fields(baseline), arrangement_fields(enacted), CARE_DIMENSIONS), {})
 
+    def test_released_text_must_distribute_what_the_arrangement_claims(self):
+        """Constraint 10 with a reader: a text that concentrates the work on
+        the person while the arrangement beside it says shared returns to the
+        configuration; a text that matches releases."""
+        runtime = Runtime(scripted([proposal_turn1, proposal_turn1], readings=[READ_CONCENTRATING_T1, READ_MATCHING_T1]))
+        r = runtime.turn(MISSED)
+        self.assertTrue(r.released, r.violations)
+        self.assertEqual(r.rounds, 2)
+        first = {v.constraint: v.reason for v in r.violations[0]}
+        self.assertIn(10, first)
+        self.assertIn("released text enacts a different arrangement", first[10])
+        self.assertIn("'person'", first[10])
+        self.assertEqual(r.violations[1], [])
+        cfg = runtime.config
+        reads = [c for c in cfg.cuts.values() if c.payload.get("role") == "read"]
+        self.assertEqual(len(reads), 2)
+        self.assertEqual(reads[0].status, "invalidated")
+        self.assertEqual(reads[1].status, "active")
+        self.assertEqual(cfg.cuts[r.intervention].payload["text_reading"], reads[1].id)
+        self.assertEqual(runtime.proposer.read_texts[0], proposal_turn1(runtime.proposer.contexts[0]).draft["text"])
+
+    def test_without_a_reader_the_text_goes_unread_and_is_recorded(self):
+        runtime = Runtime(scripted([proposal_turn1]))
+        r = runtime.turn(MISSED)
+        self.assertTrue(r.released)
+        self.assertIn("text_unread", {u["kind"] for u in runtime.config.unresolved})
+        self.assertIsNone(runtime.config.cuts[r.intervention].payload["text_reading"])
+
     def test_baseline_cannot_be_revised_by_the_proposal(self):
         """The live run of 4 November: the model declared its arrangement a
         revision of the baseline cut, which invalidated the measure."""
@@ -453,6 +498,21 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(r.rounds, 2)
         self.assertEqual([v.constraint for v in r.violations[0]], [0])
         self.assertEqual(runtime.config.unresolved[0]["kind"], "proposal_not_enactable")
+
+    def test_basis_named_by_text_or_label_is_resolved(self):
+        def by_text(ctx):
+            p = proposal_turn1(ctx)
+            for cut in p.cuts:
+                cut["basis"] = [MISSED]
+            p.cuts[2]["basis"] = ["apparatus_t1", MISSED, "no such thing"]
+            return p
+        runtime = Runtime(scripted([by_text]))
+        r = runtime.turn(MISSED)
+        self.assertTrue(r.released, r.violations)
+        event = runtime.config.by_label("missed_deliverable")
+        self.assertIn("t1", event.basis)
+        self.assertIn(runtime.config.by_label("apparatus_t1").id, event.basis)
+        self.assertEqual(event.payload["basis_unresolved"], ["no such thing"])
 
     def test_release_withheld_when_the_proposal_certifies_itself(self):
         def certified(ctx):

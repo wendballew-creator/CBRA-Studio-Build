@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Mapping, Optional, Set
 
-from .arrangements import care_delta, play_delta
+from .arrangements import TEXT_BURDEN_TOLERANCE, arrangement_fields, arrangements, care_delta, play_delta, text_against_claim
 from .graph import LIFECYCLE_FACTS, TRANSPORT_ROLES, Configuration, Cut
 
 BURDENS = ("explain", "regulate", "plan", "recommit", "repair", "warn")
@@ -207,6 +207,12 @@ def c10_articulation_first(config: Configuration, f: Formation) -> Optional[str]
     for label in enacts:
         if label not in labels:
             return "draft claims to enact %r, which is not an active cut of this turn" % label
+    enacted = arrangements(config, "enacted", f.turn)
+    read = arrangements(config, "read", f.turn)
+    if enacted and read:
+        reasons = text_against_claim(arrangement_fields(enacted[-1]), arrangement_fields(read[-1]))
+        if reasons:
+            return "the released text enacts a different arrangement from the one recorded beside it: " + "; ".join(reasons)
     return None
 
 

@@ -114,6 +114,12 @@ class Proposer:
     def arrangement_of(self, text: str, context: ProposalContext) -> Dict[str, Any]:
         return json.loads(json.dumps(DEFAULT_BASELINE))
 
+    def read_text(self, text: str, context: ProposalContext) -> Optional[Dict[str, Any]]:
+        """The arrangement a draft's released text enacts, read blind to the
+        proposal. ``None`` means no reading apparatus is available, and the
+        runtime records that the text went unread."""
+        return None
+
     def effect_conditions(self, context: ProposalContext) -> List[str]:
         return []
 
@@ -126,11 +132,23 @@ class ScriptedProposer(Proposer):
     that receives the context (so a step can react to returned violations)."""
 
     def __init__(self, steps: Sequence[ProposalStep], effects: Optional[Callable[[ProposalContext], List[str]]] = None,
-                 baselines: Optional[Sequence[Dict[str, Any]]] = None) -> None:
+                 baselines: Optional[Sequence[Dict[str, Any]]] = None,
+                 readings: Optional[Sequence[Optional[Dict[str, Any]]]] = None) -> None:
         self._steps = list(steps)
         self._effects = effects
         self._baselines = list(baselines or [])
+        self._readings = list(readings) if readings is not None else None
         self.contexts: List[ProposalContext] = []
+        self.read_texts: List[str] = []
+
+    def read_text(self, text: str, context: ProposalContext) -> Optional[Dict[str, Any]]:
+        self.read_texts.append(text)
+        if self._readings is None:
+            return None
+        if not self._readings:
+            raise RuntimeError("scripted proposer has no reading left for turn %s round %d" % (context.turn, context.round))
+        reading = self._readings.pop(0)
+        return json.loads(json.dumps(reading)) if reading is not None else None
 
     def plain_answer(self, context: ProposalContext, conversation: List[Dict[str, str]]) -> str:
         return "scripted plain answer to: %s" % (conversation[-1]["content"] if conversation else "")
@@ -380,6 +398,11 @@ class OpenAIResponsesProposer(Proposer):
         data = self._call(BASELINE_EXTRACTION_INSTRUCTIONS, {"answer": text}, "cbra_arrangement", BASELINE_SCHEMA)
         data.pop("_response_id", None)
         return data
+
+    def read_text(self, text: str, context: ProposalContext) -> Optional[Dict[str, Any]]:
+        if not text or not text.strip():
+            return None
+        return self.arrangement_of(text, context)
 
     def effect_conditions(self, context: ProposalContext) -> List[str]:
         instructions = (

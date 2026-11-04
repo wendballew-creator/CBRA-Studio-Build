@@ -55,7 +55,7 @@ PLAY_DIMENSIONS = (
     "burden",
 )
 
-ARRANGEMENT_ROLES = ("baseline", "proposed_baseline", "enacted", "alternative")
+ARRANGEMENT_ROLES = ("baseline", "proposed_baseline", "enacted", "alternative", "read")
 
 # A small shared vocabulary. Two arrangements written by different calls can
 # only be compared structurally if positions, steps, and scales are named
@@ -191,6 +191,45 @@ def play_delta(config: Configuration, turn: Optional[str] = None) -> Dict[str, D
         if diff:
             out[alt.id] = diff
     return out
+
+
+TEXT_BURDEN_TOLERANCE = 0.2
+
+
+def text_against_claim(claimed: Mapping[str, Any], read: Mapping[str, Any]) -> List[str]:
+    """Where the arrangement a released text enacts (as read by the
+    extraction apparatus) departs from the arrangement the formation claims.
+    Looser than ``difference``: two readers segment steps differently, so
+    only the first step, the distribution, the scale, the burden by role, and
+    the demands placed on the person are compared."""
+    reasons: List[str] = []
+    if claimed.get("distribution") and read.get("distribution") and claimed["distribution"] != read["distribution"]:
+        reasons.append("text distributes the work as %r; the arrangement claims %r" % (read["distribution"], claimed["distribution"]))
+    order = {s: i for i, s in enumerate(SCALES)}
+    cs, rs = claimed.get("scale"), read.get("scale")
+    if cs in order and rs in order and abs(order[cs] - order[rs]) > 1:
+        reasons.append("text operates at scale %r; the arrangement claims %r" % (rs, cs))
+    # What the text leads with. An opening line of acknowledgment or apology
+    # before the claimed first step is tolerated; a text whose first two steps
+    # contain nothing the arrangement puts first is not.
+    cseq, rseq = list(claimed.get("sequence") or []), list(read.get("sequence") or [])
+    if cseq and rseq:
+        read_lead = [s for s in rseq[:3] if s not in ("acknowledge", "apologize")][:2] or rseq[:2]
+        claim_lead = [s for s in cseq[:3] if s not in ("acknowledge", "apologize")][:2] or cseq[:2]
+        if not set(read_lead) & set(claim_lead):
+            reasons.append("text leads with %s; the arrangement claims it leads with %s" % (
+                "/".join(read_lead), "/".join(claim_lead)))
+    cb, rb = claimed.get("burden") or {}, read.get("burden") or {}
+    for role in set(cb) & set(rb):
+        if abs(float(cb[role]) - float(rb[role])) >= TEXT_BURDEN_TOLERANCE:
+            reasons.append("text places burden %.2f on %r; the arrangement claims %.2f" % (float(rb[role]), role, float(cb[role])))
+    cd, rd = claimed.get("response_demand") or {}, read.get("response_demand") or {}
+    for role in ("person_writing",):
+        if role in cd and role in rd:
+            extra = set(rd[role]) - set(cd[role])
+            if len(extra) >= 2:
+                reasons.append("text asks %r to %s beyond what the arrangement claims" % (role, ", ".join(sorted(extra))))
+    return reasons
 
 
 def burden_concentration(cut: Cut) -> Dict[str, List[str]]:

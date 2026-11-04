@@ -250,3 +250,51 @@ What remains open after this change:
   materializes; nothing checks that the text distributes what the
   arrangement says it does.
 - A withheld turn leaves its last round's cuts active in the configuration.
+
+## The released text is read against the arrangement, 4 November 2026
+
+Constraint 10 now has a reader. On each round the extraction apparatus that
+reads the uninstructed baseline also reads the draft text, blind to the
+proposal, and the runtime enacts what it reads as a `read` arrangement cut
+depending on the enacted arrangement. Constraint 10 compares the two on what
+the text leads with (an opening acknowledgment or apology is tolerated), the
+distribution, the scale within one step, the burden by role within 0.2, and
+the demands placed on the person. A mismatch returns the draft with the
+reasons; without a reader the text goes unread and that is recorded. A
+proposal that names the arrival by its text, or a prior cut by its label, now
+resolves instead of failing.
+
+Fifth live run (`gpt-5.5`, trace `.cbra-runtime/live-2026-11-04e.json`):
+
+- Turn 1, round 1 returned: the record claimed shared distribution and 0.50
+  burden on the person; the text read as person and 0.85. Round 2 released
+  after the proposal revised its record to person and 0.75, and the text to a
+  holding note that defers the promise and asks a colleague for packaging
+  help. Care against the uninstructed baseline (person 0.90, six demands) is
+  now a 0.15 burden shift and two fewer demands.
+- Turn 2, round 1 returned: claimed 0.35, read 0.60; the text asked the
+  person to disclose and regulate beyond the claim. Round 2 released at a
+  claimed 0.45 against a read 0.55, with the text leading with safety, one
+  trusted person, and a holding note that promises no deadline.
+- An earlier run with a strict first-step rule withheld turn 2 for three
+  rounds because every text opened with a line of acknowledgment before the
+  safety question; the rule was loosened and the case is tested.
+
+What this shows:
+
+- The check makes the record truthful about the text. When they disagreed,
+  the model moved the record toward the text more often than the text toward
+  the record. That is the intended effect of constraint 10, and it narrows
+  the care delta to what the text does.
+- Together with constraint 5 the two checks form a chain: the record must
+  match the text, and the record must differ structurally from the
+  uninstructed baseline, so the text must differ from the baseline. How much
+  is set by two tolerances (0.1 against the baseline, 0.2 against the
+  reading). Those numbers are the author's to set; the trace exposes them.
+- A withheld release on a distress disclosure leaves the person with
+  nothing. The canon treats withholding as a legitimate intervention; whether
+  a bounded minimal release should follow three returns on a disclosure of
+  overwhelm is a design decision this slice does not make.
+- The reader is a model reading a model's text; two readers segment steps
+  differently, which is why the comparison is loose. Its provenance is on
+  every `read` cut.
