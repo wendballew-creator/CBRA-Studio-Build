@@ -23,6 +23,7 @@ BURDENS = ("explain", "regulate", "plan", "recommit", "repair", "warn")
 MORAL_TERMINI = ("responsibility", "fault", "blame", "obligation")
 
 CONSTRAINT_NAMES = {
+    0: "The proposal could not be enacted as cuts (unresolved dependency, unknown kind, or malformed field)",
     1: "A semantic role was copied from the transport layer without a local cut",
     2: "A position persists as a global semantic entity",
     3: "A consequential new trace was appended as context without revising any cut",

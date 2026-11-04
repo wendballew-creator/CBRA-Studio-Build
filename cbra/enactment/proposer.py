@@ -22,7 +22,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 
-from .graph import APPARATUS_MARK
+from .graph import APPARATUS_MARK, EnactmentError
 
 
 @dataclass
@@ -216,7 +216,7 @@ class OpenAIResponsesProposer(Proposer):
     already uses. Not exercised by the test suite; live use records provider,
     model, instruction digest, and response id as provenance."""
 
-    def __init__(self, model: Optional[str] = None, client: Any = None, max_output_tokens: int = 4000) -> None:
+    def __init__(self, model: Optional[str] = None, client: Any = None, max_output_tokens: int = 24000) -> None:
         self.model = model or os.environ.get("CBRA_OPENAI_MODEL") or "gpt-5"
         self.max_output_tokens = max_output_tokens
         self._client = client
@@ -236,7 +236,15 @@ class OpenAIResponsesProposer(Proposer):
             text={"format": {"type": "json_schema", "name": schema_name, "schema": schema, "strict": False}},
         )
         text = getattr(response, "output_text", None) or ""
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as error:
+            status = getattr(response, "status", None)
+            reason = getattr(getattr(response, "incomplete_details", None), "reason", None)
+            raise EnactmentError(
+                "proposal not parseable as JSON (%d chars, status=%s, incomplete=%s): %s"
+                % (len(text), status, reason, error)
+            )
         data["_response_id"] = getattr(response, "id", None)
         return data
 

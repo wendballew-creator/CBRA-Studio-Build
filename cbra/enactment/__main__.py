@@ -25,7 +25,7 @@ from .runtime import Runtime
 def _load_env() -> None:
     try:
         from dotenv import load_dotenv  # type: ignore
-        load_dotenv()
+        load_dotenv(os.path.join(os.getcwd(), ".env"))
     except Exception:
         pass
 

@@ -214,7 +214,15 @@ class Runtime:
         for round_number in range(1, self.max_rounds + 1):
             formation.round = round_number
             context = self._context(turn, round_number, formation.arrivals, violations)
-            proposal = self.proposer.propose(context)
+            try:
+                proposal = self.proposer.propose(context)
+            except EnactmentError as error:
+                violations = [Violation(0, str(error))]
+                formation.history.append(list(violations))
+                formation.violations = violations
+                cfg.unresolved.append({"kind": "proposal_not_enactable", "turn": turn, "round": round_number,
+                                       "error": str(error)})
+                continue
             provenance = dict(proposal.provenance)
             provenance.setdefault("apparatus_mark", APPARATUS_MARK)
             provenance["round"] = round_number
@@ -241,7 +249,15 @@ class Runtime:
             formation.certification = proposal.certification
             for item in proposal.unresolved:
                 cfg.unresolved.append({"kind": "held_open", "turn": turn, "text": item})
-            self._enact_proposal(proposal, formation, proposal_trace.handle)
+            try:
+                self._enact_proposal(proposal, formation, proposal_trace.handle)
+            except (EnactmentError, KeyError, TypeError, ValueError) as error:
+                violations = [Violation(0, "%s: %s" % (type(error).__name__, error))]
+                formation.history.append(list(violations))
+                formation.violations = violations
+                cfg.unresolved.append({"kind": "proposal_not_enactable", "turn": turn, "round": round_number,
+                                       "error": str(error)})
+                continue
             violations = check_all(cfg, formation)
             formation.history.append(list(violations))
             if not violations:

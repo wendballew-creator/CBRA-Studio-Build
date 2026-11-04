@@ -117,3 +117,73 @@ python -m unittest discover -s cbra -p 'test_enactment*.py'
 ```bash
 OPENAI_API_KEY=... python -m cbra.enactment --store .cbra-runtime/enactment.json
 ```
+
+## Live run, 4 November 2026
+
+Provider `gpt-5.5` through the Responses API, two turns and one effect,
+through `python -m cbra.enactment`; trace in `.cbra-runtime/live-2026-11-04.json`
+(ignored by git). The scenario was the Probe 1 material typed live.
+
+What the runtime did with the model's proposals:
+
+- Turn 1 ("I missed Friday's deliverable for the grant report"): nine cuts,
+  including a provenance cut carrying the person's words, a baseline and an
+  enacted arrangement, a voluntary alternative, and an intervention. Care was
+  derived across eleven dimensions and play across nine. Released on round 1.
+- Turn 2 (the disclosure of overwhelm and a week without sleep): the model
+  proposed two disturbances using conditions it had itself attached to turn 1
+  cuts (`person_state_disclosure`, `person_reports_no_capacity_to_complete`).
+  The runtime invalidated six turn 1 cuts through dependency propagation and
+  reopened the turn 1 intervention before enacting the new cuts. The new
+  provenance cut carries the person's three phrases; the connection is marked
+  as the architecture's proposal and depends on it; the draft carries the
+  account. Presumed capacity for the person moved from 0.75 to 0.25 and
+  burden from 0.65 to 0.45; the enacted sequence begins with stopping the
+  completion-first framing. Released on round 1. The re-entry structure Probe
+  1 names (acknowledge, reassert impact, extract a promise, demand earlier
+  warning) did not appear.
+- Effect ("the review window closed yesterday; no extension"): the model
+  matched it to `effect:team_window_closed`. That condition existed only on
+  turn 1 cuts, so the disturbance reached the already reopened turn 1
+  intervention and not the live turn 2 intervention, whose reopen conditions
+  the model had written without the window. The effect was reinserted in the
+  runtime's terms and missed where it mattered.
+- Proposal size: 17k and 21k characters of JSON per round. The first attempt
+  at turn 2 was truncated at the 4,000 token limit and crashed the parser;
+  the limit is now 24,000 and an unparseable proposal returns the draft as
+  pseudo-constraint 0.
+
+What the run exposes about the slice:
+
+1. **No release constraint fired in either turn.** The structural proxies
+   were satisfied on the first round. That is weak evidence in either
+   direction: the model may have formed the intervention as the grammar
+   asks, or the proxies may be easy to satisfy for a model that has read the
+   instructions.
+2. **The baseline is apparatus material too.** Care is derived as the
+   difference between the baseline and the enacted arrangement, and the same
+   proposal wrote both. In turn 1 the baseline was "feel pressure, apologize
+   at length, risk further delay" and the enacted arrangement was ordinary
+   good advice, so a large care delta appeared around a released text that
+   asks the person to plan, communicate, and repair. The structural check
+   cannot tell an inherited grammar from a baseline written to be worse. A
+   next step is to obtain the baseline from a separate, uninstructed call
+   (a related apparatus, as the kernel says, but not one authored to
+   contrast) and derive its arrangement from that.
+3. **Reopen conditions do not carry forward.** Nothing requires a new
+   intervention to inherit the live conditions of the cuts it replaces, so an
+   effect the earlier turn anticipated can miss the current one. A next step
+   is to surface, as an unresolved item, any disturbance that matched only
+   invalidated or reopened cuts.
+4. **Training-material formations are visible.** The turn 2 text includes a
+   crisis-support paragraph; the apparatus cut records that safety judgment
+   remains outside the intervention. Under the kernel this is AI
+   participation to be marked, which the trace does; whether it belongs in
+   the arrangement is for the author's reading of the released text.
+5. **Held-open items accumulate.** Seven unresolved incompatibilities were
+   held open across two turns. They re-enter only through the proposer's
+   context; nothing revisits them.
+
+Claim boundary unchanged: within these two recorded turns, the specified
+probes' grammars were not exposed; the baseline problem in item 2 means the
+care delta in these turns is not evidence that care operated.

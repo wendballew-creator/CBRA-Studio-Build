@@ -368,6 +368,18 @@ class ProbeTests(unittest.TestCase):
         result = restored.effect(WINDOW_CLOSED, conditions=["effect:team_window_closed"])
         self.assertIn(r2.intervention, result.reopened)
 
+    def test_unenactable_proposal_returns_the_draft_instead_of_crashing(self):
+        def broken(ctx):
+            p = proposal_turn1(ctx)
+            p.cuts[2]["depends_on"] = ["a_label_that_does_not_exist"]
+            return p
+        runtime = Runtime(ScriptedProposer([broken, proposal_turn1]))
+        r = runtime.turn(MISSED)
+        self.assertTrue(r.released)
+        self.assertEqual(r.rounds, 2)
+        self.assertEqual([v.constraint for v in r.violations[0]], [0])
+        self.assertEqual(runtime.config.unresolved[0]["kind"], "proposal_not_enactable")
+
     def test_release_withheld_when_the_proposal_certifies_itself(self):
         def certified(ctx):
             p = proposal_turn1(ctx)
