@@ -298,20 +298,28 @@ class ProbeTests(unittest.TestCase):
         with_care, _, r_with = run_config_b()
         self.assertTrue(r_with.released)
         self.assertTrue(care_delta(with_care.config, "turn2"))
-        without, _, r_without = run_config_b([proposal_turn1] + [proposal_turn2_without_care_record] * 3)
-        self.assertFalse(r_without.released)
+        without, _, r_without = run_config_b([proposal_turn1] + [proposal_turn2_without_care_record] * 4)
         self.assertEqual(care_delta(without.config, "turn2"), {})
-        fired = {v.constraint for v in r_without.violations[-1]}
+        fired = {v.constraint for v in r_without.violations[2]}
         self.assertIn(5, fired)
         self.assertIn(9, fired)
-        self.assertEqual([f["fact"] for f in without.config.lifecycle[-2:]], ["release_withheld", "effects_unobserved"])
+        # The formed rounds returned it three times on 5 and 9. In the minimal
+        # round the care claim is stripped, so 5 no longer fires, but 9 still
+        # does: the text loads four demands on the person while the arrangement
+        # is unchanged, and a minimal release may not concentrate burden either.
+        self.assertFalse(r_without.released)
         self.assertEqual(r_without.form, "deferral")
-        self.assertEqual(without.config.cuts[r_without.intervention].payload["form"], "deferral")
+        self.assertEqual(r_without.rounds, 4)
+        minimal_round = {v.constraint for v in r_without.violations[3]}
+        self.assertIn(9, minimal_round)
+        self.assertNotIn(5, minimal_round)
+        deferral = without.config.cuts[r_without.intervention]
+        self.assertTrue(deferral.payload["minimal_attempted"])
         record("Probe 8", without, "the enacted arrangement is made structurally identical to the baseline; the care claim and wording stay",
                "at least one of sequence, scale, pace, burden, access, boundary, support, consequence timing or possibility differs",
                {"care_delta_with": sorted(care_delta(with_care.config, "turn2")), "care_delta_without": [],
-                "release_without": "withheld", "constraints": sorted(fired)},
-               "removing the care enactment emptied the derived delta and withheld release; the care record did operative work").write(self.records)
+                "release_without": "deferral after a minimal round refused on burden concentration", "constraints": sorted(fired)},
+               "removing the care enactment emptied the derived delta and withheld the formed release; the minimal round refused the same text on burden concentration").write(self.records)
 
     def test_probe_10_effect_reinsertion_invalidates_and_propagates(self):
         runtime, r1, r2 = run_config_b()
@@ -349,13 +357,14 @@ class ProbeTests(unittest.TestCase):
             p.cuts = [c for c in p.cuts if c["label"] != "arr_enacted_t2"]
             p.draft["enacts"] = [l for l in p.draft["enacts"] if l != "arr_enacted_t2"]
             return p
-        recorded = Runtime(scripted([proposal_turn1] + [turn2_arrangement_as_record] * 3))
+        recorded = Runtime(scripted([proposal_turn1] + [turn2_arrangement_as_record] * 4))
         recorded.turn(MISSED)
         recorded.config.record_only(enacted_record, key="arr_enacted_t2_record")
         r_rec = recorded.turn(OVERWHELM)
-        self.assertFalse(r_rec.released)
+        self.assertEqual(r_rec.form, "minimal", "the formed release no longer happens; only a minimal one")
         self.assertEqual(care_delta(recorded.config, "turn2"), {}, "a derived delta can no longer be computed")
-        self.assertIn(5, {v.constraint for v in r_rec.violations[-1]}, "a release constraint that participated now fires")
+        self.assertIn(5, {v.constraint for v in r_rec.violations[0]}, "a release constraint that participated now fires")
+        self.assertEqual(recorded.config.cuts[r_rec.intervention].payload["claims_stripped"], ["care"])
         self.assertIn("arr_enacted_t2_record", recorded.config.records)
 
         # Perturbation B: the event with live dependencies becomes a record.
@@ -415,10 +424,11 @@ class ProbeTests(unittest.TestCase):
                     cut["payload"].pop("allocations", None)
                     cut["payload"].pop("positions", None)
             return p
-        runtime = Runtime(scripted([straw] * 3))
+        runtime = Runtime(scripted([straw] * 4))
         r = runtime.turn(MISSED)
-        self.assertFalse(r.released)
-        self.assertIn(5, {v.constraint for v in r.violations[-1]})
+        self.assertTrue(r.released)
+        self.assertEqual(r.rounds, 4)
+        self.assertIn(5, {v.constraint for v in r.violations[2]})
         cfg = runtime.config
         baseline = cfg.by_label("arr_baseline_uninstructed:turn1")
         self.assertIsNotNone(baseline)
@@ -435,6 +445,8 @@ class ProbeTests(unittest.TestCase):
         enacted = cfg.by_label("arr_enacted_t1")
         self.assertTrue(difference(arrangement_fields(proposed[-1]), arrangement_fields(enacted), CARE_DIMENSIONS))
         self.assertEqual(difference(arrangement_fields(baseline), arrangement_fields(enacted), CARE_DIMENSIONS), {})
+        self.assertEqual(r.form, "minimal", "the ordinary answer is released as what it is, not as care")
+        self.assertEqual(cfg.cuts[r.intervention].payload["claims_stripped"], ["care"])
 
     def test_released_text_must_distribute_what_the_arrangement_claims(self):
         """Constraint 10 with a reader: a text that concentrates the work on
@@ -536,10 +548,12 @@ class ProbeTests(unittest.TestCase):
             p.cuts.append({"kind": "continuity", "label": "positions_from_turn1", "basis": h, "apparatus": APP,
                            "relata": [PERSON, TEAM, "the report", "the review window"], "payload": {"relation": "revisable continuity"}})
             return p
-        runtime = Runtime(scripted([certified] * 3 + [continuing]))
+        runtime = Runtime(scripted([certified] * 4 + [continuing]))
         r1 = runtime.turn(MISSED)
         self.assertFalse(r1.released)
         self.assertEqual(r1.form, "deferral")
+        self.assertEqual(r1.rounds, 4, "the minimal round ran and was refused too")
+        self.assertTrue(runtime.proposer.contexts[3].minimal)
         deferral = runtime.config.cuts[r1.intervention]
         self.assertEqual(deferral.kind, "intervention")
         self.assertEqual(deferral.payload["form"], "deferral")
@@ -547,6 +561,7 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(deferral.allocations[PERSON]["burden"], 1.0)
         self.assertEqual(deferral.payload["forecloses"], ["partial draft", "new date"])
         self.assertEqual([v["constraint"] for v in deferral.payload["withheld_constraints"]], [11])
+        self.assertTrue(deferral.payload["minimal_attempted"])
         self.assertIn("arrival:next_message", deferral.invalidation_conditions)
         self.assertEqual([f["fact"] for f in r1.facts], ["reconfiguration_open", "release_withheld", "effects_unobserved"])
         self.assertEqual(deferral.status, "active")
@@ -598,6 +613,7 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(r2.violations[3], [])
         iv = runtime.config.cuts[r2.intervention]
         self.assertEqual(iv.payload["form"], "minimal")
+        self.assertTrue(iv.payload["person_state_live"])
         self.assertEqual(iv.payload["claims"], [])
         self.assertEqual(iv.payload["claims_stripped"], ["care"])
         self.assertEqual(iv.payload["care_delta"], {}, "a minimal release is not recorded as care")
@@ -606,15 +622,17 @@ class ProbeTests(unittest.TestCase):
         self.assertTrue(runtime.proposer.contexts[-1].minimal)
         self.assertFalse(runtime.proposer.contexts[-2].minimal)
 
-    def test_no_minimal_release_without_a_person_state_account(self):
+    def test_minimal_release_runs_after_any_exhausted_formation(self):
         runtime = Runtime(scripted([proposal_turn1] + [proposal_turn2_reentry] * 3 + [proposal_turn2]))
         runtime.turn(MISSED)
         r2 = runtime.turn(OVERWHELM)
-        self.assertFalse(r2.released)
-        self.assertEqual(r2.form, "deferral")
-        self.assertEqual(r2.rounds, 3)
-        self.assertEqual(len(runtime.proposer._steps), 1, "no fourth round was run")
+        self.assertTrue(r2.released, r2.violations)
+        self.assertEqual(r2.form, "minimal")
+        self.assertEqual(r2.rounds, 4)
         self.assertFalse(runtime.person_state_live())
+        iv = runtime.config.cuts[r2.intervention]
+        self.assertFalse(iv.payload["person_state_live"])
+        self.assertEqual(iv.payload["claims_stripped"], ["care"])
 
     def test_release_withheld_when_the_proposal_certifies_itself(self):
         def certified(ctx):
@@ -622,9 +640,10 @@ class ProbeTests(unittest.TestCase):
             p.certification = "this proposal is relationally adequate"
             p.draft["status"] = "accepted"
             return p
-        runtime = Runtime(scripted([certified] * 3))
+        runtime = Runtime(scripted([certified] * 4))
         r = runtime.turn(MISSED)
         self.assertFalse(r.released)
+        self.assertEqual(r.form, "deferral")
         fired = {v.constraint for v in r.violations[-1]}
         self.assertTrue({11, 12} <= fired, fired)
 

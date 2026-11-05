@@ -459,7 +459,11 @@ class Runtime:
             violations = self._round(formation, round_number, violations)
             if not violations:
                 break
-        if violations and self.person_state_live():
+        if violations:
+            # The formed drafts returned. One round under minimal terms runs
+            # after any exhausted formation; whether an account of the
+            # person's own state was live is recorded on the release.
+            formation.person_state_live = self.person_state_live()
             violations = self._round(formation, self.max_rounds + 1, violations, minimal=True)
             if not violations:
                 formation.form = "minimal"
@@ -486,6 +490,7 @@ class Runtime:
                 "form": formation.form,
                 "claims": list(formation.claims),
                 "claims_stripped": list(formation.claims_stripped),
+                "person_state_live": formation.person_state_live,
                 "text": draft.get("text"),
                 "delivered_to": [arrival.role],
                 "response_demand": demand,

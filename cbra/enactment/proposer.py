@@ -284,9 +284,8 @@ of the returned draft are listed under "returned_cuts" and are no longer
 active: do not depend on them; re-propose any you still need, with the same
 labels if you like.
 
-If "minimal" is true, the formed drafts have returned and a person's account
-of their own state is live. Propose the smallest release the structural
-constraints will accept: claim neither "care" nor "play"; scale "minimal";
+If "minimal" is true, the formed drafts have returned. Propose the smallest
+release the structural constraints will accept: claim neither "care" nor "play"; scale "minimal";
 at most one demand on the person; an enacted arrangement that says exactly
 what the text does; a text of a few sentences that may be a single question
 handing the next move to the person. State "variation_constraint" as

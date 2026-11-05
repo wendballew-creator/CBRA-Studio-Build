@@ -310,8 +310,10 @@ new arrival now disturbs. The lifecycle facts are `release_withheld` and
 `effects_unobserved`; the deferral reopens, like any intervention, when a
 dependency or condition is disturbed.
 
-When a provenance cut whose payload says it is about the person's body or
-state is live, one more round runs under minimal terms before any deferral:
+After any exhausted formation, one more round runs under minimal terms
+before any deferral (first scoped to turns in which a provenance cut about
+the person's body or state was live; made general the same day, with that
+condition recorded on the release as `person_state_live`):
 the proposer is told the formed drafts returned and asked for the smallest
 release the structural guards accept; a care or play claim made anyway is
 stripped and recorded as stripped; variation is recorded as constrained; the
@@ -336,15 +338,21 @@ Sixth live run (`gpt-5.5`, trace `.cbra-runtime/live-2026-11-04f.json`):
   re-propose what it needs; cuts enacted before a mid-round failure are now
   tracked so the next round returns them.
 
-What this raises for the author:
+Decision taken after this run:
 
-- One of two turns in this run, an ordinary practical request, ended in
-  silence. The minimal release was scoped to a live body account on the
-  reading that care changes timing when a body enters the arrangement. The
-  Incompatibility Constraints also name compulsory usefulness and the kernel
-  calls a minimal direct answer legitimate; whether the minimal round should
-  be available after any exhausted formation, not only when a state account
-  is live, is a decision the trace now makes concrete.
+- One of two turns, an ordinary practical request, had ended in silence
+  because the minimal round was scoped to a live body account. The author
+  made the minimal round general: it now runs after any exhausted formation,
+  on the reading that the kernel calls a minimal direct answer legitimate and
+  the Incompatibility Constraints name compulsory usefulness and its opposite
+  as the two failures to hold apart. Whether a body account was live is
+  recorded on each minimal release. In consequence, a proposal whose care
+  claim has no structural delta is no longer withheld outright: its formed
+  rounds return, and what is released is marked minimal with the claim
+  stripped. Probe 8, Probe 15 and the straw-baseline test now assert that
+  form rather than a withheld release. A seventh live run released both
+  turns formed on round two, so the general minimal round has run only under
+  scripted proposals so far.
 - The deferral's burden figure of 1.0 is a mechanical statement that nothing
   was redistributed, not a measurement; it exists so the silence is traced
   and reopenable.
