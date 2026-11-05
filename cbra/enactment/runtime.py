@@ -16,7 +16,9 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from .arrangements import care_delta, play_delta
-from .graph import APPARATUS_MARK, Configuration, Cut, Delta, EnactmentError
+from .graph import APPARATUS_MARK, Configuration, Cut, Delta, EnactmentError, TransportTrace
+
+TransportTraceLike = TransportTrace
 from .proposer import Proposal, ProposalContext, Proposer
 from .release import Formation, Violation, check_all
 
@@ -31,6 +33,7 @@ class TurnResult:
     violations: List[List[Violation]]
     deltas: List[Delta]
     facts: List[Dict[str, Any]]
+    form: str = "formed"
 
     def as_record(self) -> Dict[str, Any]:
         return {
@@ -38,6 +41,7 @@ class TurnResult:
             "released": self.released,
             "text": self.text,
             "intervention": self.intervention,
+            "form": self.form,
             "rounds": self.rounds,
             "violations": [[v.as_record() for v in rnd] for rnd in self.violations],
             "deltas": [d.as_record() for d in self.deltas],
@@ -103,8 +107,10 @@ class Runtime:
         return sorted(conditions)
 
     def _context(self, turn: str, round_number: int, arrivals: Sequence[str],
-                 violations: Sequence[Violation], baseline_id: Optional[str] = None) -> ProposalContext:
+                 violations: Sequence[Violation], baseline_id: Optional[str] = None,
+                 returning: Sequence[str] = ()) -> ProposalContext:
         cfg = self.config
+        returning = set(returning)
         baseline = None
         if baseline_id and baseline_id in cfg.cuts:
             b = cfg.cuts[baseline_id]
@@ -115,8 +121,12 @@ class Runtime:
                            if k not in ("source_text", "derived_from", "turn", "role")}}
             baseline["plain_answer"] = b.payload.get("source_text")
         active = []
+        returned = []
         for cut in cfg.cuts.values():
             if cut.status == "invalidated":
+                continue
+            if cut.id in returning:
+                returned.append({"id": cut.id, "kind": cut.kind, "label": cut.label})
                 continue
             active.append({
                 "id": cut.id, "kind": cut.kind, "label": cut.label, "status": cut.status,
@@ -139,6 +149,7 @@ class Runtime:
             violations=[v.as_record() for v in violations],
             conditions_available=self.conditions_available(),
             baseline=baseline,
+            returned_cuts=returned,
         )
 
     # -- the baseline: an uninstructed answer, read for its arrangement -----
@@ -217,12 +228,12 @@ class Runtime:
                     cut = self._enact_spec(spec, labels, formation, proposal_handle)
                     labels[cut.label] = cut.id
                     enacted.append(cut.id)
+                    formation.cuts.append(cut.id)   # tracked at once, so a failed round still returns
                     pending.remove(spec)
                     progress = True
         if pending:
             missing = [(s.get("label"), s.get("depends_on")) for s in pending]
             raise EnactmentError("unresolved dependencies in proposal: %s" % missing)
-        formation.cuts.extend(enacted)
 
     def _enact_spec(self, spec: Mapping[str, Any], labels: Mapping[str, str], formation: Formation,
                     proposal_handle: str) -> Cut:
@@ -315,6 +326,121 @@ class Runtime:
 
     # -- the turn ---------------------------------------------------------
 
+    PERSON_STATE_MARKS = ("body", "state", "health")
+
+    def person_state_live(self) -> bool:
+        """A provenance cut about the person's own body or state is active."""
+        return any(
+            c.kind == "provenance" and c.payload.get("about") in self.PERSON_STATE_MARKS
+            for c in self.config.active()
+        )
+
+    def _round(self, formation: Formation, round_number: int, violations: List[Violation],
+               minimal: bool = False) -> List[Violation]:
+        """One round of formation: propose, inscribe, return the previous
+        draft if any, enact, read the draft, run the release constraints."""
+        cfg = self.config
+        turn = formation.turn
+        formation.round = round_number
+        formation.minimal = minimal
+        context = self._context(turn, round_number, formation.arrivals, violations, formation.baseline,
+                                returning=formation.cuts)
+        context.minimal = minimal
+        try:
+            proposal = self.proposer.propose(context)
+        except EnactmentError as error:
+            cfg.unresolved.append({"kind": "proposal_not_enactable", "turn": turn, "round": round_number, "error": str(error)})
+            result = [Violation(0, str(error))]
+            formation.history.append(list(result))
+            formation.violations = result
+            return result
+        provenance = dict(proposal.provenance)
+        provenance.setdefault("apparatus_mark", APPARATUS_MARK)
+        provenance["round"] = round_number
+        provenance["minimal"] = minimal
+        proposal_trace = cfg.inscribe(json.dumps(proposal.as_record(), ensure_ascii=False), "model_output",
+                                      channel="proposer", provenance=provenance)
+        if formation.cuts:
+            returned = []
+            for cut_id in list(formation.cuts):
+                returned.extend(cfg.invalidate(cut_id, "draft returned to configuration (round %d)" % (round_number - 1), proposal_trace.handle))
+            cfg.deltas.append(Delta(kind="return", version_from=cfg.version, version_to=cfg.version,
+                                    source=proposal_trace.handle, invalidated=returned,
+                                    release_constraints_changed=[v.name for v in violations]))
+            formation.cuts = []
+            cfg.enact(
+                kind="apparatus", label="release_constraints_fired:%s:r%d" % (turn, round_number - 1),
+                basis=[proposal_trace.handle], apparatus=["release constraints participating in formation"],
+                payload={"turn": turn, "violations": [v.as_record() for v in violations]},
+            )
+        formation.proposal_trace = proposal_trace.handle
+        formation.draft = proposal.draft
+        formation.claims = list(proposal.claims)
+        formation.variation_possible = bool(proposal.variation_possible)
+        formation.variation_constraint = proposal.variation_constraint
+        formation.certification = proposal.certification
+        if minimal:
+            # A minimal release claims neither care nor play; a claim made
+            # anyway is stripped and recorded, never released as care.
+            formation.claims_stripped = [c for c in formation.claims if c in ("care", "play")]
+            formation.claims = [c for c in formation.claims if c not in ("care", "play")]
+            formation.variation_possible = False
+            formation.variation_constraint = proposal.variation_constraint or "minimal release after returns"
+        for item in proposal.unresolved:
+            entry = {"kind": "held_open", "turn": turn, "text": item}
+            if entry not in cfg.unresolved:
+                cfg.unresolved.append(entry)
+        try:
+            self._enact_proposal(proposal, formation, proposal_trace.handle)
+            self._read_draft(formation, context, proposal_trace.handle)
+        except (EnactmentError, KeyError, TypeError, ValueError) as error:
+            cfg.unresolved.append({"kind": "proposal_not_enactable", "turn": turn, "round": round_number, "error": str(error)})
+            result = [Violation(0, "%s: %s" % (type(error).__name__, error))]
+            formation.history.append(list(result))
+            formation.violations = result
+            return result
+        result = check_all(cfg, formation)
+        formation.history.append(list(result))
+        formation.violations = result
+        return result
+
+    def _defer(self, formation: Formation, violations: List[Violation], arrival: TransportTraceLike) -> Cut:
+        """Withholding is a public intervention. Enact it as a deferral cut
+        that exposes the burden it leaves with the person and the conditions
+        that reopen it; the next arrival reopens it."""
+        cfg = self.config
+        person = "the person writing"
+        for c in cfg.active("provenance"):
+            if c.relata:
+                person = c.relata[0]
+                break
+        draft = formation.draft or {}
+        from .arrangements import arrangements
+        enacted = arrangements(cfg, "enacted", formation.turn)
+        forecloses = list(enacted[-1].payload.get("possibilities_open") or []) if enacted else []
+        basis = list(formation.arrivals) + ([formation.proposal_trace] if formation.proposal_trace else [])
+        deferral = cfg.enact(
+            kind="intervention", label="deferral:%s" % formation.turn, basis=basis,
+            apparatus=["release withheld after %d rounds; silence delivered through %s" % (formation.round, self.channel)],
+            relata=[person],
+            unmarked=["what the person makes of no reply", "how long the silence lasts"],
+            allocations={person: {"burden": 1.0}},
+            invalidation_conditions=["arrival:next_message", "effect:person_responds"] + list(draft.get("reopen_conditions", [])),
+            payload={
+                "turn": formation.turn, "form": "deferral", "text": None, "delivered_to": [arrival.role],
+                "withheld_constraints": [v.as_record() for v in violations], "rounds": formation.round,
+                "minimal_attempted": formation.minimal, "forecloses": forecloses,
+                "response_demand": {person: ["decide", "communicate"]},
+                "note": "silence is a public cut; the next move and its burden stay with the person",
+            },
+        )
+        cfg.fact("release_withheld", turn=formation.turn, intervention=deferral.id, rounds=formation.round,
+                 constraints=[v.as_record() for v in violations])
+        cfg.fact("effects_unobserved", turn=formation.turn, intervention=deferral.id)
+        cfg.unresolved.append({"kind": "release_withheld", "turn": formation.turn, "intervention": deferral.id,
+                               "constraints": [v.constraint for v in violations]})
+        return deferral
+
     def turn(self, text: str, role: str = "user_message", channel: Optional[str] = None,
              transformations: Sequence[str] = ()) -> TurnResult:
         cfg = self.config
@@ -324,72 +450,24 @@ class Runtime:
         delta_start = len(cfg.deltas)
         fact_start = len(cfg.lifecycle)
         arrival = cfg.inscribe(text, role, channel or self.channel, transformations)
+        cfg.disturb("arrival:next_message", source=arrival.handle, reason="a new arrival reopens deferred interventions")
         cfg.fact("reconfiguration_open", turn=turn, arrival=arrival.handle)
         formation = Formation(turn=turn, arrivals=[arrival.handle])
         self._baseline(turn, arrival.handle, formation)
         violations: List[Violation] = []
         for round_number in range(1, self.max_rounds + 1):
-            formation.round = round_number
-            context = self._context(turn, round_number, formation.arrivals, violations, formation.baseline)
-            try:
-                proposal = self.proposer.propose(context)
-            except EnactmentError as error:
-                violations = [Violation(0, str(error))]
-                formation.history.append(list(violations))
-                formation.violations = violations
-                cfg.unresolved.append({"kind": "proposal_not_enactable", "turn": turn, "round": round_number,
-                                       "error": str(error)})
-                continue
-            provenance = dict(proposal.provenance)
-            provenance.setdefault("apparatus_mark", APPARATUS_MARK)
-            provenance["round"] = round_number
-            proposal_trace = cfg.inscribe(json.dumps(proposal.as_record(), ensure_ascii=False), "model_output",
-                                          channel="proposer", provenance=provenance)
-            if formation.cuts:
-                returned = []
-                for cut_id in list(formation.cuts):
-                    returned.extend(cfg.invalidate(cut_id, "draft returned to configuration (round %d)" % (round_number - 1), proposal_trace.handle))
-                cfg.deltas.append(Delta(kind="return", version_from=cfg.version, version_to=cfg.version,
-                                        source=proposal_trace.handle, invalidated=returned,
-                                        release_constraints_changed=[v.name for v in violations]))
-                formation.cuts = []
-                cfg.enact(
-                    kind="apparatus", label="release_constraints_fired:%s:r%d" % (turn, round_number - 1),
-                    basis=[proposal_trace.handle], apparatus=["release constraints participating in formation"],
-                    payload={"turn": turn, "violations": [v.as_record() for v in violations]},
-                )
-            formation.proposal_trace = proposal_trace.handle
-            formation.draft = proposal.draft
-            formation.claims = list(proposal.claims)
-            formation.variation_possible = bool(proposal.variation_possible)
-            formation.variation_constraint = proposal.variation_constraint
-            formation.certification = proposal.certification
-            for item in proposal.unresolved:
-                entry = {"kind": "held_open", "turn": turn, "text": item}
-                if entry not in cfg.unresolved:
-                    cfg.unresolved.append(entry)
-            try:
-                self._enact_proposal(proposal, formation, proposal_trace.handle)
-                self._read_draft(formation, context, proposal_trace.handle)
-            except (EnactmentError, KeyError, TypeError, ValueError) as error:
-                violations = [Violation(0, "%s: %s" % (type(error).__name__, error))]
-                formation.history.append(list(violations))
-                formation.violations = violations
-                cfg.unresolved.append({"kind": "proposal_not_enactable", "turn": turn, "round": round_number,
-                                       "error": str(error)})
-                continue
-            violations = check_all(cfg, formation)
-            formation.history.append(list(violations))
+            violations = self._round(formation, round_number, violations)
             if not violations:
                 break
-            formation.violations = violations
+        if violations and self.person_state_live():
+            violations = self._round(formation, self.max_rounds + 1, violations, minimal=True)
+            if not violations:
+                formation.form = "minimal"
         if violations:
-            cfg.fact("release_withheld", turn=turn, constraints=[v.as_record() for v in violations])
-            cfg.unresolved.append({"kind": "release_withheld", "turn": turn,
-                                   "constraints": [v.constraint for v in violations]})
+            deferral = self._defer(formation, violations, arrival)
             self._save()
-            return TurnResult(turn, False, None, None, formation.round, formation.history,
-                              cfg.deltas[delta_start:], cfg.lifecycle[fact_start:])
+            return TurnResult(turn, False, None, deferral.id, formation.round, formation.history,
+                              cfg.deltas[delta_start:], cfg.lifecycle[fact_start:], form="deferral")
         draft = formation.draft or {}
         labels = {cfg.cuts[i].label: i for i in formation.cuts if cfg.cuts[i].status == "active"}
         demand = _response_demand(draft.get("response_demand"))
@@ -405,6 +483,9 @@ class Runtime:
             invalidation_conditions=list(draft.get("reopen_conditions", [])),
             payload={
                 "turn": turn,
+                "form": formation.form,
+                "claims": list(formation.claims),
+                "claims_stripped": list(formation.claims_stripped),
                 "text": draft.get("text"),
                 "delivered_to": [arrival.role],
                 "response_demand": demand,
@@ -414,16 +495,16 @@ class Runtime:
                 "carries_accounts": list(draft.get("carries_accounts", [])),
                 "baseline": formation.baseline,
                 "text_reading": next((c.id for c in cfg.active("arrangement") if c.payload.get("role") == "read" and c.payload.get("turn") == turn), None),
-                "care_delta": {k: list(v) for k, v in care_delta(cfg, turn).items()},
-                "play_delta": {k: {kk: list(vv) for kk, vv in d.items()} for k, d in play_delta(cfg, turn).items()},
+                "care_delta": {k: list(v) for k, v in care_delta(cfg, turn).items()} if "care" in formation.claims else {},
+                "play_delta": {k: {kk: list(vv) for kk, vv in d.items()} for k, d in play_delta(cfg, turn).items()} if "play" in formation.claims or formation.variation_possible else {},
                 "rounds": formation.round,
             },
         )
-        cfg.fact("intervention_released", turn=turn, intervention=intervention.id, rounds=formation.round)
+        cfg.fact("intervention_released", turn=turn, intervention=intervention.id, rounds=formation.round, form=formation.form)
         cfg.fact("effects_unobserved", turn=turn, intervention=intervention.id)
         self._save()
         return TurnResult(turn, True, draft.get("text"), intervention.id, formation.round, formation.history,
-                          cfg.deltas[delta_start:], cfg.lifecycle[fact_start:])
+                          cfg.deltas[delta_start:], cfg.lifecycle[fact_start:], form=formation.form)
 
     # -- effect return ----------------------------------------------------
 

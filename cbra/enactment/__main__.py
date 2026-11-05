@@ -68,8 +68,8 @@ def main(argv=None) -> int:
             if result.released:
                 print(result.text)
             else:
-                print("(release withheld; constraints: %s)" % ", ".join(
-                    "%d" % v.constraint for v in result.violations[-1]))
+                print("(release withheld; deferral %s enacted; constraints: %s)" % (result.intervention, ", ".join(
+                    "%d" % v.constraint for v in result.violations[-1])))
             continue
         print(json.dumps({k: v for k, v in result.as_record().items() if k != "deltas"}, indent=1))
     return 0

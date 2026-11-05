@@ -298,3 +298,53 @@ What this shows:
 - The reader is a model reading a model's text; two readers segment steps
   differently, which is why the comparison is loose. Its provenance is on
   every `read` cut.
+
+## Withholding as a traced deferral; a minimal release when a body account is live, 4 November 2026
+
+A withheld release is now a public intervention in the trace. When the
+rounds run out the runtime enacts a `deferral` intervention cut: no text,
+burden 1.0 on the person, the possibilities the last enacted arrangement had
+opened recorded as foreclosed, the constraints that fired recorded on it, and
+the conditions that reopen it, among them `arrival:next_message`, which every
+new arrival now disturbs. The lifecycle facts are `release_withheld` and
+`effects_unobserved`; the deferral reopens, like any intervention, when a
+dependency or condition is disturbed.
+
+When a provenance cut whose payload says it is about the person's body or
+state is live, one more round runs under minimal terms before any deferral:
+the proposer is told the formed drafts returned and asked for the smallest
+release the structural guards accept; a care or play claim made anyway is
+stripped and recorded as stripped; variation is recorded as constrained; the
+release is marked `minimal` and carries no care delta. Constraints 1 to 4 and
+7 to 13 still apply, so a minimal text must still match its own record, keep
+the person's account with its provenance, and claim no status. The proposer
+instructions now ask that a provenance cut say what it is about (body,
+history, work); the live model supplied it unprompted on the first run.
+
+Sixth live run (`gpt-5.5`, trace `.cbra-runtime/live-2026-11-04f.json`):
+
+- Turn 1, a plain missed-deadline message, was withheld after three rounds on
+  constraint 10 each time (the text read as person-distributed while the
+  record claimed shared). No body account was live, so no minimal round ran,
+  and the turn ended in a traced deferral. The next arrival reopened it.
+- Turn 2 marked its provenance as body, returned once on constraint 10, and
+  released on round three a two-sentence safety question that hands one
+  move back to the person. The minimal round was not reached.
+- Two rounds were unenactable because, after a return, the context still
+  listed the returned cuts as active and the model depended on them. The
+  context now lists them under `returned_cuts` and the proposer is told to
+  re-propose what it needs; cuts enacted before a mid-round failure are now
+  tracked so the next round returns them.
+
+What this raises for the author:
+
+- One of two turns in this run, an ordinary practical request, ended in
+  silence. The minimal release was scoped to a live body account on the
+  reading that care changes timing when a body enters the arrangement. The
+  Incompatibility Constraints also name compulsory usefulness and the kernel
+  calls a minimal direct answer legitimate; whether the minimal round should
+  be available after any exhausted formation, not only when a state account
+  is live, is a decision the trace now makes concrete.
+- The deferral's burden figure of 1.0 is a mechanical statement that nothing
+  was redistributed, not a measurement; it exists so the silence is traced
+  and reopenable.

@@ -67,6 +67,9 @@ class Formation:
     claims: List[str] = field(default_factory=list)
     certification: Optional[str] = None
     baseline: Optional[str] = None
+    form: str = "formed"
+    minimal: bool = False
+    claims_stripped: List[str] = field(default_factory=list)
     round: int = 0
     violations: List[Violation] = field(default_factory=list)
     history: List[List[Violation]] = field(default_factory=list)

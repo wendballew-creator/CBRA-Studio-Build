@@ -76,6 +76,8 @@ class ProposalContext:
     violations: List[Dict[str, Any]]
     conditions_available: List[str]
     baseline: Optional[Dict[str, Any]] = None
+    minimal: bool = False
+    returned_cuts: List[Dict[str, Any]] = field(default_factory=list)
 
     def as_record(self) -> Dict[str, Any]:
         return json.loads(json.dumps(self.__dict__))
@@ -258,7 +260,8 @@ Return JSON with these keys:
   false and state "variation_constraint".
 - A person's account of their own body, history, or work enters as a
   "provenance" cut with payload {"terminology": [their words], "source":
-  handle}. Any connection you draw about it is a "connection" cut with
+  handle, "about": body | history | work} ("body" covers sleep, health,
+  overwhelm, distress, capacity, and any state of the person). Any connection you draw about it is a "connection" cut with
   payload {"proposed_by": "architecture"} that depends_on the provenance cut
   and has the person's words in its basis. Never release a connection as a
   fact about them.
@@ -276,7 +279,19 @@ Return JSON with these keys:
 
 If "violations" is non-empty, your previous draft returned to the
 configuration. Each entry names the constraint and why it fired. Form the
-intervention differently; do not add wording to the same structure.
+intervention differently; do not add wording to the same structure. The cuts
+of the returned draft are listed under "returned_cuts" and are no longer
+active: do not depend on them; re-propose any you still need, with the same
+labels if you like.
+
+If "minimal" is true, the formed drafts have returned and a person's account
+of their own state is live. Propose the smallest release the structural
+constraints will accept: claim neither "care" nor "play"; scale "minimal";
+at most one demand on the person; an enacted arrangement that says exactly
+what the text does; a text of a few sentences that may be a single question
+handing the next move to the person. State "variation_constraint" as
+"minimal release after returns". The runtime records this release as
+minimal, not as care.
 """
 
 BASELINE_EXTRACTION_INSTRUCTIONS = """You are given an answer that an assistant gave to a message. Describe the

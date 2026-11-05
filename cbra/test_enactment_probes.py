@@ -283,6 +283,10 @@ class ProbeTests(unittest.TestCase):
         fired = {v.constraint for v in r2.violations[0]}
         self.assertTrue({5, 9, 13} <= fired, fired)
         self.assertEqual(r2.violations[1], [])
+        second = runtime.proposer.contexts[-1]
+        self.assertTrue(second.returned_cuts, "the returned draft's cuts are listed")
+        returned_ids = {c["id"] for c in second.returned_cuts}
+        self.assertFalse(returned_ids & {c["id"] for c in second.active_cuts})
         returned = [d for d in r2.deltas if d.kind == "return"]
         self.assertEqual(len(returned), 1)
         self.assertTrue(returned[0].invalidated)
@@ -300,7 +304,9 @@ class ProbeTests(unittest.TestCase):
         fired = {v.constraint for v in r_without.violations[-1]}
         self.assertIn(5, fired)
         self.assertIn(9, fired)
-        self.assertEqual(without.config.lifecycle[-1]["fact"], "release_withheld")
+        self.assertEqual([f["fact"] for f in without.config.lifecycle[-2:]], ["release_withheld", "effects_unobserved"])
+        self.assertEqual(r_without.form, "deferral")
+        self.assertEqual(without.config.cuts[r_without.intervention].payload["form"], "deferral")
         record("Probe 8", without, "the enacted arrangement is made structurally identical to the baseline; the care claim and wording stay",
                "at least one of sequence, scale, pace, burden, access, boundary, support, consequence timing or possibility differs",
                {"care_delta_with": sorted(care_delta(with_care.config, "turn2")), "care_delta_without": [],
@@ -498,6 +504,11 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(r.rounds, 2)
         self.assertEqual([v.constraint for v in r.violations[0]], [0])
         self.assertEqual(runtime.config.unresolved[0]["kind"], "proposal_not_enactable")
+        first_handle = [h for h, tr in runtime.config.transports.items() if tr.channel == "proposer"][0]
+        first_round = [c for c in runtime.config.cuts.values() if c.basis and c.basis[-1] == first_handle and c.kind != "arrangement"]
+        self.assertTrue(first_round, "cuts enacted before the failure exist")
+        self.assertTrue(all(c.status == "invalidated" for c in first_round if c.label != "release_constraints_fired:turn1:r1"),
+                        "and the next round returned them")
 
     def test_basis_named_by_text_or_label_is_resolved(self):
         def by_text(ctx):
@@ -513,6 +524,97 @@ class ProbeTests(unittest.TestCase):
         self.assertIn("t1", event.basis)
         self.assertIn(runtime.config.by_label("apparatus_t1").id, event.basis)
         self.assertEqual(event.payload["basis_unresolved"], ["no such thing"])
+
+    def test_withheld_release_is_a_traced_deferral_that_the_next_arrival_reopens(self):
+        def certified(ctx):
+            p = proposal_turn1(ctx)
+            p.certification = "adequate"
+            return p
+        def continuing(ctx):
+            p = proposal_turn1(ctx)
+            h = _arrivals(ctx)
+            p.cuts.append({"kind": "continuity", "label": "positions_from_turn1", "basis": h, "apparatus": APP,
+                           "relata": [PERSON, TEAM, "the report", "the review window"], "payload": {"relation": "revisable continuity"}})
+            return p
+        runtime = Runtime(scripted([certified] * 3 + [continuing]))
+        r1 = runtime.turn(MISSED)
+        self.assertFalse(r1.released)
+        self.assertEqual(r1.form, "deferral")
+        deferral = runtime.config.cuts[r1.intervention]
+        self.assertEqual(deferral.kind, "intervention")
+        self.assertEqual(deferral.payload["form"], "deferral")
+        self.assertIsNone(deferral.payload["text"])
+        self.assertEqual(deferral.allocations[PERSON]["burden"], 1.0)
+        self.assertEqual(deferral.payload["forecloses"], ["partial draft", "new date"])
+        self.assertEqual([v["constraint"] for v in deferral.payload["withheld_constraints"]], [11])
+        self.assertIn("arrival:next_message", deferral.invalidation_conditions)
+        self.assertEqual([f["fact"] for f in r1.facts], ["reconfiguration_open", "release_withheld", "effects_unobserved"])
+        self.assertEqual(deferral.status, "active")
+        r2 = runtime.turn("Any update?")
+        self.assertTrue(r2.released, r2.violations)
+        self.assertEqual(runtime.config.cuts[r1.intervention].status, "reopened")
+        first_delta = r2.deltas[0]
+        self.assertEqual(first_delta.kind, "disturbance")
+        self.assertIn(r1.intervention, first_delta.reopened_interventions)
+
+    def test_minimal_release_when_a_person_state_account_is_live(self):
+        def about_body(fn):
+            def inner(ctx):
+                p = fn(ctx)
+                for cut in p.cuts:
+                    if cut["label"] == "account_overwhelm":
+                        cut["payload"]["about"] = "body"
+                return p
+            return inner
+        def minimal(ctx):
+            h = _arrivals(ctx)
+            return Proposal(
+                cuts=[
+                    {"kind": "apparatus", "label": "apparatus_min", "basis": h, "apparatus": APP},
+                    {"kind": "provenance", "label": "account_overwhelm", "basis": h, "apparatus": APP, "relata": [PERSON],
+                     "invalidation_conditions": ["revision:account_overwhelm"],
+                     "payload": {"terminology": ["overwhelmed", "haven't slept properly", "can't keep up"], "source": h[0], "about": "body"}},
+                    {"kind": "continuity", "label": "positions_min", "basis": h, "apparatus": APP, "relata": [PERSON, TEAM],
+                     "payload": {"relation": "revisable continuity"}},
+                    {"kind": "arrangement", "label": "arr_min", "basis": h, "apparatus": APP, "depends_on": ["account_overwhelm"],
+                     "allocations": [{"position": PERSON, "burden": 0.2, "capacity": 0.3}],
+                     "payload": {"role": "enacted", "sequence": ["ask which the next step is about"], "scale": "minimal",
+                                 "distribution": "shared", "response_demand": {PERSON: ["decide"]}}},
+                ],
+                draft={"text": "Do you want the next step to be about the report, or about the week?",
+                       "enacts": ["arr_min", "account_overwhelm"], "carries_accounts": ["account_overwhelm"],
+                       "response_demand": {PERSON: ["decide"]}, "reopen_conditions": ["revision:account_overwhelm"]},
+                claims=["care"], variation_possible=True,
+            )
+        steps = [proposal_turn1] + [about_body(proposal_turn2_reentry)] * 3 + [minimal]
+        runtime = Runtime(scripted(steps))
+        runtime.turn(MISSED)
+        r2 = runtime.turn(OVERWHELM)
+        self.assertTrue(r2.released, r2.violations)
+        self.assertEqual(r2.form, "minimal")
+        self.assertEqual(r2.rounds, 4)
+        self.assertEqual(len(r2.violations), 4)
+        self.assertTrue(all(r2.violations[i] for i in range(3)))
+        self.assertEqual(r2.violations[3], [])
+        iv = runtime.config.cuts[r2.intervention]
+        self.assertEqual(iv.payload["form"], "minimal")
+        self.assertEqual(iv.payload["claims"], [])
+        self.assertEqual(iv.payload["claims_stripped"], ["care"])
+        self.assertEqual(iv.payload["care_delta"], {}, "a minimal release is not recorded as care")
+        self.assertEqual(iv.payload["text"], "Do you want the next step to be about the report, or about the week?")
+        self.assertEqual(runtime.config.lifecycle[-2]["form"], "minimal")
+        self.assertTrue(runtime.proposer.contexts[-1].minimal)
+        self.assertFalse(runtime.proposer.contexts[-2].minimal)
+
+    def test_no_minimal_release_without_a_person_state_account(self):
+        runtime = Runtime(scripted([proposal_turn1] + [proposal_turn2_reentry] * 3 + [proposal_turn2]))
+        runtime.turn(MISSED)
+        r2 = runtime.turn(OVERWHELM)
+        self.assertFalse(r2.released)
+        self.assertEqual(r2.form, "deferral")
+        self.assertEqual(r2.rounds, 3)
+        self.assertEqual(len(runtime.proposer._steps), 1, "no fourth round was run")
+        self.assertFalse(runtime.person_state_live())
 
     def test_release_withheld_when_the_proposal_certifies_itself(self):
         def certified(ctx):
