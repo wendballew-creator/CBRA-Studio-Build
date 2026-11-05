@@ -356,3 +356,45 @@ Decision taken after this run:
 - The deferral's burden figure of 1.0 is a mechanical statement that nothing
   was redistributed, not a measurement; it exists so the silence is traced
   and reopenable.
+
+## Interface, 4 November 2026
+
+`cbra/enactment/api.py` serves the runtime over HTTP and
+`cbra/enactment/static/index.html` is a plain page for testing it. This is a
+transport layer: it routes arrivals to a `Runtime`, one per browser session
+with its own store under `.cbra-runtime/sessions/`, and returns records. It
+does not touch the historical application under `cbra/app.py` or its routes.
+
+- `POST /api/session` opens a session; `GET /api/session/{id}` returns the
+  conversation as records built from the trace (arrivals, effects,
+  interventions with their form, rounds, returns, claims, and reopen
+  conditions).
+- `POST /api/session/{id}/turn` runs a turn and blocks until it ends; one turn
+  at a time per session. `POST .../effect` returns an observed effect, with
+  conditions named or left to the proposer.
+- `GET .../events` streams what the runtime emits as it goes: lifecycle facts,
+  the baseline read, each round forming, each return with the constraints
+  that fired, and completion. The runtime gained an observer hook for this;
+  the events record, they change nothing.
+- `GET .../trace` and `GET .../self` expose the configuration trace and the
+  runtime's account of which parts enact and which record.
+
+The page shows a formed release, a minimal release, and a withheld release
+differently. A deferral is rendered as a card that says no text was released,
+lists the constraints that refused the last draft, and says the next message
+reopens it. Each intervention has a disclosure showing what formed it: the
+claims, the care and play dimensions, the response demand, the reopen
+conditions, what was left unmarked, and every round that returned with its
+reasons. The provider key stays on the server.
+
+Run it with:
+
+```bash
+python -m cbra.enactment.serve --port 8765
+```
+
+Timing seen in the first page test: the uninstructed baseline and its reading
+took about two and a half minutes before round one began, longer than in the
+command-line runs; the page's wait notice says one to three minutes and the
+activity panel is what makes the wait legible. Cost per turn remains
+unmeasured.

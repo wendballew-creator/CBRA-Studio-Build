@@ -572,6 +572,25 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(first_delta.kind, "disturbance")
         self.assertIn(r1.intervention, first_delta.reopened_interventions)
 
+    def test_deferral_with_object_valued_provenance_relata_and_partial_saves(self):
+        def certified_with_object_relata(ctx):
+            p = proposal_turn1(ctx)
+            p.certification = "adequate"
+            h = _arrivals(ctx)
+            p.cuts.append({"kind": "provenance", "label": "account_work", "basis": h, "apparatus": APP,
+                           "relata": [{"role": "person_writing", "label": "the person writing"}],
+                           "payload": {"terminology": ["missed"], "source": h[0], "about": "work"}})
+            return p
+        store = JsonStore(os.path.join(self.tmp.name, "partial.json"))
+        runtime = Runtime(scripted([certified_with_object_relata] * 4), store=store)
+        r = runtime.turn(MISSED)
+        self.assertEqual(r.form, "deferral")
+        deferral = runtime.config.cuts[r.intervention]
+        self.assertEqual(deferral.relata, ("the person writing",))
+        self.assertEqual(deferral.allocations["the person writing"]["burden"], 1.0)
+        saved = JsonStore(store.path).load()
+        self.assertEqual(saved.version, runtime.config.version)
+
     def test_minimal_release_when_a_person_state_account_is_live(self):
         def about_body(fn):
             def inner(ctx):

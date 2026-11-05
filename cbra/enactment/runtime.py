@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from .arrangements import care_delta, play_delta
 from .graph import APPARATUS_MARK, Configuration, Cut, Delta, EnactmentError, TransportTrace
@@ -88,14 +88,30 @@ def _response_demand(value: Any) -> Dict[str, List[str]]:
 
 class Runtime:
     def __init__(self, proposer: Proposer, store: Any = None, config: Optional[Configuration] = None,
-                 max_rounds: int = 3, channel: str = "cli") -> None:
+                 max_rounds: int = 3, channel: str = "cli",
+                 observer: Optional[Callable[[Dict[str, Any]], None]] = None) -> None:
         self.proposer = proposer
         self.store = store
+        self.observer = observer
         self.config = config or (store.load() if store is not None and store.exists() else Configuration())
         self.max_rounds = max_rounds
         self.channel = channel
         self._turns = sum(1 for f in self.config.lifecycle if f.get("fact") == "reconfiguration_open")
         self.last_turn: Optional[str] = None
+
+    # -- progress events (recording; they change nothing) -------------------
+
+    def _notify(self, event: Dict[str, Any]) -> None:
+        if self.observer is not None:
+            try:
+                self.observer(dict(event))
+            except Exception:  # an observer failure must not disturb the turn
+                pass
+
+    def _fact(self, name: str, **detail: Any) -> Dict[str, Any]:
+        record = self.config.fact(name, **detail)
+        self._notify(dict(record, event="fact"))
+        return record
 
     # -- context -----------------------------------------------------------
 
@@ -206,6 +222,8 @@ class Runtime:
             payload=payload,
         )
         formation.baseline = cut.id
+        self._notify({"event": "baseline", "turn": turn, "cut": cut.id})
+        self._save()
         return cut.id
 
     # -- enacting a proposal ----------------------------------------------
@@ -343,6 +361,7 @@ class Runtime:
         turn = formation.turn
         formation.round = round_number
         formation.minimal = minimal
+        self._notify({"event": "round", "turn": turn, "round": round_number, "minimal": minimal})
         context = self._context(turn, round_number, formation.arrivals, violations, formation.baseline,
                                 returning=formation.cuts)
         context.minimal = minimal
@@ -402,6 +421,10 @@ class Runtime:
         result = check_all(cfg, formation)
         formation.history.append(list(result))
         formation.violations = result
+        if result:
+            self._notify({"event": "returned", "turn": turn, "round": round_number,
+                          "constraints": [v.as_record() for v in result]})
+        self._save()
         return result
 
     def _defer(self, formation: Formation, violations: List[Violation], arrival: TransportTraceLike) -> Cut:
@@ -412,7 +435,7 @@ class Runtime:
         person = "the person writing"
         for c in cfg.active("provenance"):
             if c.relata:
-                person = c.relata[0]
+                person = str(c.relata[0])
                 break
         draft = formation.draft or {}
         from .arrangements import arrangements
@@ -434,9 +457,9 @@ class Runtime:
                 "note": "silence is a public cut; the next move and its burden stay with the person",
             },
         )
-        cfg.fact("release_withheld", turn=formation.turn, intervention=deferral.id, rounds=formation.round,
+        self._fact("release_withheld", turn=formation.turn, intervention=deferral.id, rounds=formation.round,
                  constraints=[v.as_record() for v in violations])
-        cfg.fact("effects_unobserved", turn=formation.turn, intervention=deferral.id)
+        self._fact("effects_unobserved", turn=formation.turn, intervention=deferral.id)
         cfg.unresolved.append({"kind": "release_withheld", "turn": formation.turn, "intervention": deferral.id,
                                "constraints": [v.constraint for v in violations]})
         return deferral
@@ -451,7 +474,7 @@ class Runtime:
         fact_start = len(cfg.lifecycle)
         arrival = cfg.inscribe(text, role, channel or self.channel, transformations)
         cfg.disturb("arrival:next_message", source=arrival.handle, reason="a new arrival reopens deferred interventions")
-        cfg.fact("reconfiguration_open", turn=turn, arrival=arrival.handle)
+        self._fact("reconfiguration_open", turn=turn, arrival=arrival.handle)
         formation = Formation(turn=turn, arrivals=[arrival.handle])
         self._baseline(turn, arrival.handle, formation)
         violations: List[Violation] = []
@@ -468,8 +491,10 @@ class Runtime:
             if not violations:
                 formation.form = "minimal"
         if violations:
-            deferral = self._defer(formation, violations, arrival)
-            self._save()
+            try:
+                deferral = self._defer(formation, violations, arrival)
+            finally:
+                self._save()
             return TurnResult(turn, False, None, deferral.id, formation.round, formation.history,
                               cfg.deltas[delta_start:], cfg.lifecycle[fact_start:], form="deferral")
         draft = formation.draft or {}
@@ -505,8 +530,8 @@ class Runtime:
                 "rounds": formation.round,
             },
         )
-        cfg.fact("intervention_released", turn=turn, intervention=intervention.id, rounds=formation.round, form=formation.form)
-        cfg.fact("effects_unobserved", turn=turn, intervention=intervention.id)
+        self._fact("intervention_released", turn=turn, intervention=intervention.id, rounds=formation.round, form=formation.form)
+        self._fact("effects_unobserved", turn=turn, intervention=intervention.id)
         self._save()
         return TurnResult(turn, True, draft.get("text"), intervention.id, formation.round, formation.history,
                           cfg.deltas[delta_start:], cfg.lifecycle[fact_start:], form=formation.form)
@@ -523,7 +548,7 @@ class Runtime:
         reopened = [i for d in deltas for i in d.reopened_interventions]
         reinserted = any(d.structural() for d in deltas)
         if reinserted:
-            cfg.fact("prior_cut_disturbed", trace=trace.handle, conditions=list(conditions), reopened=reopened)
+            self._fact("prior_cut_disturbed", trace=trace.handle, conditions=list(conditions), reopened=reopened)
         else:
             cfg.unresolved.append({"kind": "effect_not_reinserted", "trace": trace.handle,
                                    "note": "effect recorded beside an unchanged formation; the movement that reinserts it is still to come"})

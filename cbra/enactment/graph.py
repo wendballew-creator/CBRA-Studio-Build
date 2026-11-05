@@ -76,6 +76,21 @@ def _tuple(value: Any) -> Tuple[Any, ...]:
     return tuple(value)
 
 
+def _label(item: Any) -> str:
+    """A proposal may name a position or condition as an object; the cut
+    carries its label. Objects keep their other fields only in payload."""
+    if isinstance(item, Mapping):
+        for key in ("label", "text", "kind", "role", "name", "id"):
+            if item.get(key):
+                return str(item[key])
+        return json.dumps(item, sort_keys=True)
+    return str(item)
+
+
+def _labels(value: Any) -> Tuple[str, ...]:
+    return tuple(_label(v) for v in _tuple(value))
+
+
 @dataclass(frozen=True)
 class TransportTrace:
     """A record of arrival. It carries no semantic weight by itself."""
@@ -326,15 +341,15 @@ class Configuration:
             apparatus=tuple(apparatus),
             depends_on=depends,
             lineage=lineage,
-            relata=_tuple(fields.pop("relata", ())),
-            relations=tuple(tuple(r) for r in fields.pop("relations", ())),
-            addressable=_tuple(fields.pop("addressable", ())),
-            unmarked=_tuple(fields.pop("unmarked", ())),
-            power=_tuple(fields.pop("power", ())),
+            relata=_labels(fields.pop("relata", ())),
+            relations=tuple(tuple(_label(x) for x in r) for r in fields.pop("relations", ()) if isinstance(r, (list, tuple))),
+            addressable=_labels(fields.pop("addressable", ())),
+            unmarked=_labels(fields.pop("unmarked", ())),
+            power=_labels(fields.pop("power", ())),
             allocations={k: dict(v) for k, v in dict(fields.pop("allocations", {})).items()},
             consequence_paths=tuple(dict(p) for p in fields.pop("consequence_paths", ())),
-            counter_cuts=_tuple(fields.pop("counter_cuts", ())),
-            invalidation_conditions=_tuple(fields.pop("invalidation_conditions", ())),
+            counter_cuts=_labels(fields.pop("counter_cuts", ())),
+            invalidation_conditions=_labels(fields.pop("invalidation_conditions", ())),
             payload=dict(fields.pop("payload", {})),
         )
         if fields:

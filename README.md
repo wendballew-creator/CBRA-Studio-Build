@@ -40,7 +40,9 @@ constraints inside formation, effect return, local persistence. It is built
 clean, apart from the Milestone 2 substrate, and it reports bounded lifecycle
 facts only. [ENACTMENT_SLICE.md](ENACTMENT_SLICE.md) records what it enacts,
 what it records, what it does not establish, and its claim boundary. The
-2 November 2026 canon that specifies it is not yet in this repository.
+2 November 2026 canon that specifies it is not yet in this repository. A test
+page over it runs with `python -m cbra.enactment.serve` and needs the provider
+key in the environment.
 
 ## Repository layers
 

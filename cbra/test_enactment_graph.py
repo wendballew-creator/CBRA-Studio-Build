@@ -158,6 +158,20 @@ class GraphTests(unittest.TestCase):
         read_full = dict(claimed, scale="expanded", distribution="person")
         self.assertEqual(len(text_against_claim(claimed, read_full)), 2)
 
+    def test_object_valued_labels_are_carried_as_labels(self):
+        cfg = Configuration()
+        t1 = cfg.inscribe("hello", "user_message")
+        cut = cfg.enact("provenance", "p", basis=[t1.handle], apparatus=["a"],
+                        relata=[{"role": "person_writing", "label": "the person writing"}, "sleep"],
+                        unmarked=[{"text": "cause of overwhelm"}],
+                        invalidation_conditions=[{"kind": "revision:p"}],
+                        relations=[[{"label": "sleep"}, "conditions", {"label": "the person writing"}]])
+        self.assertEqual(cut.relata, ("the person writing", "sleep"))
+        self.assertEqual(cut.unmarked, ("cause of overwhelm",))
+        self.assertEqual(cut.invalidation_conditions, ("revision:p",))
+        self.assertEqual(cut.relations, (("sleep", "conditions", "the person writing"),))
+        self.assertEqual(cut.relata[0] in {"the person writing": 1}, True)
+
     def test_global_entity_constraint_requires_continuity_cut(self):
         cfg = Configuration()
         t0 = cfg.inscribe("earlier", "user_message")

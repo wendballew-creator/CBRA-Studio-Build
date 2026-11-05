@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CBRA enactment slice</title>
+<style>
+  :root { --bg:#f7f6f2; --fg:#1d1d1b; --muted:#6b6b66; --line:#dcdad3; --card:#ffffff; --accent:#2f5d50;
+          --formed:#2f5d50; --minimal:#7a5a1e; --deferral:#8a3b3b; --arrival:#e9e7df; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161614; --fg:#ecebe6; --muted:#a09f98; --line:#33332f; --card:#1f1f1c; --arrival:#2a2a26; --accent:#8fc1ae; --formed:#8fc1ae; --minimal:#d9b36a; --deferral:#e08a8a; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  header { display:flex; align-items:baseline; gap:12px; padding:14px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  header .muted { color:var(--muted); font-size:13px; }
+  header button { margin-left:auto; }
+  main { display:grid; grid-template-columns: minmax(0,1fr) 340px; gap:0; min-height: calc(100vh - 54px); }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } aside { border-left:0; border-top:1px solid var(--line); } }
+  section#conv { padding:16px; display:flex; flex-direction:column; gap:12px; }
+  aside { border-left:1px solid var(--line); padding:16px; font-size:13px; }
+  aside h2 { font-size:13px; margin:0 0 8px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  #events { list-style:none; padding:0; margin:0 0 16px; max-height:50vh; overflow:auto; }
+  #events li { padding:4px 0; border-bottom:1px dashed var(--line); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 14px; max-width:760px; }
+  .arrival { background:var(--arrival); border-color:transparent; align-self:flex-end; }
+  .effect { border-style:dashed; align-self:flex-end; }
+  .chip { display:inline-block; font-size:12px; padding:1px 8px; border-radius:999px; border:1px solid currentColor; margin-right:8px; }
+  .formed { color:var(--formed); } .minimal { color:var(--minimal); } .deferral { color:var(--deferral); }
+  .text { white-space:pre-wrap; margin:8px 0 4px; }
+  details { margin-top:6px; font-size:13px; color:var(--muted); }
+  details summary { cursor:pointer; }
+  details pre, pre.json { white-space:pre-wrap; word-break:break-word; font-size:12px; background:var(--bg); padding:8px; border-radius:6px; max-height:40vh; overflow:auto; }
+  form { display:flex; flex-direction:column; gap:8px; max-width:760px; }
+  textarea, input { width:100%; font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--fg); }
+  textarea { min-height:72px; resize:vertical; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  button { font:inherit; padding:7px 14px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button:disabled { opacity:.5; cursor:default; }
+  .busy { color:var(--muted); font-size:13px; }
+  .small { font-size:12px; color:var(--muted); }
+  dialog { max-width:900px; width:92vw; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg); }
+</style>
+</head>
+<body>
+<header>
+  <h1>CBRA enactment slice</h1>
+  <span class="muted">session <code id="sid">…</code></span>
+  <span class="muted" id="status"></span>
+  <button id="trace">Trace</button>
+  <button id="self">Self</button>
+  <button id="new">New session</button>
+</header>
+<main>
+  <section id="conv">
+    <div id="items"></div>
+    <form id="turn">
+      <textarea id="text" placeholder="Write to the runtime. Each message is a turn: a plain answer is formed first as the baseline, then the proposer forms the intervention and the release constraints run."></textarea>
+      <div class="row">
+        <button class="primary" id="send" type="submit">Send</button>
+        <span class="busy" id="busy"></span>
+      </div>
+    </form>
+    <form id="effectForm">
+      <div class="row">
+        <input id="effectText" placeholder="Report an observed effect (what happened after the last intervention)">
+      </div>
+      <div class="row">
+        <input id="effectConds" placeholder="Conditions, comma separated (optional; otherwise the proposer matches them)">
+        <button id="effectSend" type="submit">Report effect</button>
+      </div>
+      <div class="small">A turn takes one to three minutes: a plain answer, its reading, then one to four proposal rounds with a reading of each draft. Facts appear on the right as they occur.</div>
+    </form>
+  </section>
+  <aside>
+    <h2>Activity</h2>
+    <ul id="events"></ul>
+    <h2>Held open</h2>
+    <ul id="unresolved" class="small"></ul>
+  </aside>
+</main>
+<dialog id="dlg"><div class="row"><strong id="dlgTitle"></strong><button id="dlgClose" style="margin-left:auto">Close</button></div><pre class="json" id="dlgBody"></pre></dialog>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  let session = null, es = null, busy = false;
+  const store = { get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+                  set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+  async function api(path, opts) {
+    const r = await fetch(path, Object.assign({ headers: { "Content-Type": "application/json" } }, opts || {}));
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { if (data.history) renderHistory(data.history); throw new Error(data.error || (r.status + " " + r.statusText)); }
+    return data;
+  }
+
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+  function renderItem(item) {
+    if (item.kind === "arrival") { const c = el("div", "card arrival", item.text); return c; }
+    if (item.kind === "effect") { const c = el("div", "card effect"); c.append(el("span", "chip", "effect"), el("span", null, item.text)); return c; }
+    const c = el("div", "card");
+    const form = item.form || "formed";
+    const label = form === "deferral" ? "release withheld" : form === "minimal" ? "minimal release" : "released";
+    const head = el("div");
+    head.append(el("span", "chip " + form, label));
+    head.append(el("span", "small", item.turn + " · " + (item.rounds || 0) + " round" + (item.rounds === 1 ? "" : "s") + (item.status === "reopened" ? " · reopened" : "")));
+    c.append(head);
+    if (form === "deferral") {
+      c.append(el("div", "text", "No text was released after " + item.rounds + " rounds. The silence is itself a cut: the next move stays with you, and your next message reopens it."));
+      const ul = el("ul");
+      (item.withheld_constraints || []).forEach(v => ul.append(el("li", null, v.constraint + ". " + v.name + " — " + v.reason)));
+      c.append(ul);
+    } else {
+      c.append(el("div", "text", item.text || ""));
+    }
+    const d = el("details"); d.append(el("summary", null, "what formed this"));
+    const lines = [];
+    if (form === "minimal") lines.push("Released under minimal terms: no care or play claim" + (item.claims_stripped && item.claims_stripped.length ? " (claimed " + item.claims_stripped.join(", ") + "; stripped)" : "") + ". Person-state account live: " + item.person_state_live + ".");
+    if (item.claims && item.claims.length) lines.push("Claims: " + item.claims.join(", ") + ".");
+    if (item.care_delta && item.care_delta.length) lines.push("Care, as structural difference from the uninstructed baseline: " + item.care_delta.join(", ") + ".");
+    const pk = Object.keys(item.play_delta || {});
+    if (pk.length) lines.push("Play: alternative arrangement " + pk.join(", ") + " differs in " + Object.values(item.play_delta).map(v => v.join(", ")).join("; ") + ".");
+    if (item.response_demand) lines.push("Response demand: " + Object.entries(item.response_demand).map(([p, d]) => p + " → " + d.join(", ")).join("; ") + ".");
+    if (item.reopen_conditions && item.reopen_conditions.length) lines.push("Reopens on: " + item.reopen_conditions.join(", ") + ".");
+    if (item.unmarked && item.unmarked.length) lines.push("Left unmarked: " + item.unmarked.join("; ") + ".");
+    if (item.reopened_reason) lines.push("Reopened: " + item.reopened_reason + ".");
+    (item.returns || []).forEach(r => lines.push("Round " + r.round + " returned: " + r.constraints.map(v => v.constraint + " (" + v.reason + ")").join("; ")));
+    lines.forEach(l => d.append(el("div", null, l)));
+    c.append(d);
+    return c;
+  }
+
+  function renderHistory(items) { const box = $("items"); box.innerHTML = ""; items.forEach(i => box.append(renderItem(i))); window.scrollTo(0, document.body.scrollHeight); }
+  function renderUnresolved(list) { const ul = $("unresolved"); ul.innerHTML = ""; (list || []).slice(-12).forEach(u => ul.append(el("li", null, (u.kind || "") + (u.text ? ": " + u.text : u.note ? ": " + u.note : u.error ? ": " + u.error : "")))); }
+  function logEvent(e) {
+    const li = el("li");
+    let t;
+    if (e.event === "fact") t = "[" + e.fact + "]" + (e.turn ? " " + e.turn : "") + (e.form ? " · " + e.form : "") + (e.intervention ? " · " + e.intervention : "");
+    else if (e.event === "round") t = (e.minimal ? "minimal round " : "round ") + e.round + " forming";
+    else if (e.event === "returned") t = "round " + e.round + " returned on " + e.constraints.map(c => c.constraint).join(", ");
+    else if (e.event === "baseline") t = "uninstructed baseline read (" + e.cut + ")";
+    else if (e.event === "done") t = e.kind === "turn" ? ("done: " + (e.released ? e.form : "withheld")) : ("effect " + (e.reinserted ? "reinserted" : "recorded, not reinserted"));
+    else if (e.event === "error") t = "error: " + e.error;
+    else t = JSON.stringify(e);
+    li.textContent = t; $("events").prepend(li);
+  }
+  function setBusy(b, msg) { busy = b; $("send").disabled = b; $("effectSend").disabled = b; $("busy").textContent = b ? (msg || "forming…") : ""; }
+
+  function listen() {
+    if (es) es.close();
+    es = new EventSource("/api/session/" + session + "/events");
+    es.onmessage = (m) => { try { logEvent(JSON.parse(m.data)); } catch (e) {} };
+  }
+
+  async function load(id) {
+    const data = await api("/api/session/" + id);
+    session = id; store.set("cbra_session", id); $("sid").textContent = id;
+    renderHistory(data.history); renderUnresolved(data.unresolved); listen();
+  }
+  async function fresh() { const d = await api("/api/session", { method: "POST", body: "{}" }); $("events").innerHTML = ""; await load(d.session); }
+
+  $("turn").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const text = $("text").value.trim(); if (!text || busy) return;
+    setBusy(true, "forming… (one to three minutes)");
+    $("items").append(renderItem({ kind: "arrival", text }));
+    $("text").value = "";
+    try { const r = await api("/api/session/" + session + "/turn", { method: "POST", body: JSON.stringify({ text }) }); renderHistory(r.history); }
+    catch (e) { $("status").textContent = e.message; }
+    finally { setBusy(false); refreshUnresolved(); }
+  });
+  $("effectForm").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const text = $("effectText").value.trim(); if (!text || busy) return;
+    const conds = $("effectConds").value.split(",").map(s => s.trim()).filter(Boolean);
+    setBusy(true, "returning the effect…");
+    try { const r = await api("/api/session/" + session + "/effect", { method: "POST", body: JSON.stringify(conds.length ? { text, conditions: conds } : { text }) }); renderHistory(r.history); $("effectText").value = ""; $("effectConds").value = ""; }
+    catch (e) { $("status").textContent = e.message; }
+    finally { setBusy(false); refreshUnresolved(); }
+  });
+  async function refreshUnresolved() { try { const d = await api("/api/session/" + session); renderUnresolved(d.unresolved); } catch (e) {} }
+  function showDialog(title, obj) { $("dlgTitle").textContent = title; $("dlgBody").textContent = JSON.stringify(obj, null, 1); $("dlg").showModal(); }
+  $("dlgClose").addEventListener("click", () => $("dlg").close());
+  $("trace").addEventListener("click", async () => showDialog("Configuration trace", await api("/api/session/" + session + "/trace")));
+  $("self").addEventListener("click", async () => showDialog("The runtime's account of itself", await api("/api/session/" + session + "/self")));
+  $("new").addEventListener("click", fresh);
+
+  (async () => {
+    const saved = store.get("cbra_session");
+    try { if (saved) await load(saved); else await fresh(); } catch (e) { await fresh(); }
+  })();
+})();
+</script>
+</body>
+</html>
