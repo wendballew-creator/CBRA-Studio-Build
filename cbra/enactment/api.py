@@ -64,6 +64,7 @@ def history(config: Configuration) -> List[Dict[str, Any]]:
             "person_state_live": p.get("person_state_live"),
             "material": [{"handle": h, "file": config.transports[h].provenance.get("file"),
                           "heading": config.transports[h].provenance.get("heading"),
+                          "terms": list(config.transports[h].provenance.get("terms") or []),
                           "consequential": bool(config.transports[h].provenance.get("consequential"))}
                          for h in p.get("material", []) if h in config.transports],
             "care_delta": sorted((p.get("care_delta") or {}).keys()),

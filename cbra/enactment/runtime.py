@@ -188,8 +188,8 @@ class Runtime:
             trace = cfg.inscribe(passage.text, "document", channel="corpus", provenance={
                 "file": passage.file, "heading": passage.heading, "line": passage.line,
                 "score": passage.score, "consequential": passage.consequential, "matched": passage.matched,
-                "corpus": self.material.describe().get("index"),
-                "apparatus": "lexical selection over the active canon files; locates candidates only",
+                "terms": passage.terms, "corpus": self.material.describe().get("index"),
+                "apparatus": "lexical selection over the active canon files, indexed by the glossary's own terms; locates candidates only",
             })
             formation.material.append(trace.handle)
             if passage.consequential:
@@ -198,6 +198,7 @@ class Runtime:
             self._notify({"event": "material", "turn": formation.turn, "passages": [
                 {"handle": h, "file": cfg.transports[h].provenance.get("file"),
                  "heading": cfg.transports[h].provenance.get("heading"),
+                 "terms": list(cfg.transports[h].provenance.get("terms") or []),
                  "consequential": bool(cfg.transports[h].provenance.get("consequential"))} for h in formation.material]})
 
     # -- the baseline: an uninstructed answer, read for its arrangement -----

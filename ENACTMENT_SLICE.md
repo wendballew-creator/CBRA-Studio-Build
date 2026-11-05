@@ -509,3 +509,60 @@ names no canon term gets whatever sections share its words; the proposer
 decides what a passage does; and the November set is still outside the
 repository, so the default corpus for anyone else running the server is the
 July set.
+
+## Selection indexed by the canon's own vocabulary, 5 November 2026
+
+The first selection scored every content word of the arrival against
+every section, so "system" and "relation" counted as much as
+"intra-action", a word used in one section counted the same as a word used
+in eighty, "care" matched "careful", and four passages came back whether or
+not anything matched. On the November set "What does care mean in this
+system?" ranked "Status of This Canon" above the Care entries, and "Explain
+the relation between play and care" ranked "The Dynamic Coding Method" and
+"Changes from v12" above Care and Play.
+
+`material.py` now indexes the canon by its own terms:
+
+- The entry headings of the glossary files (44 in Glossary v6, 32 in v5)
+  are the term set. A term matches an arrival only as a whole phrase after
+  light stemming, so "intra-active" names `Intra-action` and "an
+  alternative arrangement" names `Alternative Arrangement`, while "cut" on
+  its own does not name `Agential Cut`. A bare head word that belongs to
+  exactly one multi-word term and is not a term itself ("a cut", "a
+  trace") ranks that entry without marking it: the arrival did not name
+  it.
+- A section whose heading is a term the arrival named is consequential
+  and must ground a cut (constraint 3 unchanged). Only canon terms mark.
+- The arrival's other words score sections by rarity across the canon
+  (inverse document frequency over sections), heading hits doubled, so a
+  word common in the canon counts for little.
+- Without a named term, a section needs at least two rare words and a
+  floor score, so "hello", a landlord email, or a missed deadline select
+  nothing rather than four weak passages. Version-history sections
+  ("Changes from v12") and file-title sections are never selected.
+- The provenance of each document trace, the `material` event, and the
+  page now carry the terms the passage was selected by ("names Care").
+
+A selection test set is checked in (`cbra/test_enactment_material.py`,
+`CASES`): fourteen questions with the passages each must and must not
+select, whether each must be consequential, and which must select nothing.
+It runs against the July corpus in the repository and, when present,
+against the November set under `.cbra-runtime/canon/`. It is what says
+whether a change to selection is an improvement. All cases pass on both
+sets; 38 enactment tests, full suite OK.
+
+Known limits: stemming is crude (suffix stripping, a few aliases) and the
+test set is what guards it; a question that names no canon term and shares
+no two rare words with a section gets no material, which is honest but
+means "How do things get their boundaries?" finds nothing. The two next
+steps are selection re-run each round on the labels of the live cuts, and
+an embedding pass as a second source of candidates with the term rule left
+as the only thing that marks a passage consequential.
+
+Result on the page, fresh session, November set: "What does care mean in
+this system?" selected Kernel v13 › Care and Glossary v6 › Care (both
+named), then the Grammar's "Care as an Organizing Constraint" and the
+Constraints' "Care Decoration", and released on round one with an answer
+that begins "In CBRA, care is not a service or a tone", gives the canon's
+operative test as a list of what must change in the arrangement, and names
+the decoration pattern by its canon name.
