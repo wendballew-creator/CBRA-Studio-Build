@@ -64,9 +64,11 @@ ARRANGEMENT_ROLES = ("baseline", "proposed_baseline", "enacted", "alternative", 
 # (tests and older traces use plain labels), so comparison degrades to label
 # equality rather than failing.
 POSITION_ROLES = (
-    "person_writing", "affected_others", "authority", "support_person",
+    "person", "affected_others", "authority", "support_person",
     "health_or_crisis", "apparatus", "other",
 )
+ROLE_ALIASES = {"person_writing": "person", "user": "person", "asker": "person", "assistant": "apparatus",
+                "the assistant": "apparatus", "model": "apparatus", "cbra": "apparatus"}
 STEP_KINDS = (
     "check_safety", "acknowledge", "explain", "apologize", "plan",
     "communicate_internal", "communicate_external", "decide_routing",
@@ -75,7 +77,7 @@ STEP_KINDS = (
 )
 SCALES = ("minimal", "reduced", "full", "expanded")
 PACES = ("immediate", "prompt", "paced", "slow")
-DISTRIBUTIONS = ("person", "shared", "transferred")
+DISTRIBUTIONS = ("person", "shared", "transferred", "apparatus", "none")
 CONSEQUENCE_TIMINGS = ("before_commitment", "after_commitment", "deferred")
 SUPPORT_KINDS = ("script", "checklist", "proxy", "coverage", "health_resource", "accompaniment", "none")
 NUMERIC_TOLERANCE = 0.1
@@ -101,7 +103,8 @@ def _role_map(payload: Mapping[str, Any]) -> Dict[str, str]:
     roles: Dict[str, str] = {}
     for entry in payload.get("positions") or []:
         if isinstance(entry, Mapping) and entry.get("label") and entry.get("role"):
-            roles[str(entry["label"])] = str(entry["role"])
+            role = str(entry["role"])
+            roles[str(entry["label"])] = ROLE_ALIASES.get(role, role)
     return roles
 
 
@@ -224,7 +227,7 @@ def text_against_claim(claimed: Mapping[str, Any], read: Mapping[str, Any]) -> L
         if abs(float(cb[role]) - float(rb[role])) >= TEXT_BURDEN_TOLERANCE:
             reasons.append("text places burden %.2f on %r; the arrangement claims %.2f" % (float(rb[role]), role, float(cb[role])))
     cd, rd = claimed.get("response_demand") or {}, read.get("response_demand") or {}
-    for role in ("person_writing",):
+    for role in ("person",):
         if role in cd and role in rd:
             extra = set(rd[role]) - set(cd[role])
             if len(extra) >= 2:

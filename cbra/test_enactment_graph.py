@@ -143,14 +143,14 @@ class GraphTests(unittest.TestCase):
     def test_text_against_claim_tolerates_an_opening_acknowledgment(self):
         from cbra.enactment.arrangements import text_against_claim
         claimed = {"sequence": ["check_safety", "hand_off", "rest"], "scale": "minimal", "distribution": "shared",
-                   "burden": {"person_writing": 0.4, "authority": 0.3},
-                   "response_demand": {"person_writing": ["decide", "communicate"]}}
+                   "burden": {"person": 0.4, "authority": 0.3},
+                   "response_demand": {"person": ["decide", "communicate"]}}
         read_ok = dict(claimed, sequence=["acknowledge", "check_safety", "seek_support"],
-                       burden={"person_writing": 0.5, "authority": 0.3})
+                       burden={"person": 0.5, "authority": 0.3})
         self.assertEqual(text_against_claim(claimed, read_ok), [])
         read_promise_first = dict(claimed, sequence=["apologize", "recommit", "explain", "plan"],
-                                  burden={"person_writing": 0.85, "authority": 0.05},
-                                  response_demand={"person_writing": ["explain", "plan", "recommit", "warn"]})
+                                  burden={"person": 0.85, "authority": 0.05},
+                                  response_demand={"person": ["explain", "plan", "recommit", "warn"]})
         reasons = text_against_claim(claimed, read_promise_first)
         self.assertEqual(len(reasons), 4, reasons)
         self.assertTrue(any("leads with recommit/explain" in r for r in reasons))
@@ -171,6 +171,26 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(cut.invalidation_conditions, ("revision:p",))
         self.assertEqual(cut.relations, (("sleep", "conditions", "the person writing"),))
         self.assertEqual(cut.relata[0] in {"the person writing": 1}, True)
+
+    def test_reader_labels_are_aliased_and_not_judged_by_constraint_1(self):
+        from cbra.enactment.arrangements import arrangement_fields
+        cfg = Configuration()
+        t1 = cfg.inscribe("What is intra-action?", "user_message")
+        app = cfg.enact("apparatus", "app", basis=[t1.handle], apparatus=["a"], payload={"turn": "turn1"})
+        read = cfg.enact("arrangement", "arr_read:turn1:r1", basis=[t1.handle], apparatus=["reader"],
+                         relata=["user", "assistant"],
+                         payload={"turn": "turn1", "role": "read", "distribution": "apparatus",
+                                  "positions": [{"role": "person_writing", "label": "user"}, {"role": "assistant", "label": "assistant"}],
+                                  "response_demand": {"assistant": ["explain"]}},
+                         allocations={"assistant": {"burden": 0.9}, "user": {"burden": 0.1}})
+        fields = arrangement_fields(read)
+        self.assertEqual(fields["burden"], {"apparatus": 0.9, "person": 0.1})
+        self.assertEqual(fields["response_demand"], {"apparatus": ["explain"]})
+        f = Formation(turn="turn1", arrivals=[t1.handle], cuts=[app.id, read.id], variation_constraint="n/a")
+        self.assertNotIn(1, [v.constraint for v in check_all(cfg, f)])
+        bad = cfg.enact("position", "pos", basis=[t1.handle], apparatus=["a"], relata=["user"], payload={"turn": "turn1"})
+        f.cuts.append(bad.id)
+        self.assertIn(1, [v.constraint for v in check_all(cfg, f)])
 
     def test_global_entity_constraint_requires_continuity_cut(self):
         cfg = Configuration()

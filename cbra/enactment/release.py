@@ -88,6 +88,8 @@ def _labels(cuts: List[Cut]) -> Dict[str, Cut]:
 
 def c1_transport_role_copied(config: Configuration, f: Formation) -> Optional[str]:
     for cut in f.active_cuts(config):
+        if cut.kind == "arrangement" and cut.payload.get("role") in ("baseline", "read"):
+            continue  # the architecture's own readings; their labels are not the proposal's cuts
         if cut.label in TRANSPORT_ROLES:
             return "cut %s is labelled with transport role %r" % (cut.id, cut.label)
         for r in cut.relata:

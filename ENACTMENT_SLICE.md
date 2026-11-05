@@ -430,3 +430,31 @@ read as person-distributed, revised the record toward "transferred" and
 mismatch. The page made that legible as it happened, which is what it is
 for. Cost per turn is still unmeasured and should be read from the provider
 dashboard before anyone else uses the page.
+
+## A definitional question, 4 November 2026
+
+The author asked the page "What is intra-action?" and the runtime withheld
+it after four rounds. The trace showed two defects in the slice, not in the
+model: constraint 1 was firing on the reader's own cuts, because the
+extraction call labelled the asker "user" and the runtime enacted that
+reading as a cut; and from round two the reader tagged the assistant as the
+person and the asker as an affected other, so the burden it reported was the
+assistant's work of explaining and constraint 10's "text distributes the
+work as person" was an artifact. The role was renamed from "person_writing"
+to "person", "apparatus" was named explicitly as the assistant that answers,
+"apparatus" and "none" were added to the distributions for an explanation
+that asks nothing of anyone, reader labels are aliased, and constraint 1 no
+longer judges baseline or read cuts.
+
+Rerun on a fresh session: released on round 1 in about three minutes, with
+a plain definition of intra-action. The record beside it: claims ['care'];
+uninstructed baseline distribution 'apparatus', enacted 'apparatus', as read 'apparatus';
+person's burden in baseline 0.0, enacted 0.0, as read 0.0;
+care delta ['boundary', 'presumed_capacity', 'scale', 'sequence'].
+
+What this adds: the vocabulary and the readers were tuned on a scenario
+about distributing work, and a question with no work to distribute exposed
+that. The fix is in the vocabulary, not in a special case for questions.
+Whether a definitional answer should ever carry a care claim is a reading
+for the author; the record above shows what the model claimed and what the
+runtime computed.

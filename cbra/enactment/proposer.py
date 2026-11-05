@@ -176,15 +176,19 @@ class ScriptedProposer(Proposer):
 
 
 ARRANGEMENT_VOCABULARY = """Use this vocabulary exactly; it is what makes two arrangements comparable.
-- position roles: person_writing | affected_others | authority |
-  support_person | health_or_crisis | apparatus | other
+- position roles: person (the one who sent the message and to whom the
+  intervention is addressed) | affected_others | authority | support_person |
+  health_or_crisis | apparatus (the assistant, model, or architecture that
+  answers; in a plain answer the assistant is "apparatus") | other
 - step kinds: check_safety | acknowledge | explain | apologize | plan |
   communicate_internal | communicate_external | decide_routing |
   reduce_scope | hand_off | seek_support | rest | repair | recommit | warn |
   follow_up | wait | other
 - scale: minimal | reduced | full | expanded
 - pace: immediate | prompt | paced | slow
-- distribution: person | shared | transferred
+- distribution: person (the person carries the work) | shared | transferred
+  (another position carries it) | apparatus (the answer itself is the work,
+  as in an explanation) | none (nothing is asked of anyone)
 - consequence_timing: before_commitment | after_commitment | deferred
 - support kinds: script | checklist | proxy | coverage | health_resource |
   accompaniment | none
@@ -298,7 +302,12 @@ minimal, not as care.
 BASELINE_EXTRACTION_INSTRUCTIONS = """You are given an answer that an assistant gave to a message. Describe the
 arrangement that answer enacts: who it asks to do what, in what order, at
 what scale and pace, with what support, and what it leaves open. Read only;
-do not improve, judge, or soften it. Return JSON in the fields below.
+do not improve, judge, or soften it. The assistant that wrote the answer is
+role "apparatus"; the person who sent the message is role "person". Work the
+answer does itself (explaining, drafting) is the apparatus's burden; work it
+asks of the person is the person's. If the answer asks nothing of anyone,
+distribution is "apparatus" or "none" and the person's burden is 0. Return
+JSON in the fields below.
 
 """ + ARRANGEMENT_VOCABULARY + "\n"
 
