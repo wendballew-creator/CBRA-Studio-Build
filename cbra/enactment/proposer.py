@@ -78,6 +78,7 @@ class ProposalContext:
     baseline: Optional[Dict[str, Any]] = None
     minimal: bool = False
     returned_cuts: List[Dict[str, Any]] = field(default_factory=list)
+    material: List[Dict[str, Any]] = field(default_factory=list)
 
     def as_record(self) -> Dict[str, Any]:
         return json.loads(json.dumps(self.__dict__))
@@ -282,6 +283,17 @@ Return JSON with these keys:
   [...], "anticipated_effects": [...]}.
 - "claims": subset of ["care", "play"]. "unresolved": incompatibilities you
   are holding open rather than resolving. "certification": null.
+
+"material" holds passages of the project's own canon (its kernel, grammar,
+glossary, constraints, probes) selected for this arrival, each with a
+transport handle, file, and heading. This is CBRA's own system. When the
+arrival asks about a concept the canon defines, the intervention speaks from
+the canon's own definition first, in the canon's terms, and marks where that
+sense differs from or extends the term's wider usage; it does not answer
+from general knowledge and leave the canon beside it. Put the handle of
+every passage a cut rests on in that cut's "basis". A passage marked
+consequential (its heading matched the arrival) must ground at least one cut
+or the draft returns.
 
 If "violations" is non-empty, your previous draft returned to the
 configuration. Each entry names the constraint and why it fired. Form the

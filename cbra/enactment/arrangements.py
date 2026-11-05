@@ -91,11 +91,16 @@ def _normal(value: Any) -> Any:
     return value
 
 
+def _norm_token(value: Any) -> Any:
+    return value.strip().lower().replace(" ", "_") if isinstance(value, str) else value
+
+
 def _kind(item: Any) -> Any:
-    """A step, support item, or possibility compared by its kind when it has one."""
+    """A step, support item, or possibility compared by its kind when it has one.
+    Kinds are compared case-insensitively."""
     if isinstance(item, Mapping):
-        return item.get("kind", item.get("text"))
-    return item
+        return _norm_token(item.get("kind", item.get("text")))
+    return _norm_token(item)
 
 
 def _role_map(payload: Mapping[str, Any]) -> Dict[str, str]:
@@ -103,7 +108,7 @@ def _role_map(payload: Mapping[str, Any]) -> Dict[str, str]:
     roles: Dict[str, str] = {}
     for entry in payload.get("positions") or []:
         if isinstance(entry, Mapping) and entry.get("label") and entry.get("role"):
-            role = str(entry["role"])
+            role = _norm_token(str(entry["role"]))
             roles[str(entry["label"])] = ROLE_ALIASES.get(role, role)
     return roles
 
@@ -130,12 +135,14 @@ def arrangement_fields(cut: Cut) -> Dict[str, Any]:
     fields: Dict[str, Any] = {}
     for k in set(CARE_DIMENSIONS) | set(PLAY_DIMENSIONS):
         fields[k] = _normal(payload.get(k))
+    for k in ("scale", "pace", "distribution", "consequence_timing"):
+        fields[k] = _norm_token(fields.get(k))
     fields["sequence"] = [_kind(s) for s in (payload.get("sequence") or [])]
     fields["support"] = sorted(set(str(_kind(s)) for s in (payload.get("support") or []))) if isinstance(payload.get("support"), (list, tuple)) else _normal(payload.get("support"))
     fields["possibilities_open"] = sorted(set(str(_kind(p)) for p in (payload.get("possibilities_open") or [])))
     demand = payload.get("response_demand") or {}
     if isinstance(demand, Mapping):
-        fields["response_demand"] = _normal(_by_role({k: sorted(set(v)) for k, v in demand.items()}, roles))
+        fields["response_demand"] = _normal(_by_role({k: sorted({_norm_token(d) for d in v}) for k, v in demand.items()}, roles))
     if cut.allocations:
         fields["burden"] = _normal(_by_role({k: v["burden"] for k, v in cut.allocations.items() if v.get("burden") is not None}, roles))
         fields["presumed_capacity"] = _normal(_by_role({k: v["capacity"] for k, v in cut.allocations.items() if v.get("capacity") is not None}, roles))
@@ -197,6 +204,7 @@ def play_delta(config: Configuration, turn: Optional[str] = None) -> Dict[str, D
 
 
 TEXT_BURDEN_TOLERANCE = 0.2
+HEAVY_DEMANDS = ("explain", "regulate", "plan", "recommit", "repair", "warn", "disclose")
 
 
 def text_against_claim(claimed: Mapping[str, Any], read: Mapping[str, Any]) -> List[str]:
@@ -206,8 +214,16 @@ def text_against_claim(claimed: Mapping[str, Any], read: Mapping[str, Any]) -> L
     only the first step, the distribution, the scale, the burden by role, and
     the demands placed on the person are compared."""
     reasons: List[str] = []
-    if claimed.get("distribution") and read.get("distribution") and claimed["distribution"] != read["distribution"]:
-        reasons.append("text distributes the work as %r; the arrangement claims %r" % (read["distribution"], claimed["distribution"]))
+    claimed = dict(claimed, sequence=[_norm_token(s) for s in (claimed.get("sequence") or [])],
+                   distribution=_norm_token(claimed.get("distribution")), scale=_norm_token(claimed.get("scale")))
+    read = dict(read, sequence=[_norm_token(s) for s in (read.get("sequence") or [])],
+                distribution=_norm_token(read.get("distribution")), scale=_norm_token(read.get("scale")))
+    # Distribution is a coarse label; the burden numbers are the measure. The
+    # label is compared only for the flip that matters: work landing on the
+    # person while the record says it does not, or the reverse.
+    cdist, rdist = claimed.get("distribution"), read.get("distribution")
+    if cdist and rdist and (cdist == "person") != (rdist == "person"):
+        reasons.append("text distributes the work as %r; the arrangement claims %r" % (rdist, cdist))
     order = {s: i for i, s in enumerate(SCALES)}
     cs, rs = claimed.get("scale"), read.get("scale")
     if cs in order and rs in order and abs(order[cs] - order[rs]) > 1:
@@ -228,8 +244,8 @@ def text_against_claim(claimed: Mapping[str, Any], read: Mapping[str, Any]) -> L
             reasons.append("text places burden %.2f on %r; the arrangement claims %.2f" % (float(rb[role]), role, float(cb[role])))
     cd, rd = claimed.get("response_demand") or {}, read.get("response_demand") or {}
     for role in ("person",):
-        if role in cd and role in rd:
-            extra = set(rd[role]) - set(cd[role])
+        if role in rd:
+            extra = (set(rd[role]) - set(cd.get(role, []))) & set(HEAVY_DEMANDS)
             if len(extra) >= 2:
                 reasons.append("text asks %r to %s beyond what the arrangement claims" % (role, ", ".join(sorted(extra))))
     return reasons

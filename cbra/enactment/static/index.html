@@ -126,6 +126,7 @@
     if (item.response_demand) lines.push("Response demand: " + Object.entries(item.response_demand).map(([p, d]) => p + " → " + d.join(", ")).join("; ") + ".");
     if (item.reopen_conditions && item.reopen_conditions.length) lines.push("Reopens on: " + item.reopen_conditions.join(", ") + ".");
     if (item.unmarked && item.unmarked.length) lines.push("Left unmarked: " + item.unmarked.join("; ") + ".");
+    if (item.material && item.material.length) lines.push("Canon material: " + item.material.map(m => m.file + " › " + m.heading + (m.consequential ? " (matched)" : "")).join("; ") + ".");
     if (item.reopened_reason) lines.push("Reopened: " + item.reopened_reason + ".");
     (item.returns || []).forEach(r => lines.push("Round " + r.round + " returned: " + r.constraints.map(v => v.constraint + " (" + v.reason + ")").join("; ")));
     lines.forEach(l => d.append(el("div", null, l)));
@@ -142,6 +143,7 @@
     else if (e.event === "round") t = (e.minimal ? "minimal round " : "round ") + e.round + " forming";
     else if (e.event === "returned") t = "round " + e.round + " returned on " + e.constraints.map(c => c.constraint).join(", ");
     else if (e.event === "baseline") t = "uninstructed baseline read (" + e.cut + ")";
+    else if (e.event === "material") t = "canon material: " + e.passages.map(p => p.file.replace(/^CBRA_|\.md$/g, "") + " › " + p.heading + (p.consequential ? " (matched)" : "")).join("; ");
     else if (e.event === "done") t = e.kind === "turn" ? ("done: " + (e.released ? e.form : "withheld")) : ("effect " + (e.reinserted ? "reinserted" : "recorded, not reinserted"));
     else if (e.event === "error") t = "error: " + e.error;
     else t = JSON.stringify(e);

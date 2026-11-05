@@ -22,6 +22,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from .graph import Configuration
+from .material import Corpus
 from .persistence import JsonStore
 from .proposer import Proposer
 from .runtime import Runtime
@@ -61,6 +62,10 @@ def history(config: Configuration) -> List[Dict[str, Any]]:
             "withheld_constraints": p.get("withheld_constraints", []),
             "claims": p.get("claims", []), "claims_stripped": p.get("claims_stripped", []),
             "person_state_live": p.get("person_state_live"),
+            "material": [{"handle": h, "file": config.transports[h].provenance.get("file"),
+                          "heading": config.transports[h].provenance.get("heading"),
+                          "consequential": bool(config.transports[h].provenance.get("consequential"))}
+                         for h in p.get("material", []) if h in config.transports],
             "care_delta": sorted((p.get("care_delta") or {}).keys()),
             "play_delta": {k: sorted(v.keys()) for k, v in (p.get("play_delta") or {}).items()},
             "reopen_conditions": list(cut.invalidation_conditions),
@@ -96,8 +101,9 @@ class Session:
 
 
 def create_app(proposer: Optional[Proposer] = None, store_dir: str = os.path.join(".cbra-runtime", "sessions"),
-               model: Optional[str] = None, max_rounds: int = 3) -> FastAPI:
+               model: Optional[str] = None, max_rounds: int = 3, corpus_dir: Optional[str] = None) -> FastAPI:
     app = FastAPI(title="CBRA enactment slice", docs_url=None, redoc_url=None)
+    corpus = Corpus(corpus_dir) if corpus_dir else None
     sessions: Dict[str, Session] = {}
     registry_lock = threading.Lock()
     state: Dict[str, Any] = {"proposer": proposer}
@@ -121,7 +127,7 @@ def create_app(proposer: Optional[Proposer] = None, store_dir: str = os.path.joi
                 raise HTTPException(404, "no such session")
             events: "queue.Queue[Dict[str, Any]]" = queue.Queue()
             runtime = Runtime(get_proposer(), store=store, max_rounds=max_rounds, channel="web",
-                              observer=events.put)
+                              observer=events.put, material=corpus)
             runtime.config.session = session_id
             session = Session(session_id, runtime, events)
             sessions[session_id] = session
@@ -196,6 +202,10 @@ def create_app(proposer: Optional[Proposer] = None, store_dir: str = os.path.joi
     @app.get("/api/session/{session_id}/trace")
     def trace(session_id: str) -> Dict[str, Any]:
         return compact_trace(open_session(session_id, create=False).runtime.config)
+
+    @app.get("/api/canon")
+    def canon() -> Dict[str, Any]:
+        return corpus.describe() if corpus else {"directory": None, "index": None, "files": [], "sections": 0}
 
     @app.get("/api/session/{session_id}/self")
     def account(session_id: str) -> Dict[str, Any]:

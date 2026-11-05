@@ -458,3 +458,54 @@ that. The fix is in the vocabulary, not in a special case for questions.
 Whether a definitional answer should ever carry a care claim is a reading
 for the author; the record above shows what the model claimed and what the
 runtime computed.
+
+## The canon as material, 5 November 2026
+
+The author's first question to the page, "What is intra-action?", was
+answered from the model's general knowledge of Barad and said nothing about
+what intra-action is within CBRA. The runtime had no access to its own
+canon: the proposer received the grammar as instructions and never saw the
+Kernel or the Glossary. The historical engine retrieved from the corpus;
+the slice had dropped that.
+
+`cbra/enactment/material.py` restores it as material in the grammar's
+sense. The files the corpus index lists as active are split by heading; for
+each arrival the matching sections are selected (lexical, heading matches
+weighted), inscribed as `document` transport traces on the `corpus` channel
+with file, heading, line, and score as provenance, and given to the
+proposer. They are not given to the uninstructed baseline, whose point is
+the inherited grammar without the system. A passage whose heading matched a
+term of the arrival is consequential, and constraint 3 requires it to
+ground at least one cut, otherwise the draft returns: a canon passage
+appended as context is context relegation. The proposer is told that this
+is CBRA's own system and that a concept the canon defines is answered from
+the canon's definition first, in the canon's terms, marking where that
+sense differs from wider usage.
+
+The server takes `--corpus-dir` (default `$CBRA_CORPUS_DIR` or `./corpus`,
+which holds the 28 July set the repository carries). For the page test it
+was pointed at the 2 November set unpacked under `.cbra-runtime/canon/`,
+which is ignored by git because that set awaits the author's review.
+
+Two more brittlenesses in the text comparison surfaced on the first rerun
+and were fixed: step kinds and categories compared case-sensitively
+("Explain" against "explain"); the distribution label alone counted as a
+mismatch ("shared" against "apparatus" for a definition that ends with an
+offer), where only the flip onto or off the person should; and a closing
+offer read as two extra demands, where only heavy demands (explain,
+regulate, plan, recommit, repair, warn, disclose) should count.
+
+Result on the page, fresh session: the Glossary v6 and Kernel v13
+"Intra-action" entries were selected and marked, and the turn released on
+round one in about three minutes with an answer that begins "In CBRA's
+canon, intra-action is constitutive relation", carries the recorded-cut
+account of relata, reserves interaction for stable nodes later connected,
+and offers an application. The three earlier drafts of the previous run
+had already answered from the canon; the comparison, not the content, had
+withheld them.
+
+What remains: selection is lexical and finds headings, so a question that
+names no canon term gets whatever sections share its words; the proposer
+decides what a passage does; and the November set is still outside the
+repository, so the default corpus for anyone else running the server is the
+July set.

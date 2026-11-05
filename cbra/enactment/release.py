@@ -59,6 +59,8 @@ class Formation:
 
     turn: str
     arrivals: List[str]
+    material: List[str] = field(default_factory=list)
+    material_required: List[str] = field(default_factory=list)
     proposal_trace: Optional[str] = None
     cuts: List[str] = field(default_factory=list)
     draft: Optional[Dict[str, Any]] = None
@@ -129,6 +131,11 @@ def c3_context_appended(config: Configuration, f: Formation) -> Optional[str]:
     for handle in f.arrivals:
         if handle not in bases:
             return "arrival %s is in no cut's basis; it was appended as context" % handle
+    for handle in f.material_required:
+        if handle not in bases:
+            t = config.transports.get(handle)
+            where = "%s, %s" % (t.provenance.get("file"), t.provenance.get("heading")) if t else handle
+            return "canon passage %s (%s) matched the arrival and grounds no cut; it was appended as context" % (handle, where)
     return None
 
 

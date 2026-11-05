@@ -130,6 +130,11 @@ class GraphTests(unittest.TestCase):
                          "the internal lead or grant contact": {"burden": 0.1, "capacity": 0.6}})
         self.assertEqual(difference(arrangement_fields(a), arrangement_fields(b), CARE_DIMENSIONS), {},
                          "different wording, labels, and sub-tolerance numbers are the same arrangement")
+        b_caps = cfg.enact("arrangement", "b_caps", basis=[t1.handle], apparatus=["x"], payload=dict(
+            b.payload, sequence=[{"kind": "Acknowledge", "text": "x"}, {"kind": "Communicate_External", "text": "y"}],
+            scale="Full", distribution="Person"), allocations=dict(b.allocations))
+        self.assertEqual(difference(arrangement_fields(a), arrangement_fields(b_caps), CARE_DIMENSIONS), {},
+                         "kinds and categories compare case-insensitively")
         c = cfg.enact("arrangement", "c", basis=[t1.handle], apparatus=["x"], payload=dict(
             b.payload, sequence=[{"kind": "communicate_internal", "text": "One line to the lead."},
                                  {"kind": "hand_off", "text": "Lead decides routing."}],
@@ -157,6 +162,15 @@ class GraphTests(unittest.TestCase):
         self.assertTrue(any("burden 0.85" in r for r in reasons))
         read_full = dict(claimed, scale="expanded", distribution="person")
         self.assertEqual(len(text_against_claim(claimed, read_full)), 2)
+        # A definition that ends with an offer: labels differ, nothing lands on the person.
+        explain = {"sequence": ["explain"], "scale": "reduced", "distribution": "apparatus",
+                   "burden": {"apparatus": 0.95, "person": 0.05}, "response_demand": {}}
+        read_offer = {"sequence": ["Explain", "Explain", "Wait"], "scale": "Reduced", "distribution": "shared",
+                      "burden": {"apparatus": 0.8, "person": 0.2}, "response_demand": {"person": ["decide", "communicate"]}}
+        self.assertEqual(text_against_claim(explain, read_offer), [])
+        read_pushes = dict(read_offer, distribution="person", burden={"person": 0.6, "apparatus": 0.4},
+                           response_demand={"person": ["explain", "disclose", "plan"]})
+        self.assertEqual(len(text_against_claim(explain, read_pushes)), 4)  # distribution, two burdens, demands
 
     def test_object_valued_labels_are_carried_as_labels(self):
         cfg = Configuration()

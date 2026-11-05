@@ -19,6 +19,7 @@ from .arrangements import care_delta, play_delta
 from .graph import APPARATUS_MARK, Configuration, Cut, Delta, EnactmentError, TransportTrace
 
 TransportTraceLike = TransportTrace
+from .material import Corpus
 from .proposer import Proposal, ProposalContext, Proposer
 from .release import Formation, Violation, check_all
 
@@ -89,10 +90,12 @@ def _response_demand(value: Any) -> Dict[str, List[str]]:
 class Runtime:
     def __init__(self, proposer: Proposer, store: Any = None, config: Optional[Configuration] = None,
                  max_rounds: int = 3, channel: str = "cli",
-                 observer: Optional[Callable[[Dict[str, Any]], None]] = None) -> None:
+                 observer: Optional[Callable[[Dict[str, Any]], None]] = None,
+                 material: Optional[Corpus] = None) -> None:
         self.proposer = proposer
         self.store = store
         self.observer = observer
+        self.material = material
         self.config = config or (store.load() if store is not None and store.exists() else Configuration())
         self.max_rounds = max_rounds
         self.channel = channel
@@ -124,9 +127,15 @@ class Runtime:
 
     def _context(self, turn: str, round_number: int, arrivals: Sequence[str],
                  violations: Sequence[Violation], baseline_id: Optional[str] = None,
-                 returning: Sequence[str] = ()) -> ProposalContext:
+                 returning: Sequence[str] = (), material: Sequence[str] = ()) -> ProposalContext:
         cfg = self.config
         returning = set(returning)
+        passages = []
+        for h in material:
+            t = cfg.transports.get(h)
+            if t:
+                passages.append({"handle": h, "file": t.provenance.get("file"), "heading": t.provenance.get("heading"),
+                                 "consequential": bool(t.provenance.get("consequential")), "text": t.text})
         baseline = None
         if baseline_id and baseline_id in cfg.cuts:
             b = cfg.cuts[baseline_id]
@@ -166,7 +175,30 @@ class Runtime:
             conditions_available=self.conditions_available(),
             baseline=baseline,
             returned_cuts=returned,
+            material=passages,
         )
+
+    # -- the canon as material ---------------------------------------------
+
+    def _select_material(self, formation: Formation, text: str) -> None:
+        if self.material is None:
+            return
+        cfg = self.config
+        for passage in self.material.select(text):
+            trace = cfg.inscribe(passage.text, "document", channel="corpus", provenance={
+                "file": passage.file, "heading": passage.heading, "line": passage.line,
+                "score": passage.score, "consequential": passage.consequential, "matched": passage.matched,
+                "corpus": self.material.describe().get("index"),
+                "apparatus": "lexical selection over the active canon files; locates candidates only",
+            })
+            formation.material.append(trace.handle)
+            if passage.consequential:
+                formation.material_required.append(trace.handle)
+        if formation.material:
+            self._notify({"event": "material", "turn": formation.turn, "passages": [
+                {"handle": h, "file": cfg.transports[h].provenance.get("file"),
+                 "heading": cfg.transports[h].provenance.get("heading"),
+                 "consequential": bool(cfg.transports[h].provenance.get("consequential"))} for h in formation.material]})
 
     # -- the baseline: an uninstructed answer, read for its arrangement -----
 
@@ -363,7 +395,7 @@ class Runtime:
         formation.minimal = minimal
         self._notify({"event": "round", "turn": turn, "round": round_number, "minimal": minimal})
         context = self._context(turn, round_number, formation.arrivals, violations, formation.baseline,
-                                returning=formation.cuts)
+                                returning=formation.cuts, material=formation.material)
         context.minimal = minimal
         try:
             proposal = self.proposer.propose(context)
@@ -476,6 +508,7 @@ class Runtime:
         cfg.disturb("arrival:next_message", source=arrival.handle, reason="a new arrival reopens deferred interventions")
         self._fact("reconfiguration_open", turn=turn, arrival=arrival.handle)
         formation = Formation(turn=turn, arrivals=[arrival.handle])
+        self._select_material(formation, text)
         self._baseline(turn, arrival.handle, formation)
         violations: List[Violation] = []
         for round_number in range(1, self.max_rounds + 1):
@@ -504,7 +537,8 @@ class Runtime:
             kind="intervention",
             label="intervention:%s" % turn,
             basis=list(formation.arrivals) + [formation.proposal_trace],
-            apparatus=["text delivery through %s" % (channel or self.channel)],
+            apparatus=["text delivery through %s" % (channel or self.channel)]
+                      + (["canon material: %s" % self.material.describe().get("index")] if self.material and formation.material else []),
             depends_on=[labels[l] for l in draft.get("enacts", []) if l in labels],
             relata=list(demand.keys()),
             unmarked=list(draft.get("unmarked", [])),
@@ -525,6 +559,8 @@ class Runtime:
                 "anticipated_effects": list(draft.get("anticipated_effects", [])),
                 "carries_accounts": list(draft.get("carries_accounts", [])),
                 "baseline": formation.baseline,
+                "material": list(formation.material),
+                "material_required": list(formation.material_required),
                 "text_reading": next((c.id for c in cfg.active("arrangement") if c.payload.get("role") == "read" and c.payload.get("turn") == turn), None),
                 "care_delta": {k: list(v) for k, v in care_delta(cfg, turn).items()} if "care" in formation.claims else {},
                 "play_delta": {k: {kk: list(vv) for kk, vv in d.items()} for k, d in play_delta(cfg, turn).items()} if "play" in formation.claims or formation.variation_possible else {},
