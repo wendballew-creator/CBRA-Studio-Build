@@ -96,6 +96,91 @@ class SelectionCases(unittest.TestCase):
                         "text the configuration produced draws only the canon entries it names: %s" % [(p.heading, p.terms, p.matched) for p in drawn])
 
 
+class FakeEmbedder:
+    """Vectors from a few indicator words, so similarity can be tested
+    without a provider. A text with none of them gets the zero vector."""
+
+    model = "fake-indicators"
+    WORDS = ("boundar", "cut", "care", "deadline")
+
+    def __init__(self):
+        self.calls = []
+
+    def embed(self, texts):
+        self.calls.append(list(texts))
+        return [[1.0 if w in t.lower() else 0.0 for w in self.WORDS] for t in texts]
+
+
+class SimilarityTests(unittest.TestCase):
+    def test_similarity_fills_what_the_terms_left_open_and_never_marks(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as cache:
+            emb = FakeEmbedder()
+            corpus = Corpus(CORPUS, embedder=emb, cache_dir=cache)
+            self.assertEqual(Corpus(CORPUS).select("How do things get their boundaries?"), [])
+            passages = corpus.select("How do things get their boundaries?")
+            self.assertTrue(passages)
+            self.assertTrue(all(p.via == "similarity" and not p.consequential and p.similarity is not None for p in passages), passages)
+            headings = [p.heading for p in passages]
+            self.assertTrue("Agential Cut" in headings or "Intra-action" in headings, headings)
+            self.assertFalse(any("glossary" in h.lower() or "kernel" in h.lower() for h in headings), "no title sections")
+            # a named term still comes first and still marks; similarity only fills
+            named = corpus.select("What is intra-action?")
+            self.assertEqual((named[0].heading, named[0].consequential, named[0].via), ("Intra-action", True, "terms"))
+            self.assertTrue(all(p.via != "similarity" or not p.consequential for p in named))
+            # nothing similar: nothing selected
+            self.assertEqual(corpus.select("hello"), [])
+            # text the configuration produced never goes to similarity
+            self.assertEqual(corpus.select("concept boundary", terms_only=True), [])
+            # the canon was embedded once and cached; a second corpus reads the cache
+            section_calls = [c for c in emb.calls if len(c) > 1]
+            self.assertEqual(len(section_calls), 1)
+            cache_files = os.listdir(cache)
+            self.assertEqual(cache_files, ["fake-indicators.json"])
+            emb2 = FakeEmbedder()
+            again = Corpus(CORPUS, embedder=emb2, cache_dir=cache)
+            again.select("How do things get their boundaries?")
+            self.assertEqual([len(c) for c in emb2.calls], [], "sections and this query were already cached")
+            self.assertEqual(again.describe()["embedding_model"], "fake-indicators")
+
+    def test_provider_failure_leaves_the_corpus_lexical(self):
+        class Broken:
+            model = "broken"
+
+            def embed(self, texts):
+                raise RuntimeError("no network")
+
+        corpus = Corpus(CORPUS, embedder=Broken())
+        self.assertEqual(corpus.select("How do things get their boundaries?"), [])
+        self.assertIn("RuntimeError", corpus.describe()["embedding_error"])
+        self.assertEqual(corpus.select("What is intra-action?")[0].heading, "Intra-action")
+
+    def test_similar_passages_enter_the_formation_as_candidates(self):
+        emb = FakeEmbedder()
+        corpus = Corpus(CORPUS, embedder=emb)
+        question = "How do things get their boundaries?"
+
+        def grounds_arrival(ctx):
+            h = _arrivals(ctx)
+            self.assertTrue(ctx.material)
+            self.assertFalse(any(m["consequential"] for m in ctx.material))
+            return Proposal(cuts=[
+                {"kind": "apparatus", "label": "app", "basis": h, "apparatus": APP},
+                {"kind": "arrangement", "label": "arr", "basis": h, "apparatus": APP,
+                 "payload": {"role": "enacted", "sequence": ["explain"], "scale": "minimal", "distribution": "apparatus"}},
+            ], draft={"text": "In CBRA, boundaries are enacted by cuts and stay revisable.", "enacts": ["arr"], "reopen_conditions": []},
+               claims=[], variation_possible=False, variation_constraint="a definition")
+
+        runtime = Runtime(ScriptedProposer([grounds_arrival], baselines=[BASELINE_FIELDS]), material=corpus)
+        r = runtime.turn(question)
+        self.assertTrue(r.released, r.violations)
+        docs = [t for t in runtime.config.transports.values() if t.role == "document"]
+        self.assertTrue(docs)
+        self.assertTrue(all(t.provenance["via"] == "similarity" and not t.provenance["consequential"] for t in docs))
+        self.assertIn("embedding similarity", docs[0].provenance["apparatus"])
+        self.assertEqual(runtime.config.cuts[r.intervention].payload["material_required"], [])
+
+
 class MaterialTests(unittest.TestCase):
     def test_material_enters_as_document_traces_and_must_ground_a_cut(self):
         corpus = Corpus(CORPUS)

@@ -39,3 +39,6 @@ run_regression_checks_clean.sh
 *_backup_before_clean_handoff/
 *.backup_before_clean_handoff
 cbra_runtime_fresh*.zip
+
+# cached canon embeddings
+.embeddings/

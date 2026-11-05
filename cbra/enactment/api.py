@@ -66,6 +66,7 @@ def history(config: Configuration) -> List[Dict[str, Any]]:
                           "heading": config.transports[h].provenance.get("heading"),
                           "terms": list(config.transports[h].provenance.get("terms") or []),
                           "drawn_by": config.transports[h].provenance.get("drawn_by"),
+                          "via": config.transports[h].provenance.get("via"),
                           "consequential": bool(config.transports[h].provenance.get("consequential"))}
                          for h in p.get("material", []) if h in config.transports],
             "care_delta": sorted((p.get("care_delta") or {}).keys()),
@@ -103,9 +104,10 @@ class Session:
 
 
 def create_app(proposer: Optional[Proposer] = None, store_dir: str = os.path.join(".cbra-runtime", "sessions"),
-               model: Optional[str] = None, max_rounds: int = 3, corpus_dir: Optional[str] = None) -> FastAPI:
+               model: Optional[str] = None, max_rounds: int = 3, corpus_dir: Optional[str] = None,
+               embedder: Any = None, embedding_cache: Optional[str] = None) -> FastAPI:
     app = FastAPI(title="CBRA enactment slice", docs_url=None, redoc_url=None)
-    corpus = Corpus(corpus_dir) if corpus_dir else None
+    corpus = Corpus(corpus_dir, embedder=embedder, cache_dir=embedding_cache) if corpus_dir else None
     sessions: Dict[str, Session] = {}
     registry_lock = threading.Lock()
     state: Dict[str, Any] = {"proposer": proposer}

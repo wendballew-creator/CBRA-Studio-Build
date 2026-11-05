@@ -621,3 +621,55 @@ address canon terms, and this question's cuts did not. A question that
 names no canon term and whose cuts name none either is what the third
 step, an embedding pass as a second source of candidates with the term
 rule left as the only marker, is for.
+
+## Similarity as a second source of candidates, 5 November 2026
+
+The term and word passes find what the arrival or the cuts name. For a
+question the canon answers without anyone naming a term ("How do things
+get their boundaries?", "Who decides what counts as a thing here?", "Why
+does the system withhold a response?") they find nothing. An embedding
+pass now fills what those passes leave open: the active sections are
+embedded once with `text-embedding-3-small` (cached on disk under
+`.cbra-runtime/embeddings/`, by digest of model and text; a canon of 180
+sections embeds in two seconds for a fraction of a cent), the arrival is
+embedded once, and sections above a cosine-similarity floor fill the
+remaining places up to the limit. They enter as `document` traces with
+`via: similarity` and the similarity as provenance, and the page shows
+them as "(similar)".
+
+Three rules keep the fuzzy method in its place. It never marks: only a
+canon term the arrival named makes a passage consequential, so nothing
+the embedding found is ever required of a cut. It never runs on text the
+configuration produced (the cut-drawn pass stays terms-only). And it
+ranks only definitional sections: file-title sections and probe
+templates, a heading repeated three or more times such as "Perturbation"
+or "Required structural difference", are left out, since they are
+attractors for any question and define nothing.
+
+Calibration on both canons, 5 November: a greeting, thanks, a dinner
+question and a landlord email peak at 0.13 to 0.26; a missed-deadline
+message at 0.34, on a probe template; the questions above at 0.41 to
+0.58, with "Is the model a participant or a tool?" finding AI
+Participation, Model Participation and AI Instrumentalization at 0.53 to
+0.58 and "How do things get their boundaries?" finding Claim Boundary
+and the Intra-action entry. The floor is 0.35. If the provider fails,
+the corpus records the error and keeps working lexically.
+
+Tests use a fake embedder of indicator words, so the suite needs no key:
+similarity fills only what the terms left open and never marks, a named
+term still comes first, nothing similar selects nothing, the canon is
+embedded once and read from cache after, a broken provider leaves the
+corpus lexical, and similar passages enter the formation as unrequired
+candidates. The server embeds when a key is present; `--embedding-model
+none` turns the pass off.
+
+Result on the page, fresh session, November set, "How do things get their
+boundaries?": the similarity pass selected Kernel v13 › Claim Boundary
+(0.42) and Glossary v6 › Intra-action (0.36), both shown as similar and
+neither required. The proposer's category cut rested on the Intra-action
+passage, and the turn released on round one with an answer that opens
+"In CBRA's terms, boundaries don't pre-exist things; they emerge through
+intra-action", then gives everyday marks of a boundary and offers to
+trace a particular kind of thing. The two earlier runs of this question,
+without the pass, had released general answers that never reached the
+canon. The rounded cache for both canons is 2.6 MB.

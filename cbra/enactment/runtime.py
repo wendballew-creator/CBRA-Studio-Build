@@ -204,9 +204,12 @@ class Runtime:
             trace = cfg.inscribe(passage.text, "document", channel="corpus", provenance={
                 "file": passage.file, "heading": passage.heading, "line": passage.line,
                 "score": passage.score, "consequential": consequential, "matched": passage.matched,
-                "terms": passage.terms, "corpus": self.material.describe().get("index"),
+                "terms": passage.terms, "via": passage.via, "similarity": passage.similarity,
+                "corpus": self.material.describe().get("index"),
                 "drawn_by": drawn_by or "the arrival",
-                "apparatus": "lexical selection over the active canon files, indexed by the glossary's own terms; locates candidates only",
+                "apparatus": ("embedding similarity to the arrival (%s); a candidate only" % self.material.describe().get("embedding_model")
+                              if passage.via == "similarity" else
+                              "lexical selection over the active canon files, indexed by the glossary's own terms; locates candidates only"),
             })
             formation.material.append(trace.handle)
             added.append(trace.handle)
@@ -217,6 +220,7 @@ class Runtime:
                 {"handle": h, "file": cfg.transports[h].provenance.get("file"),
                  "heading": cfg.transports[h].provenance.get("heading"),
                  "terms": list(cfg.transports[h].provenance.get("terms") or []),
+                 "via": cfg.transports[h].provenance.get("via"),
                  "consequential": bool(cfg.transports[h].provenance.get("consequential"))} for h in added]})
         return added
 
