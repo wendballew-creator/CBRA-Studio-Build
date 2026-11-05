@@ -266,7 +266,9 @@ Return JSON with these keys:
   and has the person's words in its basis. Never release a connection as a
   fact about them.
 - "draft": {"text": the public intervention, in ordinary language, concise
-  where the configuration calls for concision, carrying the trace silently;
+  where the configuration calls for concision, carrying the trace silently
+  (required unless "action" declares a non-text intervention such as
+  "silence", "deferral", or a tool use, which is then released as that);
   "enacts": [labels of cuts the text materializes]; "response_demand":
   {position: [...]}; "carries_accounts": [provenance labels]; "status": one
   of reconfiguration_open | release_withheld | intervention_released |

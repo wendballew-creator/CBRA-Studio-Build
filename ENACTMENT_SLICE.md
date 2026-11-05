@@ -398,3 +398,35 @@ took about two and a half minutes before round one began, longer than in the
 command-line runs; the page's wait notice says one to three minutes and the
 activity panel is what makes the wait legible. Cost per turn remains
 unmeasured.
+
+First page tests, 4 November 2026 (live, `gpt-5.5`, the missed-deadline
+message):
+
+- The first attempt crashed at the deferral after four rounds (about ten
+  minutes) and lost the turn: the model had named the provenance cut's relata
+  as role/label objects and the deferral used one as a key, and the store
+  wrote only at the end of a turn. Both fixed: object-valued labels are
+  carried as labels at enactment, the runtime saves after the baseline and
+  after every round, and a failing turn answers with the error and the
+  current history, which the page renders.
+- The second attempt released on round three with no text: the model's third
+  proposal sent an empty draft, and constraint 10 had treated an empty draft
+  as nothing to check. A draft now returns unless it carries text or declares
+  a non-text intervention (silence, deferral, tool use), which is then
+  released and shown as that.
+- The third attempt, a new session, ran about eleven minutes: returns on
+  constraint 10, then 6 and 10, then 1, then the first live minimal round,
+  which also returned on constraint 10 (the text distributed the work to the
+  person while the record claimed transferred, and led with planning while
+  the record led with reducing scope). The turn ended in a traced deferral,
+  which the page rendered as such with the constraint and the note that the
+  next message reopens it; the activity panel had shown every step.
+
+What the page tests add to the record: on this provider the plain
+uninstructed answer and its reading take two to three minutes before round
+one, each proposal round two to three more, and the model, told its text
+read as person-distributed, revised the record toward "transferred" and
+"reduce scope" rather than the text; constraint 10 then kept refusing the
+mismatch. The page made that legible as it happened, which is what it is
+for. Cost per turn is still unmeasured and should be read from the provider
+dashboard before anyone else uses the page.

@@ -111,6 +111,8 @@
       const ul = el("ul");
       (item.withheld_constraints || []).forEach(v => ul.append(el("li", null, v.constraint + ". " + v.name + " — " + v.reason)));
       c.append(ul);
+    } else if (!item.text && item.action) {
+      c.append(el("div", "text", "Released as " + item.action + ": no text. The intervention is the " + item.action + " itself."));
     } else {
       c.append(el("div", "text", item.text || ""));
     }

@@ -203,7 +203,11 @@ def c9_burden_concentration(config: Configuration, f: Formation) -> Optional[str
 
 def c10_articulation_first(config: Configuration, f: Formation) -> Optional[str]:
     if not f.draft:
-        return None
+        return "no draft: the proposal forms no public intervention"
+    text = f.draft.get("text")
+    action = f.draft.get("action")
+    if not (isinstance(text, str) and text.strip()) and not action:
+        return "draft carries neither text nor a declared non-text action (silence, deferral, or tool use must be declared as such)"
     enacts = list(f.draft.get("enacts") or [])
     if not enacts:
         return "draft names no cut it materializes"

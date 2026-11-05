@@ -513,6 +513,7 @@ class Runtime:
             payload={
                 "turn": turn,
                 "form": formation.form,
+                "action": draft.get("action"),
                 "claims": list(formation.claims),
                 "claims_stripped": list(formation.claims_stripped),
                 "person_state_live": formation.person_state_live,

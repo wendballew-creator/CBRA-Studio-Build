@@ -469,6 +469,28 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(cfg.cuts[r.intervention].payload["text_reading"], reads[1].id)
         self.assertEqual(runtime.proposer.read_texts[0], proposal_turn1(runtime.proposer.contexts[0]).draft["text"])
 
+    def test_a_draft_without_text_or_declared_action_returns(self):
+        def textless(ctx):
+            p = proposal_turn1(ctx)
+            p.draft.pop("text")
+            return p
+        def silent(ctx):
+            p = proposal_turn1(ctx)
+            p.draft.pop("text")
+            p.draft["action"] = "silence"
+            return p
+        runtime = Runtime(scripted([textless, proposal_turn1]))
+        r = runtime.turn(MISSED)
+        self.assertTrue(r.released)
+        self.assertEqual(r.rounds, 2)
+        self.assertIn(10, {v.constraint for v in r.violations[0]})
+        self.assertIn("neither text nor a declared", {v.constraint: v.reason for v in r.violations[0]}[10])
+        runtime2 = Runtime(scripted([silent]))
+        r2 = runtime2.turn(MISSED)
+        self.assertTrue(r2.released)
+        self.assertIsNone(r2.text)
+        self.assertEqual(runtime2.config.cuts[r2.intervention].payload["action"], "silence")
+
     def test_without_a_reader_the_text_goes_unread_and_is_recorded(self):
         runtime = Runtime(scripted([proposal_turn1]))
         r = runtime.turn(MISSED)
