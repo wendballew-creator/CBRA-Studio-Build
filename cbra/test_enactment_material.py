@@ -90,6 +90,10 @@ class SelectionCases(unittest.TestCase):
         self.assertEqual(corpus.terms_in("cut"), [], "a bare head word does not name the term")
         self.assertEqual([(t.phrase, partial) for t, partial in corpus.matches("a cut")], [("Agential Cut", True)])
         self.assertGreater(corpus.idf("deadlin"), corpus.idf("cut"), "rarity across the canon weights the loose words")
+        drawn = corpus.select("cat boundary as cut turn1\nconcept boundary\noperation cut\nfield flows constraints models", limit=3, terms_only=True)
+        self.assertEqual(drawn[0].heading, "Agential Cut")
+        self.assertTrue(all(p.terms and not p.consequential for p in drawn),
+                        "text the configuration produced draws only the canon entries it names: %s" % [(p.heading, p.terms, p.matched) for p in drawn])
 
 
 class MaterialTests(unittest.TestCase):
@@ -135,6 +139,56 @@ class MaterialTests(unittest.TestCase):
         self.assertTrue(any("canon material" in a for a in iv.apparatus))
         # the uninstructed baseline conversation carries no canon material
         self.assertEqual([m["role"] for m in runtime._plain_conversation("t1")], ["user"])
+
+    def test_live_cuts_draw_material_for_the_next_round(self):
+        corpus = Corpus(CORPUS)
+        question = "How do things get their boundaries?"
+        self.assertEqual(corpus.select(question), [], "the arrival names no canon term")
+
+        def names_terms_but_leaves_arrival_aside(ctx):
+            self.assertEqual(ctx.material, [], "round one has no material")
+            return Proposal(cuts=[
+                {"kind": "apparatus", "label": "app", "basis": [], "apparatus": APP},
+                {"kind": "category", "label": "boundaries_as_cut", "basis": [], "apparatus": APP,
+                 "relata": ["agential cut", "intra-action"]},
+                {"kind": "arrangement", "label": "arr", "basis": [], "apparatus": APP,
+                 "payload": {"role": "enacted", "sequence": ["explain"], "scale": "minimal", "distribution": "apparatus"}},
+            ], draft={"text": "Boundaries are enacted by agential cuts within intra-action.", "enacts": ["arr"], "reopen_conditions": []},
+               claims=[], variation_possible=False, variation_constraint="a definition")
+
+        def uses_the_drawn_material(ctx):
+            headings = [(m["heading"], m["consequential"]) for m in ctx.material]
+            self.assertIn(("Agential Cut", False), headings)
+            self.assertIn(("Intra-action", False), headings)
+            self.assertFalse(any(c for _, c in headings), "material the cuts drew is not required of the next round")
+            h = _arrivals(ctx)
+            handles = [m["handle"] for m in ctx.material]
+            return Proposal(cuts=[
+                {"kind": "apparatus", "label": "app", "basis": h, "apparatus": APP},
+                {"kind": "category", "label": "boundaries_as_cut", "basis": h + handles, "apparatus": APP + ["canon passage"],
+                 "relata": ["agential cut as the canon defines it"]},
+                {"kind": "arrangement", "label": "arr", "basis": h, "apparatus": APP,
+                 "payload": {"role": "enacted", "sequence": ["explain"], "scale": "minimal", "distribution": "apparatus"}},
+            ], draft={"text": "In CBRA, boundaries are not found but enacted: an agential cut within intra-action marks what counts as a thing and what stays unmarked, and that cut stays revisable.", "enacts": ["arr", "boundaries_as_cut"], "reopen_conditions": []},
+               claims=[], variation_possible=False, variation_constraint="a definition")
+
+        runtime = Runtime(ScriptedProposer([names_terms_but_leaves_arrival_aside, uses_the_drawn_material],
+                                           baselines=[BASELINE_FIELDS]), material=corpus)
+        r = runtime.turn(question)
+        self.assertTrue(r.released, r.violations)
+        self.assertEqual(r.rounds, 2)
+        self.assertIn(3, {v.constraint for v in r.violations[0]})
+        cfg = runtime.config
+        drawn = [t for t in cfg.transports.values() if t.role == "document"]
+        self.assertTrue(drawn)
+        self.assertTrue(all(t.provenance["drawn_by"] == "the live cuts of round 1" for t in drawn))
+        self.assertTrue(all(not t.provenance["consequential"] for t in drawn))
+        self.assertTrue(any(t.provenance["heading"] == "Agential Cut" for t in drawn))
+        iv = cfg.cuts[r.intervention]
+        self.assertEqual(iv.payload["material_required"], [])
+        self.assertEqual(set(iv.payload["material"]), set(t.handle for t in drawn))
+        # the same passage is not drawn twice
+        self.assertEqual(len(set((t.provenance["file"], t.provenance["heading"]) for t in drawn)), len(drawn))
 
     def test_runtime_without_material_is_unchanged(self):
         runtime = Runtime(ScriptedProposer([], baselines=[BASELINE_FIELDS]))

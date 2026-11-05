@@ -272,13 +272,17 @@ class Corpus:
         """The canon terms an arrival names as whole phrases."""
         return [t for t, partial in self.matches(text) if not partial]
 
-    def select(self, query: str, limit: int = 4) -> List[Passage]:
+    def select(self, query: str, limit: int = 4, terms_only: bool = False) -> List[Passage]:
+        """Passages for ``query``. With ``terms_only`` only canon terms the
+        query names (whole phrases, or a bare head word) select; its other
+        words score nothing. That is the mode for text the configuration
+        produced itself, whose ordinary words are not the person's."""
         q = stems(query)
         if not q:
             return []
         named = self.matches(query)
         term_stems = set(st for t, partial in named for st in (t.stems if not partial else (t.stems[-1],)))
-        loose = [st for st in dict.fromkeys(q) if st not in term_stems]
+        loose = [] if terms_only else [st for st in dict.fromkeys(q) if st not in term_stems]
         scored: List[Passage] = []
         for s in self.sections:
             if s.heading.lower().startswith("changes from"):

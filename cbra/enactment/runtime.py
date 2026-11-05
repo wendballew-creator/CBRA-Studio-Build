@@ -180,28 +180,66 @@ class Runtime:
 
     # -- the canon as material ---------------------------------------------
 
-    def _select_material(self, formation: Formation, text: str) -> None:
+    def _select_material(self, formation: Formation, text: str, drawn_by: Optional[str] = None,
+                         limit: int = 4) -> List[str]:
+        """Select canon passages for ``text`` and inscribe the new ones.
+
+        From the arrival (``drawn_by`` None) a passage whose heading is a
+        term the arrival named is consequential and must ground a cut. From
+        the live cuts of a returned round (``drawn_by`` set) the passages are
+        what the configuration drew for itself: they go to the proposer and
+        are recorded as drawn by the cuts, but nothing is required of them,
+        since the person did not name them.
+        """
         if self.material is None:
-            return
+            return []
         cfg = self.config
-        for passage in self.material.select(text):
+        have = set((cfg.transports[h].provenance.get("file"), cfg.transports[h].provenance.get("heading"))
+                   for h in formation.material if h in cfg.transports)
+        added: List[str] = []
+        for passage in self.material.select(text, limit=limit, terms_only=drawn_by is not None):
+            if (passage.file, passage.heading) in have:
+                continue
+            consequential = passage.consequential and drawn_by is None
             trace = cfg.inscribe(passage.text, "document", channel="corpus", provenance={
                 "file": passage.file, "heading": passage.heading, "line": passage.line,
-                "score": passage.score, "consequential": passage.consequential, "matched": passage.matched,
+                "score": passage.score, "consequential": consequential, "matched": passage.matched,
                 "terms": passage.terms, "corpus": self.material.describe().get("index"),
+                "drawn_by": drawn_by or "the arrival",
                 "apparatus": "lexical selection over the active canon files, indexed by the glossary's own terms; locates candidates only",
             })
             formation.material.append(trace.handle)
-            if passage.consequential:
+            added.append(trace.handle)
+            if consequential:
                 formation.material_required.append(trace.handle)
-        if formation.material:
-            self._notify({"event": "material", "turn": formation.turn, "passages": [
+        if added:
+            self._notify({"event": "material", "turn": formation.turn, "drawn_by": drawn_by or "the arrival", "passages": [
                 {"handle": h, "file": cfg.transports[h].provenance.get("file"),
                  "heading": cfg.transports[h].provenance.get("heading"),
                  "terms": list(cfg.transports[h].provenance.get("terms") or []),
-                 "consequential": bool(cfg.transports[h].provenance.get("consequential"))} for h in formation.material]})
+                 "consequential": bool(cfg.transports[h].provenance.get("consequential"))} for h in added]})
+        return added
 
-    # -- the baseline: an uninstructed answer, read for its arrangement -----
+    def _cuts_as_text(self, formation: Formation) -> str:
+        """What the returning round's cuts address, as text to select
+        material on: the labels and relata of the proposer's event,
+        position, category, connection and noticing cuts.
+
+        Arrangement cuts are left out: their payloads are the runtime's own
+        shared vocabulary (step kinds such as "name" and "notice", care
+        dimensions), which would draw the canon's Naming and Care entries
+        into every formation. The draft's text is left out too: a passage
+        is drawn by what a cut addresses, not by a word the prose used.
+        """
+        cfg = self.config
+        parts: List[str] = []
+        for cut in formation.active_cuts(cfg):
+            if cut.kind in ("arrangement", "apparatus", "provenance", "intervention"):
+                continue
+            parts.append(cut.label.replace("_", " ").replace(":", " "))
+            for r in cut.relata:
+                parts.append(str(r).replace("_", " ").replace(":", " "))
+        return "\n".join(parts)
 
     def _plain_conversation(self, arrival_handle: str) -> List[Dict[str, str]]:
         cfg = self.config
@@ -395,6 +433,12 @@ class Runtime:
         formation.round = round_number
         formation.minimal = minimal
         self._notify({"event": "round", "turn": turn, "round": round_number, "minimal": minimal})
+        if formation.cuts:
+            # The returning round's cuts may have named canon terms the
+            # arrival did not. The configuration draws that material for
+            # itself before the next proposal.
+            self._select_material(formation, self._cuts_as_text(formation),
+                                  drawn_by="the live cuts of round %d" % (round_number - 1), limit=3)
         context = self._context(turn, round_number, formation.arrivals, violations, formation.baseline,
                                 returning=formation.cuts, material=formation.material)
         context.minimal = minimal

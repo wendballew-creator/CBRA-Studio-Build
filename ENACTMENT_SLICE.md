@@ -566,3 +566,58 @@ Constraints' "Care Decoration", and released on round one with an answer
 that begins "In CBRA, care is not a service or a tone", gives the canon's
 operative test as a list of what must change in the arrangement, and names
 the decoration pattern by its canon name.
+
+## Material drawn by the live cuts, 5 November 2026
+
+Selection ran once per turn, from the arrival. But the proposer's cuts
+name things in the canon's terms that the person's message did not:
+"constitutive relation", "agential cut", "response burden". When a draft
+returns, the configuration now draws material for itself before the next
+round: the labels, relata, and categorical payload values of the
+returning round's cuts, together with the returned draft's text, are
+selected on, and up to three passages not already in the formation enter
+as `document` traces with `drawn_by` set to the round whose cuts drew
+them. They go to the proposer with the rest of the material and are shown
+on the page as "drawn by the live cuts of round 1".
+
+Nothing is required of them. A passage the arrival named must ground a
+cut (constraint 3), because the person put that term on the table; a
+passage the configuration drew for itself is a candidate it may take up
+or not. Marking it required would let the proposer's own vocabulary
+drive the constraints, and three rounds could chase an ever-growing set
+of required passages. The same passage is not drawn twice, and a round
+that releases first draws nothing: this only acts when a formation needs
+another round.
+
+Scripted test: an arrival that names no canon term ("How do things get
+their boundaries?") gets no material; the round-one cuts name "agential
+cut" and "intra-action" but leave the arrival out of every basis, so the
+draft returns; round two sees the Agential Cut and Intra-action entries
+as drawn, unrequired material, grounds a cut on them, and releases.
+
+First live run of this, November set, "How do things get their
+boundaries?": round one returned on constraint 10, and the live cuts drew
+Kernel v13 › Care, Glossary v6 › Care, and Grammar v2 › Naming. None of
+them was about boundaries. The text selected on had included the
+arrangement cuts' payloads, which are the runtime's own shared
+vocabulary (step kinds "name" and "notice", the care dimensions), and the
+loose-word scoring, which on the cuts' labels found "turn", "model",
+"operation". Both were wrong for text the configuration produced itself:
+its ordinary words are not the person's. Now only the labels and relata
+of the proposer's event, position, category, connection, and noticing
+cuts are selected on, and only canon terms count (`terms_only`): a whole
+phrase, or a bare head word such as "cut" for `Agential Cut`. On that
+run's round-one cuts ("concept:boundary", "operation:cut", "field:flows
+constraints models") this draws `Agential Cut` and, by head word,
+`Release Constraint`, and nothing else.
+
+Second live run, same question, after the fix: round one returned on
+constraint 6; its only non-arrangement cut was a noticing cut whose relata
+("open scope question", "potential overbreadth risk") name no canon term,
+so the live cuts drew nothing, and round two released a general answer
+that does not reach the canon's account of boundaries. That is the honest
+shape of this step: the configuration draws canon material when its cuts
+address canon terms, and this question's cuts did not. A question that
+names no canon term and whose cuts name none either is what the third
+step, an embedding pass as a second source of candidates with the term
+rule left as the only marker, is for.
