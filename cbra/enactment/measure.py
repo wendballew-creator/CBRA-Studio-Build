@@ -153,6 +153,20 @@ def run(probes: Sequence[Probe], proposer: Proposer, out_dir: str, material: Opt
         "max_rounds": max_rounds,
         "probes": [],
     }
+    # A run directory may be reused to rerun some probes: the entries of
+    # probes not in this set are kept, and the record says the run was
+    # continued, with the version each part ran under.
+    kept: List[Dict[str, Any]] = []
+    manifest_path = os.path.join(out_dir, "run.json")
+    if os.path.exists(manifest_path):
+        with open(manifest_path, encoding="utf-8") as handle:
+            previous = json.load(handle)
+        ids = {p.id for p in probes}
+        kept = [entry for entry in previous.get("probes", []) if entry["probe"]["id"] not in ids]
+        manifest["started"] = previous.get("started", manifest["started"])
+        manifest["continued"] = list(previous.get("continued", [])) + [
+            {"at": datetime.now().isoformat(timespec="seconds"), "code_version": manifest["code_version"],
+             "model": manifest["model"], "probes": sorted(ids)}]
     runs: List[ProbeRun] = []
     for probe in probes:
         path = os.path.join(sessions_dir, probe.id + ".json")
@@ -182,8 +196,9 @@ def run(probes: Sequence[Probe], proposer: Proposer, out_dir: str, material: Opt
             if observer is not None:
                 observer({"event": "probe_turn", "probe": probe.id, "turn": result.turn, "released": result.released,
                           "form": result.form, "rounds": result.rounds, "seconds": record.seconds})
-        manifest["probes"] = [r.as_record() for r in runs]
+        manifest["probes"] = kept + [r.as_record() for r in runs]
         _write_manifest(out_dir, manifest)
+    manifest["probes"] = kept + [r.as_record() for r in runs]
     manifest["finished"] = datetime.now().isoformat(timespec="seconds")
     _write_manifest(out_dir, manifest)
     return manifest
@@ -370,6 +385,9 @@ def report(run_dir: str, corpus: Optional[Corpus] = None) -> str:
                      len(canon.get("files") or []), canon.get("sections", 0), canon.get("terms", 0),
                      ", similarity pass with `%s`" % canon["embedding_model"] if canon.get("embedding_model") else "",
                      manifest["max_rounds"]))
+    for c in manifest.get("continued", []):
+        lines.append("Continued %s under code `%s`, model `%s`, for: %s." % (
+            c["at"].replace("T", " "), c["code_version"], c["model"], ", ".join(c["probes"])))
     lines.append("")
     lines.append("The left column of each comparison is what the model said to the same arrival with no CBRA instructions; "
                  "the right column is what the method released. The material, the cuts the release rested on, the returns "
@@ -544,6 +562,9 @@ def main(argv=None) -> int:
     r.add_argument("--embedding-model", default=os.environ.get("CBRA_EMBEDDING_MODEL", "text-embedding-3-small"))
     r.add_argument("--embedding-cache", default=os.path.join(".cbra-runtime", "embeddings"))
     r.add_argument("--report", default=None, help="also write the report to this path")
+    r.add_argument("--only", default=None, help="comma-separated probe ids to run; the others are left out")
+    r.add_argument("--run-dir", default=None,
+                   help="an existing run directory to continue: its other probes' records are kept (default: a new dated directory under --out)")
     p = sub.add_parser("report", help="write the report for a finished run")
     p.add_argument("run_dir")
     p.add_argument("--corpus-dir", default=os.environ.get("CBRA_CORPUS_DIR") or ("corpus" if os.path.isdir("corpus") else None))
@@ -565,12 +586,19 @@ def main(argv=None) -> int:
         return 2
     from .proposer import OpenAIResponsesProposer
     probes = load_probes(args.probes)
+    if args.only:
+        wanted = [i.strip() for i in args.only.split(",") if i.strip()]
+        missing = [i for i in wanted if i not in {p.id for p in probes}]
+        if missing:
+            print("No such probe: %s" % ", ".join(missing), file=sys.stderr)
+            return 2
+        probes = [p for p in probes if p.id in wanted]
     embedder = None
     if args.corpus_dir and args.embedding_model.lower() != "none":
         from .material import OpenAIEmbedder
         embedder = OpenAIEmbedder(model=args.embedding_model)
     corpus = Corpus(args.corpus_dir, embedder=embedder, cache_dir=args.embedding_cache) if args.corpus_dir else None
-    run_dir = os.path.join(args.out, datetime.now().strftime("%Y-%m-%dT%H%M"))
+    run_dir = args.run_dir or os.path.join(args.out, datetime.now().strftime("%Y-%m-%dT%H%M"))
     os.makedirs(run_dir, exist_ok=True)
     print("Measurement run: %d probes, %d arrivals, canon %s, into %s" % (
         len(probes), sum(len(p.prompts) for p in probes), (corpus.describe().get("index") if corpus else "none"), run_dir), file=sys.stderr)

@@ -1,5 +1,7 @@
 """The measurement run: probe set, runner, report, on scripted proposals."""
 
+import contextlib
+import io
 import json
 import os
 import tempfile
@@ -132,10 +134,24 @@ class RunAndReportTests(unittest.TestCase):
         self.assertIn("## Claim boundary", text)
         self.assertNotIn("| named-term | turn1 | released r2 | r1: 3 | none", text)
 
+    def test_a_run_directory_can_be_continued_for_some_probes(self):
+        run(self.probes, self.proposer, self.tmp.name, material=self.corpus)
+        again = ScriptedProposer([plain, plain], baselines=[BASELINE_FIELDS] * 2)
+        manifest = run([self.probes[2]], again, self.tmp.name, material=self.corpus)
+        by_id = {p["probe"]["id"]: p for p in manifest["probes"]}
+        self.assertEqual(set(by_id), {"named-term", "two-turns", "broken"})
+        self.assertEqual(by_id["named-term"]["turns"][0]["rounds"], 2, "the earlier probe's record is kept")
+        self.assertEqual([t["error"] for t in by_id["broken"]["turns"]], [None, None], "the rerun replaced the failed one")
+        self.assertEqual(manifest["continued"][0]["probes"], ["broken"])
+        text = report(self.tmp.name, self.corpus)
+        self.assertIn("Continued ", text)
+        self.assertIn("| broken | turn2 | released r1 |", text)
+
     def test_report_command_writes_the_file(self):
         run(self.probes, self.proposer, self.tmp.name, material=self.corpus)
         out = os.path.join(self.tmp.name, "out.md")
-        self.assertEqual(main(["report", self.tmp.name, "--corpus-dir", CORPUS, "--out", out]), 0)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(main(["report", self.tmp.name, "--corpus-dir", CORPUS, "--out", out]), 0)
         with open(out, encoding="utf-8") as handle:
             self.assertIn("# Measurement run,", handle.read())
 
