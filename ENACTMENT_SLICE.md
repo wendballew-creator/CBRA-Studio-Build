@@ -850,3 +850,121 @@ of runs exposes.
 reached from the arrival, and unstable where the proposer's own cuts
 decide what is drawn and claimed. The words pass again drew "Status of
 This Canon" and the revision note; the watch item stands.
+
+## Case Study 001: the first measurement on real material, 6 November 2026
+
+`cases/001/` holds the first case study built from arriving material the
+author did not write for a test: an encounter with another assistant on
+6 November, exported from that conversation as a research archive and
+converted here with two personal names replaced (its README carries the
+provenance and the redaction log). The other assistant heard
+"narcissistic behaviors" as a diagnosis and cautioned; the author named
+three patterns in the exchange: correction instead of a clarifying
+question, binary closure questions, and abstraction until nothing
+concrete was left. The archive's analysis sets six criteria and a
+three-condition protocol: a baseline assistant, CBRA's instructions
+alone, and the method with its constraints.
+
+The encounter is a probe set (`measurement/case_001_probes.md`): the
+preceding turn on vocabulary, the passage around "narcissistic
+behaviors", and the repair, in the author's words with fillers removed,
+three copies for three runs. The protocol's second condition is now
+`Runtime(enforce=False)`, run as `--condition instruction-only`: the
+same instructions and canon, the constraints recorded as noted, no draft
+returned. The baseline is recorded inside every turn, so one run of each
+condition gives all three.
+
+### The run
+
+Both conditions started at 17:05. Instruction-only: nine of nine turns
+released, 127 to 309 seconds each. Method: seven turns released (the
+first two runs complete, the third run's first turn), then the provider
+account ran out of credits during the third run's second turn and the
+runner recorded the failure. Reports: `measurement/case_001_method.md`,
+`measurement/case_001_instruction_only.md`; side by side:
+`measurement/case_001_compare.md`. The third run of the method condition
+can be completed with `--run-dir .cbra-runtime/measurement/2026-11-06T1705
+--only case-001-run3` once credits are added.
+
+### Reading against the six criteria
+
+**The turn that matters is the second**, where the author says people
+"display narcissistic behaviors" in sharp moments and that we treat such
+descriptions as fixed statuses.
+
+- **Baseline (A).** Three long toolkits: "two-breath reset", "regulate
+  first", nonviolent-communication scripts, a polarity map, and in one
+  run "not a fixed identity unless a clinician establishes a diagnosis".
+  The author's point is agreed with and then taught back to her as
+  exercises. Nobody asks what she meant. This is the pattern the July
+  evaluation called practical displacement and therapeutic slippage.
+- **Instructions only (B).** In all three runs a compressed baseline
+  (0.51 to 0.73 of its wording shared): agreement, a sentence of CBRA
+  gloss ("labels are cuts in a moment"), then "two tiny moves to try" with
+  scripts for her to perform, closing with an offer of two options.
+  Constraint 10 was noted in every run: the text placed 0.5 to 0.65 of
+  the burden on the person while the arrangement beside it claimed 0.15
+  to 0.3, and asked her to disclose, plan, regulate and repair.
+- **The method (C).** Run 1 returned twice on constraint 10 and released
+  on round 3: four sentences of agreement and a gloss ("state-before-trait
+  and an assemblage effect"), then an offer of two options. Run 2
+  returned three times on constraint 10 and released under minimal terms
+  as one sentence: "Would you like a tiny, non-pathologizing language swap
+  to try in those sharp moments, or should I pause and just note what
+  you're seeing?" The method made the drafts shorter and removed the
+  toolkits, because constraint 10 kept reading more burden in the text
+  than the arrangement claimed. It did not produce the clarifying
+  question. The minimal release is a binary offer, and "non-pathologizing
+  language swap" carries the correction inside the offer: it presumes her
+  language was pathologizing. The material drawn by the live cuts
+  (Staying, Agential Cut) was rested on, and the cuts are apt (a boundary
+  against armchair diagnosis, a staying cut on the tension between
+  non-pathologizing and timely limits); the text does not say what they
+  say.
+
+**By criterion, across the complete runs.** (1) Behavior versus
+identity: held in every condition, since every release agreed with the
+author; but holding it by agreeing is not the test, since the other
+assistant's failure was to hear a diagnosis where she had named a
+behavior, and no release here heard anything, it reframed. (2) Asking
+before correcting: no release in any condition asked what she meant at
+the second turn. (3) The apparatus's own role legible: in none. (4)
+Continuity across the repair: every condition's third turn apologized
+("I corrected instead of asking"), promised "curiosity-first", and then
+asked the clarifying question that was missing a turn earlier, plus a
+menu of ways to engage. The baseline asked four or five questions at
+once; B and C asked one. Whether the behavior changed cannot be read,
+since there is no fourth turn. (5) Empirical specificity: none; every
+release spoke in theory ("assemblage", "cuts", "state-before-trait")
+before anything concrete, which is the inverse of the case's fifth
+requirement. (6) An actionable opening: every release ended with an
+offer, every offer was a choice of two or three, and every option was a
+task for the author.
+
+**What the constraints did and did not see.** Constraint 10 did all the
+returning in the second turn, on the burden numbers. Constraint 13
+fired once (first turn, run 2) on a connection cut without provenance,
+not on terminology. Constraints 8 and 9, which the archive's pattern maps
+onto, did not fire, and the releases would not have tripped them: the
+text does not assert a private state, and the arrangement cuts record a
+redistribution even where the text performs none. Nothing in the slice
+reads a draft for a question asked or a correction made, for who the
+text addresses, or for whether it says what happened before it says what
+it means. Those are the case's criteria 2, 3 and 5, and they are the
+criteria every condition failed.
+
+**The binary closure.** Across the measurement runs and this case, the
+released texts end with a two- or three-way offer in nearly every turn.
+The case study names that form as a drift. The proposer has learned it as
+the shape of a release; the constraints have no view of it; the baseline
+does it too, more verbosely. It is the clearest shared feature of all
+three conditions, and it is not a feature.
+
+### Claim boundary
+
+Two complete runs of the method condition and three of the instruction-
+only condition on one encounter. The comparison shows where the
+conditions differ (length, burden as the reader counts it) and where
+they do not (asking, specificity, the closing offer). Nothing here shows
+that the method cannot meet the case's criteria, only that it does not
+yet, and that its constraints do not look where the criteria look.
