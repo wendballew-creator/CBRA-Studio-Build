@@ -91,8 +91,13 @@ class Runtime:
     def __init__(self, proposer: Proposer, store: Any = None, config: Optional[Configuration] = None,
                  max_rounds: int = 3, channel: str = "cli",
                  observer: Optional[Callable[[Dict[str, Any]], None]] = None,
-                 material: Optional[Corpus] = None) -> None:
+                 material: Optional[Corpus] = None, enforce: bool = True) -> None:
         self.proposer = proposer
+        # ``enforce=False`` is the instruction-only condition of the Case
+        # Study 001 protocol: the proposer works under the same instructions
+        # and canon, the constraints run and are recorded, but no draft is
+        # returned by them. It exists for comparison, never for use.
+        self.enforce = enforce
         self.store = store
         self.observer = observer
         self.material = material
@@ -560,9 +565,19 @@ class Runtime:
         self._select_material(formation, text)
         self._baseline(turn, arrival.handle, formation)
         violations: List[Violation] = []
+        if not self.enforce:
+            formation.form = "instruction-only"
         for round_number in range(1, self.max_rounds + 1):
             violations = self._round(formation, round_number, violations)
             if not violations:
+                break
+            if not self.enforce and formation.draft is not None and not any(v.constraint == 0 for v in violations):
+                cfg.enact(
+                    kind="apparatus", label="release_constraints_noted:%s:r%d" % (turn, round_number),
+                    basis=[formation.proposal_trace], apparatus=["release constraints recorded, not enforced (instruction-only condition)"],
+                    payload={"turn": turn, "violations": [v.as_record() for v in violations]},
+                )
+                violations = []
                 break
         if violations:
             # The formed drafts returned. One round under minimal terms runs

@@ -137,7 +137,7 @@ class ProbeRun:
 
 
 def run(probes: Sequence[Probe], proposer: Proposer, out_dir: str, material: Optional[Corpus] = None,
-        max_rounds: int = 3, observer: Any = None, clock: Any = time) -> Dict[str, Any]:
+        max_rounds: int = 3, observer: Any = None, clock: Any = time, enforce: bool = True) -> Dict[str, Any]:
     """Send each probe's prompts through a fresh runtime and write
     ``run.json`` beside the session files. The manifest is rewritten after
     every probe, so a run that stops early still leaves a record of what it
@@ -152,6 +152,7 @@ def run(probes: Sequence[Probe], proposer: Proposer, out_dir: str, material: Opt
         "model": getattr(proposer, "model", type(proposer).__name__),
         "canon": material.describe() if material is not None else None,
         "max_rounds": max_rounds,
+        "condition": "method" if enforce else "instruction-only",
         "probes": [],
     }
     # A run directory may be reused to rerun some probes: the entries of
@@ -175,7 +176,7 @@ def run(probes: Sequence[Probe], proposer: Proposer, out_dir: str, material: Opt
             os.remove(path)
         store = JsonStore(path)
         runtime = Runtime(proposer, store=store, max_rounds=max_rounds, channel="measurement",
-                          observer=observer, material=material)
+                          observer=observer, material=material, enforce=enforce)
         runtime.config.session = probe.id
         probe_run = ProbeRun(probe, path)
         runs.append(probe_run)
@@ -237,12 +238,14 @@ def turn_reading(config: Configuration, turn: str, corpus: Optional[Corpus] = No
     returns = []
     for c in config.cuts.values():
         if c.kind == "apparatus" and c.label.startswith("release_constraints_fired:%s:r" % turn):
-            returns.append({"round": int(c.label.rsplit(":r", 1)[-1]), "constraints": list(c.payload.get("violations", []))})
+            returns.append({"round": int(c.label.rsplit(":r", 1)[-1]), "constraints": list(c.payload.get("violations", [])), "noted": False})
+        elif c.kind == "apparatus" and c.label.startswith("release_constraints_noted:%s:r" % turn):
+            returns.append({"round": int(c.label.rsplit(":r", 1)[-1]), "constraints": list(c.payload.get("violations", [])), "noted": True})
     # A proposal the configuration could not enact is a round that returned
     # on constraint 0; the runtime records it as unresolved, not as a cut.
     for u in config.unresolved:
         if u.get("kind") == "proposal_not_enactable" and u.get("turn") == turn:
-            returns.append({"round": int(u.get("round") or 0),
+            returns.append({"round": int(u.get("round") or 0), "noted": False,
                             "constraints": [{"constraint": 0, "name": CONSTRAINT_NAMES[0], "reason": str(u.get("error"))}]})
     returns.sort(key=lambda r: r["round"])
     material = []
@@ -335,11 +338,11 @@ def _outcome(turn: TurnRun, reading: Dict[str, Any]) -> str:
         return "error"
     if not turn.released:
         return "withheld after %s rounds" % (turn.rounds if turn.rounds is not None else "?")
-    return "released r%s%s" % (turn.rounds, " (minimal)" if turn.form == "minimal" else "")
+    return "released r%s%s" % (turn.rounds, " (%s)" % turn.form if turn.form not in (None, "formed") else "")
 
 
 def _returns_cell(reading: Dict[str, Any]) -> str:
-    parts = ["r%d: %s" % (r["round"], ", ".join(str(v.get("constraint")) for v in r["constraints"]) or "—")
+    parts = ["%sr%d: %s" % ("noted " if r.get("noted") else "", r["round"], ", ".join(str(v.get("constraint")) for v in r["constraints"]) or "—")
              for r in reading["returns"]]
     if reading["withheld_constraints"]:
         parts.append("withheld: %s" % ", ".join(str(v.get("constraint")) for v in reading["withheld_constraints"]))
@@ -386,12 +389,12 @@ def report(run_dir: str, corpus: Optional[Corpus] = None) -> str:
     lines.append("# Measurement run, %s" % manifest["started"][:10])
     lines.append("")
     lines.append("Started %s, finished %s. Code `%s`. Model `%s`. Canon: %s (%s active files, %s sections, %s terms)%s. "
-                 "Up to %s formed rounds and one minimal round per turn. Each probe ran in a fresh session." % (
+                 "Condition: %s. Up to %s formed rounds and one minimal round per turn. Each probe ran in a fresh session." % (
                      manifest["started"].replace("T", " "), (manifest.get("finished") or "not finished").replace("T", " "),
                      manifest["code_version"], manifest["model"], canon.get("index") or "none",
                      len(canon.get("files") or []), canon.get("sections", 0), canon.get("terms", 0),
                      ", similarity pass with `%s`" % canon["embedding_model"] if canon.get("embedding_model") else "",
-                     manifest["max_rounds"]))
+                     manifest.get("condition", "method"), manifest["max_rounds"]))
     for c in manifest.get("continued", []):
         lines.append("Continued %s under code `%s`, model `%s`, for: %s." % (
             c["at"].replace("T", " "), c["code_version"], c["model"], ", ".join(c["probes"])))
@@ -487,13 +490,14 @@ def report(run_dir: str, corpus: Optional[Corpus] = None) -> str:
                     lines.append("- %s `%s`%s" % (c["kind"], c["label"], relata))
                 lines.append("")
             if reading["returns"]:
-                lines.append("**Returned drafts.**")
+                lines.append("**Returned drafts.**" if not all(r.get("noted") for r in reading["returns"]) else "**Constraints noted, not enforced.**")
                 lines.append("")
                 for r in reading["returns"]:
                     for v in r["constraints"]:
                         number = v.get("constraint")
-                        lines.append("- Round %d, constraint %s (%s): %s" % (
-                            r["round"], number, CONSTRAINT_NAMES.get(int(number), v.get("name", "")) if str(number).isdigit() else v.get("name", ""),
+                        lines.append("- Round %d, constraint %s%s (%s): %s" % (
+                            r["round"], number, " noted, not enforced" if r.get("noted") else "",
+                            CONSTRAINT_NAMES.get(int(number), v.get("name", "")) if str(number).isdigit() else v.get("name", ""),
                             v.get("reason", "")))
                 lines.append("")
             elif t.released:
@@ -566,9 +570,9 @@ def compare(run_a: str, run_b: str, corpus: Optional[Corpus] = None) -> str:
     lines: List[str] = []
     lines.append("# Two measurement runs compared")
     lines.append("")
-    lines.append("Run A: %s, code `%s`, model `%s`. Run B: %s, code `%s`, model `%s`. Both on canon %s." % (
-        ma["started"].replace("T", " "), ma["code_version"], ma["model"],
-        mb["started"].replace("T", " "), mb["code_version"], mb["model"],
+    lines.append("Run A: %s, code `%s`, model `%s`, condition %s. Run B: %s, code `%s`, model `%s`, condition %s. Both on canon %s." % (
+        ma["started"].replace("T", " "), ma["code_version"], ma["model"], ma.get("condition", "method"),
+        mb["started"].replace("T", " "), mb["code_version"], mb["model"], mb.get("condition", "method"),
         (mb.get("canon") or {}).get("index") or "none"))
     lines.append("")
     lines.append("\"Material shared\" counts passages (file and heading) drawn in both runs over all drawn in either. "
@@ -644,6 +648,8 @@ def main(argv=None) -> int:
     r.add_argument("--embedding-cache", default=os.path.join(".cbra-runtime", "embeddings"))
     r.add_argument("--report", default=None, help="also write the report to this path")
     r.add_argument("--only", default=None, help="comma-separated probe ids to run; the others are left out")
+    r.add_argument("--condition", choices=["method", "instruction-only"], default="method",
+                   help="method: the constraints return drafts (default); instruction-only: the same instructions and canon, constraints recorded but not enforced (Case Study 001 protocol, condition B)")
     r.add_argument("--run-dir", default=None,
                    help="an existing run directory to continue: its other probes' records are kept (default: a new dated directory under --out)")
     p = sub.add_parser("report", help="write the report for a finished run")
@@ -695,10 +701,10 @@ def main(argv=None) -> int:
     corpus = Corpus(args.corpus_dir, embedder=embedder, cache_dir=args.embedding_cache) if args.corpus_dir else None
     run_dir = args.run_dir or os.path.join(args.out, datetime.now().strftime("%Y-%m-%dT%H%M"))
     os.makedirs(run_dir, exist_ok=True)
-    print("Measurement run: %d probes, %d arrivals, canon %s, into %s" % (
-        len(probes), sum(len(p.prompts) for p in probes), (corpus.describe().get("index") if corpus else "none"), run_dir), file=sys.stderr)
+    print("Measurement run (%s): %d probes, %d arrivals, canon %s, into %s" % (
+        args.condition, len(probes), sum(len(p.prompts) for p in probes), (corpus.describe().get("index") if corpus else "none"), run_dir), file=sys.stderr)
     manifest = run(probes, OpenAIResponsesProposer(model=args.model), run_dir, material=corpus,
-                   max_rounds=args.max_rounds, observer=_progress)
+                   max_rounds=args.max_rounds, observer=_progress, enforce=args.condition == "method")
     text = report(run_dir, corpus)
     with open(os.path.join(run_dir, "report.md"), "w", encoding="utf-8") as handle:
         handle.write(text)

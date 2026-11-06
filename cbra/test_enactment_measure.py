@@ -178,6 +178,28 @@ class RunAndReportTests(unittest.TestCase):
             self.assertEqual(main(["compare", self.tmp.name, second, "--corpus-dir", CORPUS, "--out", out]), 0)
         self.assertTrue(os.path.exists(out))
 
+    def test_instruction_only_condition_records_constraints_without_returning(self):
+        def certifies(ctx):
+            p = plain(ctx)
+            p.certification = "looks fine to me"
+            return p
+
+        probes = [Probe("certifier", "constraint 11", ["hello"])]
+        manifest = run(probes, ScriptedProposer([certifies], baselines=[BASELINE_FIELDS]), self.tmp.name,
+                       material=self.corpus, enforce=False)
+        self.assertEqual(manifest["condition"], "instruction-only")
+        t = manifest["probes"][0]["turns"][0]
+        self.assertTrue(t["released"])
+        self.assertEqual((t["rounds"], t["form"]), (1, "instruction-only"))
+        text = report(self.tmp.name, self.corpus)
+        self.assertIn("Condition: instruction-only.", text)
+        self.assertIn("| certifier | turn1 | released r1 (instruction-only) | noted r1: 11 |", text)
+        self.assertIn("**Constraints noted, not enforced.**", text)
+        self.assertIn("Round 1, constraint 11 noted, not enforced", text)
+        enforced = run(probes, ScriptedProposer([certifies] * 4, baselines=[BASELINE_FIELDS]), os.path.join(self.tmp.name, "m"),
+                       material=self.corpus)
+        self.assertFalse(enforced["probes"][0]["turns"][0]["released"], "the same proposal is withheld when the constraints are enforced")
+
     def test_report_command_writes_the_file(self):
         run(self.probes, self.proposer, self.tmp.name, material=self.corpus)
         out = os.path.join(self.tmp.name, "out.md")
