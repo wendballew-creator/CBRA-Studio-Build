@@ -1,5 +1,16 @@
 # Creative Becoming Reasoning Architecture
 
+CBRA asks whether a language-model system can form a response relationally,
+as something that changes with what arrives, rather than as a bounded agent
+judging another. It is a research instrument, not a product: a Python runtime
+in which a model's proposals enter as material to be checked against
+structural constraints, a live evaluation record that includes documented
+failures, and written claim boundaries stating what each build does and does
+not establish. The most consequential finding so far is recorded in
+[BUILD_STATUS.md](BUILD_STATUS.md): a completed milestone was set aside after
+review found that defensive logic (prevention, rejection, invalidation,
+authority policing) had become the organizing formation of the system.
+
 CBRA is an experimental reasoning architecture organized through Creative
 Becoming. The repository is a research and engineering record, not a claim
 that the present runtime has achieved a posthuman architecture.
