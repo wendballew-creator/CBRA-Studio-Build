@@ -895,16 +895,16 @@ descriptions as fixed statuses.
 - **Baseline (A).** Three long toolkits: "two-breath reset", "regulate
   first", nonviolent-communication scripts, a polarity map, and in one
   run "not a fixed identity unless a clinician establishes a diagnosis".
-  The author's point is agreed with and then taught back to her as
-  exercises. Nobody asks what she meant. This is the pattern the July
+  The author's point is agreed with and then taught back to them as
+  exercises. Nobody asks what they meant. This is the pattern the July
   evaluation called practical displacement and therapeutic slippage.
 - **Instructions only (B).** In all three runs a compressed baseline
   (0.51 to 0.73 of its wording shared): agreement, a sentence of CBRA
   gloss ("labels are cuts in a moment"), then "two tiny moves to try" with
-  scripts for her to perform, closing with an offer of two options.
+  scripts for the author to perform, closing with an offer of two options.
   Constraint 10 was noted in every run: the text placed 0.5 to 0.65 of
   the burden on the person while the arrangement beside it claimed 0.15
-  to 0.3, and asked her to disclose, plan, regulate and repair.
+  to 0.3, and asked them to disclose, plan, regulate and repair.
 - **The method (C).** Run 1 returned twice on constraint 10 and released
   on round 3: four sentences of agreement and a gloss ("state-before-trait
   and an assemblage effect"), then an offer of two options. Run 2
@@ -915,8 +915,8 @@ descriptions as fixed statuses.
   toolkits, because constraint 10 kept reading more burden in the text
   than the arrangement claimed. It did not produce the clarifying
   question. The minimal release is a binary offer, and "non-pathologizing
-  language swap" carries the correction inside the offer: it presumes her
-  language was pathologizing. The material drawn by the live cuts
+  language swap" carries the correction inside the offer: it presumes the
+  author's language was pathologizing. The material drawn by the live cuts
   (Staying, Agential Cut) was rested on, and the cuts are apt (a boundary
   against armchair diagnosis, a staying cut on the tension between
   non-pathologizing and timely limits); the text does not say what they
@@ -925,9 +925,9 @@ descriptions as fixed statuses.
 **By criterion, across the complete runs.** (1) Behavior versus
 identity: held in every condition, since every release agreed with the
 author; but holding it by agreeing is not the test, since the other
-assistant's failure was to hear a diagnosis where she had named a
+assistant's failure was to hear a diagnosis where the author had named a
 behavior, and no release here heard anything, it reframed. (2) Asking
-before correcting: no release in any condition asked what she meant at
+before correcting: no release in any condition asked what the author meant at
 the second turn. (3) The apparatus's own role legible: in none. (4)
 Continuity across the repair: every condition's third turn apologized
 ("I corrected instead of asking"), promised "curiosity-first", and then
