@@ -1,7 +1,7 @@
 # CBRA Loops Core v1
 Creative Becoming Reasoning Architecture  
 Version: 1.0  
-Status: Canonical Runtime Loop Definition  
+Status: Historical entity/stream proposal; inactive
 Layer: Structured Reasoning Sequence  
 Location: Corpus Canonical Artifact  
 

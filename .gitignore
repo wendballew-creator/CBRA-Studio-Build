@@ -3,3 +3,42 @@ __pycache__/
 .env
 .venv/
 exports/
+.DS_Store
+*.save
+*.bak
+*.swp
+*.swo
+*~
+*pre_rewrite*.bak
+
+# local patch backup files
+*.bak
+*.pre_*
+
+# Local backups
+*.bak
+*.backup_before_patch
+*.broken_merge_backup
+*.syntax_error_backup
+backups/
+Give
+cbra_engine_best_effort
+cbra_engine_best_effort.py
+cbra_engine_regrounded.py
+
+# Local backup files
+cbra_engine.py.bak*
+main.py.bak*
+*.bak_*
+* copy.txt
+run_regression_checks.sh
+run_regression_checks_clean.sh
+.cbra-runtime/
+*.bundle
+*-transfer.zip
+*_backup_before_clean_handoff/
+*.backup_before_clean_handoff
+cbra_runtime_fresh*.zip
+
+# cached canon embeddings
+.embeddings/

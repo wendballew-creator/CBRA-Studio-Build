@@ -1,0 +1,1241 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CBRA Studio</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --background: #0d1117;
+      --panel: #151b23;
+      --panel-soft: #1c2430;
+      --border: #303b49;
+      --text: #eef3f8;
+      --muted: #9eabb9;
+      --accent: #91b8ff;
+      --accent-ink: #081321;
+      --user: #1d3557;
+      --assistant: #20382e;
+      --pending: #5b4a24;
+      --danger: #ffb4ab;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--background);
+      color: var(--text);
+      font-family:
+        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      background: var(--accent);
+      color: var(--accent-ink);
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      border: 1px solid var(--border);
+      background: var(--panel-soft);
+      color: var(--text);
+    }
+
+    button:disabled,
+    input:disabled,
+    textarea:disabled {
+      cursor: wait;
+      opacity: 0.62;
+    }
+
+    input,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 11px 12px;
+    }
+
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    label {
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 650;
+    }
+
+    .app {
+      width: min(1120px, 100%);
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 1.35rem;
+    }
+
+    .brand p {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .state-pill {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 7px 11px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+
+    .thread-controls {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto auto;
+      gap: 10px;
+      align-items: end;
+      margin-bottom: 16px;
+    }
+
+    .thread-field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(230px, 0.8fr);
+      gap: 16px;
+    }
+
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--panel);
+      padding: 15px;
+    }
+
+    .status {
+      min-height: 22px;
+      margin-bottom: 10px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .status.error {
+      color: var(--danger);
+    }
+
+    .transcript {
+      display: flex;
+      min-height: 470px;
+      max-height: 68vh;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+      padding: 3px;
+    }
+
+    .empty {
+      margin: auto;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .turn {
+      display: grid;
+      gap: 8px;
+    }
+
+    .message {
+      border-radius: 13px;
+      padding: 12px 14px;
+      line-height: 1.48;
+      overflow-wrap: anywhere;
+    }
+
+    .message.user {
+      background: var(--user);
+    }
+
+    .message.assistant {
+      background: var(--assistant);
+    }
+
+    .message.user .message-content {
+      white-space: pre-wrap;
+    }
+
+    .message-content > :first-child {
+      margin-top: 0;
+    }
+
+    .message-content > :last-child {
+      margin-bottom: 0;
+    }
+
+    .message-content p {
+      margin: 0.7em 0;
+    }
+
+    .message-content h1,
+    .message-content h2,
+    .message-content h3,
+    .message-content h4,
+    .message-content h5,
+    .message-content h6 {
+      margin: 0.9em 0 0.35em;
+      line-height: 1.25;
+    }
+
+    .message-content h1 {
+      font-size: 1.35rem;
+    }
+
+    .message-content h2 {
+      font-size: 1.22rem;
+    }
+
+    .message-content h3 {
+      font-size: 1.12rem;
+    }
+
+    .message-content h4,
+    .message-content h5,
+    .message-content h6 {
+      font-size: 1rem;
+    }
+
+    .message-content ul,
+    .message-content ol {
+      margin: 0.65em 0;
+      padding-left: 1.5em;
+    }
+
+    .message-content li + li {
+      margin-top: 0.3em;
+    }
+
+    .message-content code {
+      border-radius: 4px;
+      background: var(--panel-soft);
+      padding: 0.08em 0.3em;
+      font-family:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    .message-content pre {
+      margin: 0.7em 0;
+    }
+
+    .message-content pre code {
+      background: transparent;
+      padding: 0;
+    }
+
+    .message-label,
+    .turn-outcome {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 700;
+      letter-spacing: 0.025em;
+      text-transform: uppercase;
+    }
+
+    .turn-outcome {
+      margin: 0 4px;
+      text-transform: none;
+    }
+
+    .composer {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .attachment-picker {
+      display: grid;
+      gap: 8px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel-soft);
+      padding: 11px 12px;
+    }
+
+    .attachment-picker input {
+      background: var(--panel);
+    }
+
+    .attachment-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .selected-files {
+      display: grid;
+      gap: 5px;
+      margin: 0;
+      padding: 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+      list-style: none;
+    }
+
+    .selected-files li {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .file-size {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+
+    .attachment-note {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.4;
+    }
+
+    .clear-attachments {
+      padding: 7px 10px;
+      font-size: 0.78rem;
+    }
+
+    .composer-actions {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .hint {
+      align-self: center;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    .sidebar-title {
+      margin: 0 0 10px;
+      font-size: 0.95rem;
+    }
+
+    pre {
+      margin: 0;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      background: var(--panel-soft);
+      color: var(--text);
+      padding: 12px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+
+    .boundary-note {
+      margin: 14px 1px 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+
+    @media (max-width: 820px) {
+      .app {
+        padding: 16px;
+      }
+
+      .header {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .state-pill {
+        align-self: flex-start;
+      }
+
+      .thread-controls,
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .transcript {
+        min-height: 360px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="header">
+      <div class="brand">
+        <h1>CBRA Studio</h1>
+        <p>Durable native conversation history</p>
+      </div>
+      <div class="state-pill" id="statePill">Unloaded</div>
+    </header>
+
+    <section class="thread-controls" aria-label="Thread controls">
+      <div class="thread-field">
+        <label for="threadId">Claimed thread ID</label>
+        <input id="threadId" autocomplete="off" spellcheck="false">
+      </div>
+      <button id="loadThreadBtn" class="secondary" type="button">
+        Load thread
+      </button>
+      <button id="newThreadBtn" type="button">New thread</button>
+    </section>
+
+    <div class="layout">
+      <section class="panel">
+        <div
+          class="status"
+          id="status"
+          role="status"
+          aria-live="polite"
+        >Preparing a claimed thread…</div>
+
+        <div class="transcript" id="transcript"></div>
+
+        <div class="composer">
+          <label for="prompt">New material</label>
+          <textarea
+            id="prompt"
+            placeholder="Write here…"
+          ></textarea>
+          <div class="attachment-picker">
+            <div class="attachment-heading">
+              <label for="attachments">Supporting documents (optional)</label>
+              <button
+                id="clearAttachmentsBtn"
+                class="secondary clear-attachments"
+                type="button"
+              >Clear selection</button>
+            </div>
+            <input
+              id="attachments"
+              type="file"
+              multiple
+              accept=".txt,.md,.docx,.pdf,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf"
+              aria-describedby="attachmentNote"
+            >
+            <ul
+              class="selected-files"
+              id="selectedFiles"
+              aria-live="polite"
+            ></ul>
+            <p class="attachment-note" id="attachmentNote">
+              Accepted formats: TXT, Markdown, DOCX, and text-bearing PDF.
+              Files remain in this page only until their turn is resolved.
+            </p>
+          </div>
+          <div class="composer-actions">
+            <span class="hint">Command/Ctrl + Enter to send</span>
+            <button id="sendBtn" type="button">Send</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <h2 class="sidebar-title">Public session summary</h2>
+        <pre id="threadSummary">No thread loaded.</pre>
+        <p class="boundary-note">
+          This client restores only the bounded public turn projection.
+          Native field state, traces, candidates, and material identifiers
+          remain internal.
+        </p>
+      </aside>
+    </div>
+  </main>
+
+  <script src="/ui/markdown.js"></script>
+  <script>
+    (() => {
+      "use strict";
+
+      const PAGE_LIMIT = 100;
+      const THREAD_PATTERN = /^thread:[0-9a-f]{32}$/;
+      const state = {
+        threadId: "",
+        revision: 0,
+        exists: false,
+        turns: [],
+        pending: null,
+        selectedAttachments: [],
+        busy: false
+      };
+
+      const elements = {
+        threadId: document.getElementById("threadId"),
+        load: document.getElementById("loadThreadBtn"),
+        create: document.getElementById("newThreadBtn"),
+        send: document.getElementById("sendBtn"),
+        prompt: document.getElementById("prompt"),
+        attachments: document.getElementById("attachments"),
+        clearAttachments:
+          document.getElementById("clearAttachmentsBtn"),
+        selectedFiles: document.getElementById("selectedFiles"),
+        transcript: document.getElementById("transcript"),
+        summary: document.getElementById("threadSummary"),
+        status: document.getElementById("status"),
+        statePill: document.getElementById("statePill")
+      };
+
+      class PublicHttpError extends Error {
+        constructor(status, body) {
+          const detail = body && body.error ? body.error : {};
+          super(detail.message || "The request could not be completed.");
+          this.name = "PublicHttpError";
+          this.status = status;
+          this.code = detail.code || "http_error";
+        }
+      }
+
+      function newClaim(prefix) {
+        const bytes = new Uint8Array(16);
+        crypto.getRandomValues(bytes);
+        const suffix = Array.from(
+          bytes,
+          value => value.toString(16).padStart(2, "0")
+        ).join("");
+        return `${prefix}${suffix}`;
+      }
+
+      function rememberThread(threadId) {
+        try {
+          localStorage.setItem("cbra.thread_id", threadId);
+        } catch (_) {
+          // The durable server identity still works when storage is blocked.
+        }
+      }
+
+      function recalledThread() {
+        try {
+          const threadId = localStorage.getItem("cbra.thread_id");
+          return THREAD_PATTERN.test(threadId || "") ? threadId : null;
+        } catch (_) {
+          return null;
+        }
+      }
+
+      function setStatus(message, isError = false) {
+        elements.status.textContent = message;
+        elements.status.classList.toggle("error", isError);
+      }
+
+      function setBusy(busy) {
+        state.busy = busy;
+        elements.load.disabled = busy;
+        elements.create.disabled = busy;
+        elements.send.disabled = busy;
+        elements.threadId.disabled = busy;
+        elements.prompt.disabled = busy;
+        elements.attachments.disabled = busy;
+        elements.clearAttachments.disabled =
+          busy || state.selectedAttachments.length === 0;
+        elements.send.textContent = sendButtonLabel();
+      }
+
+      function sendButtonLabel() {
+        if (state.busy) {
+          return "Working…";
+        }
+        if (!state.pending) {
+          return "Send";
+        }
+        if (!composerMatchesPending(state.pending)) {
+          return "Resolve prior turn";
+        }
+        return state.pending.needsReconciliation
+          ? "Recover turn"
+          : "Retry turn";
+      }
+
+      function formatBytes(value) {
+        if (value < 1024) {
+          return `${value} B`;
+        }
+        if (value < 1024 * 1024) {
+          return `${(value / 1024).toFixed(1)} KB`;
+        }
+        return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+      }
+
+      function renderSelectedFiles() {
+        elements.selectedFiles.replaceChildren();
+        if (state.selectedAttachments.length === 0) {
+          const item = document.createElement("li");
+          item.textContent = "No documents selected.";
+          elements.selectedFiles.appendChild(item);
+        } else {
+          for (const attachment of state.selectedAttachments) {
+            const item = document.createElement("li");
+            const name = document.createElement("span");
+            const size = document.createElement("span");
+            name.textContent = attachment.file.name;
+            size.className = "file-size";
+            size.textContent = formatBytes(attachment.file.size);
+            item.append(name, size);
+            elements.selectedFiles.appendChild(item);
+          }
+        }
+        elements.clearAttachments.disabled =
+          state.busy || state.selectedAttachments.length === 0;
+      }
+
+      function clearAttachmentSelection() {
+        state.selectedAttachments = [];
+        elements.attachments.value = "";
+        renderSelectedFiles();
+        elements.send.textContent = sendButtonLabel();
+      }
+
+      function clearComposer() {
+        elements.prompt.value = "";
+        clearAttachmentSelection();
+      }
+
+      function attachmentsMatch(left, right) {
+        return (
+          left.length === right.length &&
+          left.every(
+            (attachment, index) =>
+              attachment.attachmentId === right[index].attachmentId &&
+              attachment.file === right[index].file
+          )
+        );
+      }
+
+      function composerMatchesPending(pending) {
+        return (
+          elements.prompt.value.trim() === pending.userText &&
+          attachmentsMatch(
+            state.selectedAttachments,
+            pending.attachments
+          )
+        );
+      }
+
+      function appendMessage(container, role, text) {
+        const message = document.createElement("div");
+        message.className = `message ${role}`;
+
+        const label = document.createElement("span");
+        label.className = "message-label";
+        label.textContent = role === "user" ? "User" : "CBRA";
+
+        const content = document.createElement("div");
+        content.className = "message-content";
+        if (
+          role === "assistant" &&
+          window.CBRAMarkdown &&
+          typeof window.CBRAMarkdown.render === "function"
+        ) {
+          window.CBRAMarkdown.render(content, text);
+        } else {
+          content.textContent = text;
+        }
+
+        message.append(label, content);
+        container.appendChild(message);
+      }
+
+      function render() {
+        elements.transcript.replaceChildren();
+        if (state.turns.length === 0) {
+          const empty = document.createElement("div");
+          empty.className = "empty";
+          empty.textContent = state.exists
+            ? "This durable thread has no turns."
+            : "No durable turns yet.";
+          elements.transcript.appendChild(empty);
+        } else {
+          for (const turn of state.turns) {
+            const container = document.createElement("article");
+            container.className = "turn";
+            appendMessage(container, "user", turn.user_text);
+
+            const outcome = document.createElement("div");
+            outcome.className = "turn-outcome";
+            outcome.textContent =
+              `Revision ${turn.revision} · ${turn.outcome}`;
+            container.appendChild(outcome);
+
+            if (turn.text !== null) {
+              appendMessage(container, "assistant", turn.text);
+            }
+            elements.transcript.appendChild(container);
+          }
+          elements.transcript.scrollTop =
+            elements.transcript.scrollHeight;
+        }
+
+        const latest = state.turns.length
+          ? state.turns[state.turns.length - 1]
+          : null;
+        const summary = {
+          thread_id: state.threadId || null,
+          durable: state.exists,
+          revision: state.revision,
+          turn_count: state.turns.length,
+          latest_outcome: latest ? latest.outcome : null,
+          reintegration_pending:
+            Boolean(latest) &&
+            latest.outcome === "reintegration_pending"
+        };
+        elements.summary.textContent = JSON.stringify(summary, null, 2);
+        elements.statePill.textContent = state.exists
+          ? `Durable · revision ${state.revision}`
+          : "Claimed · not created";
+        renderSelectedFiles();
+        elements.send.textContent = sendButtonLabel();
+      }
+
+      async function requestJson(path, options = {}) {
+        const response = await fetch(path, options);
+        let body = null;
+        try {
+          body = await response.json();
+        } catch (_) {
+          body = null;
+        }
+        if (!response.ok) {
+          throw new PublicHttpError(response.status, body);
+        }
+        return body;
+      }
+
+      function validatePage(page, threadId, afterRevision) {
+        if (
+          !page ||
+          page.thread_id !== threadId ||
+          !Number.isInteger(page.session_revision) ||
+          !Number.isInteger(page.next_after_revision) ||
+          !Array.isArray(page.turns) ||
+          typeof page.has_more !== "boolean"
+        ) {
+          throw new Error("The transcript page contract is invalid.");
+        }
+
+        let expectedRevision = afterRevision + 1;
+        for (const turn of page.turns) {
+          if (
+            !turn ||
+            turn.revision !== expectedRevision ||
+            typeof turn.turn_id !== "string" ||
+            typeof turn.user_text !== "string" ||
+            typeof turn.outcome !== "string" ||
+            !(turn.text === null || typeof turn.text === "string")
+          ) {
+            throw new Error(
+              "The transcript page is not contiguous or typed."
+            );
+          }
+          expectedRevision += 1;
+        }
+
+        const expectedCursor = page.turns.length
+          ? page.turns[page.turns.length - 1].revision
+          : afterRevision;
+        if (
+          page.next_after_revision !== expectedCursor ||
+          page.session_revision < expectedCursor ||
+          (page.has_more && expectedCursor <= afterRevision)
+        ) {
+          throw new Error("The transcript cursor did not advance safely.");
+        }
+      }
+
+      async function loadThreadData(threadId) {
+        let cursor = 0;
+        let observedRevision = 0;
+        const turns = [];
+        let isNew = false;
+
+        try {
+          while (true) {
+            const query = new URLSearchParams({
+              after_revision: String(cursor),
+              limit: String(PAGE_LIMIT)
+            });
+            const page = await requestJson(
+              `/thread/${encodeURIComponent(threadId)}/turns?${query}`
+            );
+            validatePage(page, threadId, cursor);
+            if (page.session_revision < observedRevision) {
+              throw new Error(
+                "The durable session revision moved backward."
+              );
+            }
+            observedRevision = page.session_revision;
+            turns.push(...page.turns);
+            cursor = page.next_after_revision;
+            if (!page.has_more) {
+              break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
+        } catch (error) {
+          if (
+            error instanceof PublicHttpError &&
+            error.status === 404 &&
+            error.code === "session_not_found"
+          ) {
+            isNew = true;
+          } else {
+            throw error;
+          }
+        }
+
+        state.threadId = threadId;
+        state.revision = isNew ? 0 : observedRevision;
+        state.exists = !isNew;
+        state.turns = isNew ? [] : turns;
+        rememberThread(threadId);
+
+        let recoveredPending = false;
+        if (state.pending && state.pending.threadId === threadId) {
+          recoveredPending = state.turns.some(
+            turn => turn.turn_id === state.pending.turnId
+          );
+          if (recoveredPending) {
+            const liveMaterialWasPending =
+              composerMatchesPending(state.pending);
+            state.pending = null;
+            if (liveMaterialWasPending) {
+              clearComposer();
+            }
+          } else {
+            state.pending.creating = isNew;
+            state.pending.expectedRevision = state.revision;
+            state.pending.needsReconciliation = false;
+          }
+        }
+        render();
+        return { isNew, recoveredPending };
+      }
+
+      function visibleError(error) {
+        if (error instanceof PublicHttpError) {
+          return `${error.code}: ${error.message}`;
+        }
+        return "The network or browser interrupted the request.";
+      }
+
+      async function loadSelectedThread() {
+        const threadId = elements.threadId.value.trim();
+        if (!THREAD_PATTERN.test(threadId)) {
+          setStatus(
+            "Thread ID must be thread: followed by 32 lowercase " +
+            "hexadecimal characters.",
+            true
+          );
+          return;
+        }
+
+        setBusy(true);
+        setStatus("Restoring durable turn history…");
+        try {
+          if (state.pending && state.pending.threadId !== threadId) {
+            const pendingThreadId = state.pending.threadId;
+            elements.threadId.value = pendingThreadId;
+            setStatus(
+              "Checking the unresolved turn before switching threads…"
+            );
+            await loadThreadData(pendingThreadId);
+            if (state.pending) {
+              setStatus(
+                "The earlier interrupted turn is not durable yet. " +
+                "Resolve or retry it before switching threads.",
+                true
+              );
+              return;
+            }
+          }
+
+          if (state.threadId && state.threadId !== threadId) {
+            clearComposer();
+          }
+          elements.threadId.value = threadId;
+          const result = await loadThreadData(threadId);
+          if (result.recoveredPending) {
+            setStatus(
+              `Recovered persisted turn at revision ${state.revision}.`
+            );
+          } else if (result.isNew) {
+            setStatus(
+              "Claimed thread ready. Its first turn will create the " +
+              "durable session."
+            );
+          } else {
+            setStatus(
+              `Restored ${state.turns.length} durable turn` +
+              `${state.turns.length === 1 ? "" : "s"}.`
+            );
+          }
+        } catch (error) {
+          setStatus(visibleError(error), true);
+        } finally {
+          setBusy(false);
+          render();
+        }
+      }
+
+      function claimNewThread() {
+        if (state.pending) {
+          elements.threadId.value = state.pending.threadId;
+          setStatus(
+            "Resolve the earlier interrupted turn before claiming " +
+            "another thread.",
+            true
+          );
+          return;
+        }
+        const threadId = newClaim("thread:");
+        state.threadId = threadId;
+        state.revision = 0;
+        state.exists = false;
+        state.turns = [];
+        state.pending = null;
+        elements.threadId.value = threadId;
+        clearComposer();
+        rememberThread(threadId);
+        render();
+        setStatus(
+          "Claimed thread ready. Its first turn will create the " +
+          "durable session."
+        );
+        elements.prompt.focus();
+      }
+
+      async function sendTurn() {
+        const threadId = elements.threadId.value.trim();
+        if (!THREAD_PATTERN.test(threadId)) {
+          setStatus("Load or create a valid claimed thread first.", true);
+          return;
+        }
+        if (state.threadId !== threadId) {
+          clearAttachmentSelection();
+          setStatus(
+            "Load the changed thread before adding new material. " +
+            "Document selection was cleared to prevent cross-thread use.",
+            true
+          );
+          return;
+        }
+
+        const userText = elements.prompt.value.trim();
+        if (!state.pending && !userText) {
+          setStatus("Enter material for this turn.", true);
+          return;
+        }
+
+        setBusy(true);
+        try {
+          if (
+            state.pending &&
+            (
+              state.pending.needsReconciliation ||
+              !composerMatchesPending(state.pending)
+            )
+          ) {
+            setStatus(
+              "Checking whether the earlier interrupted turn persisted…"
+            );
+            const reconciliation = await loadThreadData(threadId);
+            if (reconciliation.recoveredPending) {
+              setStatus(
+                `Recovered persisted turn at revision ${state.revision}.` +
+                (
+                  elements.prompt.value.trim() ||
+                  state.selectedAttachments.length
+                    ? " Edited material remains ready for a new turn."
+                    : ""
+                )
+              );
+              return;
+            }
+          }
+
+          if (!state.pending) {
+            const attachments = Object.freeze(
+              state.selectedAttachments.map(attachment =>
+                Object.freeze({
+                  attachmentId: attachment.attachmentId,
+                  file: attachment.file
+                })
+              )
+            );
+            state.pending = {
+              threadId,
+              turnId: newClaim("turn:"),
+              userText,
+              attachments,
+              creating: !state.exists,
+              expectedRevision: state.revision,
+              needsReconciliation: false
+            };
+          }
+
+          const pending = state.pending;
+          const hasAttachments = pending.attachments.length > 0;
+          const path = pending.creating
+            ? hasAttachments
+              ? "/generate/attachments"
+              : "/generate"
+            : hasAttachments
+              ? `/chat/${encodeURIComponent(threadId)}/attachments`
+              : `/chat/${encodeURIComponent(threadId)}`;
+          let options;
+
+          if (hasAttachments) {
+            const form = new FormData();
+            if (pending.creating) {
+              form.append("thread_id", pending.threadId);
+            }
+            form.append("user_text", pending.userText);
+            form.append("turn_id", pending.turnId);
+            if (!pending.creating) {
+              form.append(
+                "expected_revision",
+                String(pending.expectedRevision)
+              );
+            }
+            form.append("mode", "production");
+            const orderedAttachments =
+              Array.from(pending.attachments).sort(
+                (left, right) =>
+                  left.attachmentId.localeCompare(right.attachmentId)
+              );
+            for (const attachment of orderedAttachments) {
+              form.append(
+                "attachment_id",
+                attachment.attachmentId
+              );
+              form.append(
+                "files",
+                attachment.file,
+                attachment.file.name
+              );
+            }
+            options = {
+              method: "POST",
+              body: form
+            };
+          } else {
+            const body = pending.creating
+              ? {
+                  thread_id: pending.threadId,
+                  turn_id: pending.turnId,
+                  user_text: pending.userText,
+                  mode: "production"
+                }
+              : {
+                  turn_id: pending.turnId,
+                  user_text: pending.userText,
+                  expected_revision: pending.expectedRevision,
+                  mode: "production"
+                };
+            options = {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body)
+            };
+          }
+
+          setStatus(
+            pending.creating
+              ? hasAttachments
+                ? "Creating the claimed durable thread with documents…"
+                : "Creating the claimed durable thread…"
+              : hasAttachments
+                ? "Submitting documents against revision " +
+                  `${pending.expectedRevision}…`
+                : `Submitting against revision ${pending.expectedRevision}…`
+          );
+          const liveMaterialWasPending =
+            composerMatchesPending(pending);
+          const response = await requestJson(path, options);
+          if (
+            response.thread_id !== pending.threadId ||
+            response.turn_id !== pending.turnId
+          ) {
+            throw new Error("The server returned a different turn identity.");
+          }
+
+          const restored = await loadThreadData(threadId);
+          if (!restored.recoveredPending) {
+            throw new Error(
+              "The persisted turn was absent from its durable projection."
+            );
+          }
+          setStatus(
+            `Turn ${response.revision} persisted: ${response.outcome}` +
+            `${response.idempotent_replay ? " (recovered replay)." : "."}` +
+            (
+              liveMaterialWasPending
+                ? ""
+                : " Edited material remains ready for a new turn."
+            )
+          );
+        } catch (error) {
+          if (
+            error instanceof PublicHttpError &&
+            (
+              error.code === "stale_revision" ||
+              error.code === "session_conflict"
+            ) &&
+            state.pending
+          ) {
+            try {
+              const result = await loadThreadData(threadId);
+              if (state.pending) {
+                state.pending.creating = false;
+                state.pending.expectedRevision = state.revision;
+                state.pending.needsReconciliation = false;
+              }
+              if (result.recoveredPending) {
+                setStatus(
+                  `Recovered persisted turn at revision ${state.revision}.`
+                );
+              } else {
+                setStatus(
+                  "The thread advanced elsewhere. Durable history was " +
+                  "restored; retry will reuse this turn ID.",
+                  true
+                );
+              }
+            } catch (restoreError) {
+              if (state.pending) {
+                state.pending.needsReconciliation = true;
+              }
+              setStatus(visibleError(restoreError), true);
+            }
+          } else if (
+            error instanceof PublicHttpError &&
+            error.code === "turn_conflict"
+          ) {
+            state.pending = null;
+            try {
+              await loadThreadData(threadId);
+            } catch (_) {
+              // Preserve the public conflict below if restoration also fails.
+            }
+            setStatus(
+              "The claimed turn ID conflicts with durable material. " +
+              "Review the restored history before sending a new turn.",
+              true
+            );
+          } else if (
+            error instanceof PublicHttpError &&
+            (
+              error.code === "attachment_too_large" ||
+              error.code === "unsupported_attachment" ||
+              error.code === "invalid_attachment" ||
+              error.code === "invalid_request"
+            )
+          ) {
+            state.pending = null;
+            setStatus(visibleError(error), true);
+          } else {
+            if (
+              state.pending &&
+              (
+                !(error instanceof PublicHttpError) ||
+                error.status >= 500
+              )
+            ) {
+              state.pending.needsReconciliation = true;
+            }
+            setStatus(
+              state.pending &&
+              state.pending.needsReconciliation
+                ? "The request was interrupted. Recovery will check " +
+                  "durable history before reusing the same turn and " +
+                  "document IDs."
+                : visibleError(error),
+              true
+            );
+          }
+        } finally {
+          setBusy(false);
+          render();
+        }
+      }
+
+      elements.load.addEventListener("click", loadSelectedThread);
+      elements.create.addEventListener("click", claimNewThread);
+      elements.send.addEventListener("click", sendTurn);
+      elements.attachments.addEventListener("change", () => {
+        const selected = Array.from(elements.attachments.files || []);
+        state.selectedAttachments = selected.map(file =>
+          Object.freeze({
+            attachmentId: newClaim("attachment:"),
+            file
+          })
+        );
+        render();
+      });
+      elements.clearAttachments.addEventListener(
+        "click",
+        clearAttachmentSelection
+      );
+      elements.prompt.addEventListener("keydown", event => {
+        if (
+          (event.metaKey || event.ctrlKey) &&
+          event.key === "Enter"
+        ) {
+          event.preventDefault();
+          sendTurn();
+        }
+      });
+      elements.prompt.addEventListener("input", () => {
+        elements.send.textContent = sendButtonLabel();
+      });
+
+      const initialThread = recalledThread() || newClaim("thread:");
+      elements.threadId.value = initialThread;
+      loadSelectedThread();
+    })();
+  </script>
+</body>
+</html>

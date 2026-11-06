@@ -1,14 +1,23 @@
-# CBRA Corpus Index v1
-Status: Canonical manifest for CBRA runtime corpus
-Location: ~/cbra_api/corpus
+# CBRA Corpus Index v3
+Status: Active situated constraints for the CBRA runtime corpus
+Execution grammar: recursive-reconfiguration-v1
 
 ## Canonical Files (Active)
-1. CBRA_Glossary_v3.md
-2. CBRA_Loops_Core.md
-3. Drift_Constraints.md
-4. CBRA_Kernel_v10_2.md
+1. CBRA_Kernel_v12.md
+2. CBRA_Reconfiguration_Grammar_v1.md
+3. CBRA_Glossary_v5.md
+4. CBRA_Incompatibility_Constraints_v1.md
+5. CBRA_Falsification_Probes_v2.md
 
 ## Notes
-- Active files are present in the corpus.
-- Planned files define stabilized architectural layers to be added.
-- Only files listed here are considered canonical for retrieval and runtime weighting.
+- These files replace both the entity/stream runtime grammar and the failed
+  `constitutive-phenomenon-v1` scaffolding.
+- Prior kernels, loop contracts, glossaries, constraints, invariants, and the
+  `cbra/constitutive/` slice remain historical falsification evidence only.
+- `cbra/reconfiguration/` implements a bounded structural substrate for parts
+  of `recursive-reconfiguration-v1`: local cuts, material arrangement
+  variation, diffraction, recursive revision, effect return, and bounded
+  continuity. It does not yet form cuts from situated arrivals, enact public
+  interventions, persist the new grammar, or provide an integrated response
+  runtime.
+- Canonical means current and versioned, not ontologically authoritative.
