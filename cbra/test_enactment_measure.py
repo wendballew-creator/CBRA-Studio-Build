@@ -7,7 +7,7 @@ import os
 import tempfile
 import unittest
 
-from cbra.enactment import Proposal, ScriptedProposer
+from cbra.enactment import EnactmentError, Proposal, ScriptedProposer
 from cbra.enactment.material import Corpus
 from cbra.enactment.measure import Probe, load_probes, main, report, run
 from cbra.test_enactment_probes import APP, BASELINE_FIELDS, _arrivals
@@ -45,6 +45,10 @@ def plain(ctx):
 
 def failing(ctx):
     raise RuntimeError("provider unavailable")
+
+
+def malformed(ctx):
+    raise EnactmentError("'NoneType' object is not iterable")
 
 
 class ProbeSetTests(unittest.TestCase):
@@ -88,9 +92,10 @@ class RunAndReportTests(unittest.TestCase):
             Probe("named-term", "a named term", ["What is intra-action?"]),
             Probe("two-turns", "a correction", ["hello", "thanks"]),
             Probe("broken", "a provider failure", ["anything", "never sent"]),
+            Probe("malformed", "a proposal the configuration cannot enact", ["again"]),
         ]
-        self.proposer = ScriptedProposer([ignores_material, grounds_material, plain, plain, failing],
-                                         baselines=[BASELINE_FIELDS] * 6)
+        self.proposer = ScriptedProposer([ignores_material, grounds_material, plain, plain, failing, malformed, plain],
+                                         baselines=[BASELINE_FIELDS] * 7)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -102,8 +107,9 @@ class RunAndReportTests(unittest.TestCase):
         self.assertEqual(manifest["canon"]["index"], self.corpus.describe()["index"])
         self.assertEqual(manifest["model"], "ScriptedProposer")
         by_id = {p["probe"]["id"]: p for p in manifest["probes"]}
-        self.assertEqual(set(by_id), {"named-term", "two-turns", "broken"})
+        self.assertEqual(set(by_id), {"named-term", "two-turns", "broken", "malformed"})
         self.assertEqual(by_id["named-term"]["turns"][0]["rounds"], 2)
+        self.assertEqual(by_id["malformed"]["turns"][0]["rounds"], 2)
         self.assertTrue(by_id["named-term"]["turns"][0]["released"])
         self.assertEqual([t["turn"] for t in by_id["two-turns"]["turns"]], ["turn1", "turn2"])
         broken = by_id["broken"]["turns"]
@@ -113,7 +119,7 @@ class RunAndReportTests(unittest.TestCase):
             self.assertTrue(os.path.exists(p["session_path"]), p["session_path"])
         with open(os.path.join(self.tmp.name, "run.json"), encoding="utf-8") as handle:
             self.assertEqual(json.load(handle)["finished"], manifest["finished"])
-        self.assertEqual([e["probe"] for e in events if e["event"] == "probe_turn"], ["named-term", "two-turns", "two-turns"])
+        self.assertEqual([e["probe"] for e in events if e["event"] == "probe_turn"], ["named-term", "two-turns", "two-turns", "malformed"])
         self.assertEqual([e["probe"] for e in events if e["event"] == "error"], ["broken"])
 
     def test_report_places_baseline_beside_release_and_reads_the_session_back(self):
@@ -123,6 +129,8 @@ class RunAndReportTests(unittest.TestCase):
         self.assertIn("| named-term | turn1 | released r2 | r1: 3 | 2 named |", text)
         self.assertIn("| two-turns | turn2 | released r1 | none | none |", text)
         self.assertIn("| broken | turn1 | error |", text)
+        self.assertIn("| malformed | turn1 | released r2 | r1: 0 |", text)
+        self.assertIn("Round 1, constraint 0 (The proposal could not be enacted as cuts (unresolved dependency, unknown kind, or malformed field)): 'NoneType' object is not iterable", text)
         self.assertIn("| Uninstructed answer | Released text |", text)
         self.assertIn("scripted plain answer to: What is intra-action?", text)
         self.assertIn("In CBRA, intra-action is constitutive relation", text)
@@ -139,7 +147,7 @@ class RunAndReportTests(unittest.TestCase):
         again = ScriptedProposer([plain, plain], baselines=[BASELINE_FIELDS] * 2)
         manifest = run([self.probes[2]], again, self.tmp.name, material=self.corpus)
         by_id = {p["probe"]["id"]: p for p in manifest["probes"]}
-        self.assertEqual(set(by_id), {"named-term", "two-turns", "broken"})
+        self.assertEqual(set(by_id), {"named-term", "two-turns", "broken", "malformed"})
         self.assertEqual(by_id["named-term"]["turns"][0]["rounds"], 2, "the earlier probe's record is kept")
         self.assertEqual([t["error"] for t in by_id["broken"]["turns"]], [None, None], "the rerun replaced the failed one")
         self.assertEqual(manifest["continued"][0]["probes"], ["broken"])

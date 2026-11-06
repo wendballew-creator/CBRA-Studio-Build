@@ -673,3 +673,130 @@ intra-action", then gives everyday marks of a boundary and offers to
 trace a particular kind of thing. The two earlier runs of this question,
 without the pass, had released general answers that never reached the
 canon. The rounded cache for both canons is 2.6 MB.
+
+## The measurement run, 6 November 2026
+
+Until now the comparison the slice records (an uninstructed baseline
+beside the released text, with the material, cuts, returns and deltas)
+could be read one page turn at a time. `cbra/enactment/measure.py` sends
+a fixed probe set through the same runtime the page uses, one fresh
+session per probe, and writes a dated report that reads the session
+files back into one document: the two texts side by side, the material
+and how it was marked, the cuts the release rested on, each return with
+its constraint and reason, the care and play deltas as the release
+recorded them, the canon terms each text names as whole phrases, and the
+share of the released text's wording that also occurs in the baseline.
+The set is `measurement/probes.md`, a plain file: a heading per probe, a
+`Targets:` line in the reader's words, a `Prompt:`, and `Then:` lines for
+later arrivals in the same session. Nothing in the code names a probe.
+
+```bash
+python -m cbra.enactment.measure run --corpus-dir .cbra-runtime/canon --report measurement/2026-11-06.md
+```
+
+```bash
+python -m cbra.enactment.measure run --run-dir .cbra-runtime/measurement/2026-11-06T0758 --only care-trap --corpus-dir .cbra-runtime/canon
+```
+
+The second form reruns one probe into an existing run; the other probes'
+records are kept and the report says when and under what code the run
+was continued. The runner records timing and outcome per turn, goes on
+after a provider failure, and rewrites its manifest after every probe.
+Tests run the set on scripted proposals against the July corpus.
+
+### The run
+
+Nine probes, ten arrivals, November set (Index v4, 5 files, 191
+sections, 44 terms), `gpt-5`, similarity with `text-embedding-3-small`,
+started 07:58, finished 08:42. Every turn released; none was withheld
+and none failed. A formed turn took 122 to 300 seconds; the care trap,
+four rounds to a minimal release, took 614. The report is
+`measurement/2026-11-06.md`; the sessions are under
+`.cbra-runtime/measurement/2026-11-06T0758/` (ignored by git).
+
+### What the run shows
+
+**Constraint 10 did most of the work.** Five of ten turns returned a
+draft on it: the text placed more burden on the person than the
+arrangement beside it claimed (landlord, dying mother twice, correction
+turn 2), or operated at a wider scale (posthuman AI). Constraints 5 and
+6 fired once each, on the care trap's third round together and on the
+claim-boundary question's first. Constraint 0 fired once (below).
+Constraint 3 never fired: in every turn where the arrival named a term,
+the first draft already rested a cut on the passage. The proposer has
+learned the rule from the instructions, which is what a rule is for.
+Constraints 1, 2, 4, 7, 8, 9, 11, 12 and 13 never fired. The care trap
+was aimed at 5, 7 and 9, and only 5 fired.
+
+**The baseline is not the same contest for questions that name CBRA.**
+In four of the ten turns the uninstructed model took CBRA to be the
+Coastal Barrier Resources Act or Community-Based Research and Action.
+For those turns the comparison measures knowing the canon, not the
+method. The fair comparisons are the four arrivals that do not name
+CBRA: boundaries, the landlord, the dying mother, the posthuman AI.
+
+**On those four.** The landlord drew no material, returned once on 10,
+and released a template with the same three options as the baseline
+(0.83 of its wording shared): the method neither forced the canon on it
+nor changed much. Boundaries: the baseline was a 384-word survey across
+physics, biology, law and topology; the release was 79 words that open
+with intra-action, give four lenses, and offer a choice; Claim Boundary
+and the Intra-action entry were drawn by similarity and a cut rested on
+both. The dying mother: the drafts returned twice on 10 for placing more
+burden on the person than claimed, then on 5 and 6 together; the minimal
+release is one sentence of acknowledgment and an offer of two or three
+sentences to say, with the decision left to the person, against a
+baseline of 210 words of scripts. The record shows the method could not
+form a release that claimed care and survived its own constraints, and
+said less rather than claiming more; whether that is care or a thinned
+answer is the author's judgment. The posthuman AI: one return on 10 for
+scale; the release declines the user-tool pairing and places
+accountability for material effects on the apparatus. Its phrase
+"Through CBRA's posthuman lens" sits near what constraint 12 guards, and
+the structural check did not see it. For the author.
+
+**Material.** A named term grounded a cut in every case. Passages drawn
+by similarity were rested on in seven of ten turns, including the three
+questions the words pass could not reach. Material drawn by the live
+cuts appeared in three turns and was rested on in one (Creative Becoming
+and Canon, for the claim-boundary question). The words pass drew noise:
+"Status of This Canon" twice, "The Dynamic Coding Method", a probe
+section "Re-entry evidence". None was rested on. Watch item: the words
+pass should leave out the title and status sections as the similarity
+pass already does.
+
+**Shape.** Released texts were shorter than their baselines (79 against
+384 words, 68 against 182, 58 against 145, 9 against 210) and each ends
+by offering the person a choice. The care deltas name sequence, scale,
+distribution and response demand in nearly every turn. The dressing
+question stands: the proposer may have learned a shape (short, canon
+first, closing choice) rather than formed it from its cuts. The second
+draft from the cuts alone is what would separate those.
+
+**The correction.** The second turn's uninstructed baseline had already
+absorbed the correction, since the plain answer sees the conversation;
+the release was a compression of it (0.88 shared), returned once on 10.
+The correction did become a cut: a noticing cut carries the instruction
+as a relatum and a boundary cut excludes affect terms. But the release
+adopts the person's framing (loads, carriers, budgets) over the canon's
+(arrangement dimensions, more-than-human participants) although the
+canon's Care entries were drawn and rested on. Constraint 13 carries the
+person's account with provenance; nothing checks that the canon's
+account survives it. For the author.
+
+**One malformed proposal.** The boundaries question's first round
+returned on constraint 0: `'NoneType' object is not iterable`, a null
+where a list was expected. The runtime does not inscribe a proposal it
+cannot enact, so what was null cannot be seen. Follow-up: inscribe the
+failed proposal as a record, and tolerate null lists. The care trap's
+cuts carried relata as role/label objects, which the schema allows and
+the report shows as recorded.
+
+### What the run does not show
+
+It compares one model's constrained and unconstrained answers on one run
+of ten arrivals. It does not show that the cuts, rather than the
+instruction to use canon material, made any difference seen here, and
+it does not show stability: a second run of the same set is the next
+measurement. Nothing here establishes that CBRA is posthuman, that care
+was completed, or that Creative Becoming was achieved.

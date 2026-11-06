@@ -237,6 +237,12 @@ def turn_reading(config: Configuration, turn: str, corpus: Optional[Corpus] = No
     for c in config.cuts.values():
         if c.kind == "apparatus" and c.label.startswith("release_constraints_fired:%s:r" % turn):
             returns.append({"round": int(c.label.rsplit(":r", 1)[-1]), "constraints": list(c.payload.get("violations", []))})
+    # A proposal the configuration could not enact is a round that returned
+    # on constraint 0; the runtime records it as unresolved, not as a cut.
+    for u in config.unresolved:
+        if u.get("kind") == "proposal_not_enactable" and u.get("turn") == turn:
+            returns.append({"round": int(u.get("round") or 0),
+                            "constraints": [{"constraint": 0, "name": CONSTRAINT_NAMES[0], "reason": str(u.get("error"))}]})
     returns.sort(key=lambda r: r["round"])
     material = []
     for h in payload.get("material", []):
