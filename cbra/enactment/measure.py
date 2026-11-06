@@ -699,7 +699,8 @@ def main(argv=None) -> int:
         from .material import OpenAIEmbedder
         embedder = OpenAIEmbedder(model=args.embedding_model)
     corpus = Corpus(args.corpus_dir, embedder=embedder, cache_dir=args.embedding_cache) if args.corpus_dir else None
-    run_dir = args.run_dir or os.path.join(args.out, datetime.now().strftime("%Y-%m-%dT%H%M"))
+    run_dir = args.run_dir or os.path.join(args.out, datetime.now().strftime("%Y-%m-%dT%H%M%S")
+                                            + ("" if args.condition == "method" else "-" + args.condition))
     os.makedirs(run_dir, exist_ok=True)
     print("Measurement run (%s): %d probes, %d arrivals, canon %s, into %s" % (
         args.condition, len(probes), sum(len(p.prompts) for p in probes), (corpus.describe().get("index") if corpus else "none"), run_dir), file=sys.stderr)
