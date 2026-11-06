@@ -9,7 +9,7 @@ import unittest
 
 from cbra.enactment import EnactmentError, Proposal, ScriptedProposer
 from cbra.enactment.material import Corpus
-from cbra.enactment.measure import Probe, load_probes, main, report, run
+from cbra.enactment.measure import Probe, compare, load_probes, main, report, run
 from cbra.test_enactment_probes import APP, BASELINE_FIELDS, _arrivals
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -154,6 +154,29 @@ class RunAndReportTests(unittest.TestCase):
         text = report(self.tmp.name, self.corpus)
         self.assertIn("Continued ", text)
         self.assertIn("| broken | turn2 | released r1 |", text)
+
+    def test_two_runs_compare_material_and_wording(self):
+        run(self.probes[:2], ScriptedProposer([ignores_material, grounds_material, plain, plain], baselines=[BASELINE_FIELDS] * 4),
+            self.tmp.name, material=self.corpus)
+        second = os.path.join(self.tmp.name, "second")
+        os.makedirs(second)
+
+        def grounds_differently(ctx):
+            p = grounds_material(ctx)
+            p.draft["text"] = "In CBRA, intra-action is constitutive relation and nothing else need be said."
+            return p
+
+        run(self.probes[:2], ScriptedProposer([grounds_differently, plain, plain], baselines=[BASELINE_FIELDS] * 3),
+            second, material=self.corpus)
+        text = compare(self.tmp.name, second, self.corpus)
+        self.assertIn("| named-term | turn1 | released r2 | released r1 | r1: 3 | none | 2/2 |", text)
+        self.assertIn("| two-turns | turn2 | released r1 | released r1 | none | none | none drawn |", text)
+        self.assertIn("**Material.** In both: CBRA_Glossary_v5.md › Intra-action; CBRA_Kernel_v12.md › Intra-action. Only in A: none. Only in B: none.", text)
+        self.assertIn("| Released in A | Released in B |", text)
+        out = os.path.join(self.tmp.name, "compare.md")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(main(["compare", self.tmp.name, second, "--corpus-dir", CORPUS, "--out", out]), 0)
+        self.assertTrue(os.path.exists(out))
 
     def test_report_command_writes_the_file(self):
         run(self.probes, self.proposer, self.tmp.name, material=self.corpus)

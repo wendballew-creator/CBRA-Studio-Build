@@ -3,6 +3,7 @@ report that places the uninstructed baseline beside the released text.
 
     python -m cbra.enactment.measure run [--probes measurement/probes.md] [--out DIR]
     python -m cbra.enactment.measure report RUN_DIR [--corpus-dir DIR] [--out FILE]
+    python -m cbra.enactment.measure compare RUN_A RUN_B [--corpus-dir DIR] [--out FILE]
 
 Each probe opens a fresh session, so no probe sees another's cuts. The run
 changes nothing about the method: the same ``Runtime`` the page uses forms
@@ -533,6 +534,80 @@ def report(run_dir: str, corpus: Optional[Corpus] = None) -> str:
     return "\n".join(lines)
 
 
+# -- comparing two runs --------------------------------------------------------------
+
+def _readings_of(run_dir: str, corpus: Optional[Corpus]) -> Dict[str, Any]:
+    with open(os.path.join(run_dir, "run.json"), encoding="utf-8") as handle:
+        manifest = json.load(handle)
+    out: Dict[str, Any] = {"manifest": manifest, "turns": {}}
+    for pr in manifest["probes"]:
+        probe_id = pr["probe"]["id"]
+        if not os.path.exists(pr["session_path"]):
+            continue
+        config = JsonStore(pr["session_path"]).load(session=probe_id)
+        turns = turns_of(config)
+        for index, turn_record in enumerate(pr["turns"]):
+            if index < len(turns):
+                out["turns"][(probe_id, index)] = (TurnRun(**turn_record), turn_reading(config, turns[index], corpus))
+    return out
+
+
+def _headings(reading: Dict[str, Any]) -> List[str]:
+    return sorted({"%s › %s" % (m["file"], m["heading"]) for m in reading["material"]})
+
+
+def compare(run_a: str, run_b: str, corpus: Optional[Corpus] = None) -> str:
+    """Two runs of the same set side by side: outcome, returns, material,
+    care delta, and how much of the second release's wording the first
+    already had. What repeats and what does not is the stability of the
+    method on these arrivals; the document decides nothing about why."""
+    a, b = _readings_of(run_a, corpus), _readings_of(run_b, corpus)
+    ma, mb = a["manifest"], b["manifest"]
+    lines: List[str] = []
+    lines.append("# Two measurement runs compared")
+    lines.append("")
+    lines.append("Run A: %s, code `%s`, model `%s`. Run B: %s, code `%s`, model `%s`. Both on canon %s." % (
+        ma["started"].replace("T", " "), ma["code_version"], ma["model"],
+        mb["started"].replace("T", " "), mb["code_version"], mb["model"],
+        (mb.get("canon") or {}).get("index") or "none"))
+    lines.append("")
+    lines.append("\"Material shared\" counts passages (file and heading) drawn in both runs over all drawn in either. "
+                 "\"Release wording shared\" is the share of run B's released words that also occur in run A's release.")
+    lines.append("")
+    lines.append("| Probe | Turn | Outcome A | Outcome B | Returns A | Returns B | Material shared | Care delta A | Care delta B | Release wording shared |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|")
+    keys = sorted(set(a["turns"]) | set(b["turns"]), key=lambda k: (list(p["probe"]["id"] for p in mb["probes"]).index(k[0]) if any(p["probe"]["id"] == k[0] for p in mb["probes"]) else 99, k[1]))
+    details: List[str] = []
+    for key in keys:
+        ta, ra = a["turns"].get(key, (None, None))
+        tb, rb = b["turns"].get(key, (None, None))
+        ha, hb = (_headings(ra) if ra else []), (_headings(rb) if rb else [])
+        union = set(ha) | set(hb)
+        shared = "%d/%d" % (len(set(ha) & set(hb)), len(union)) if union else "none drawn"
+        wording = _shared(ra["released_text"] if ra else None, rb["released_text"] if rb else None)
+        lines.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+            key[0], (ra or rb or {}).get("turn") or "turn%d" % (key[1] + 1),
+            _outcome(ta, ra) if ta else "—", _outcome(tb, rb) if tb else "—",
+            _returns_cell(ra) if ra else "—", _returns_cell(rb) if rb else "—", shared,
+            _cell(", ".join(ra["care_delta"]) if ra and ra["care_delta"] else ("claimed, none" if ra and "care" in ra["claims"] else "—")),
+            _cell(", ".join(rb["care_delta"]) if rb and rb["care_delta"] else ("claimed, none" if rb and "care" in rb["claims"] else "—")),
+            "%.2f" % wording if wording is not None else "—"))
+        details.append("## %s, %s" % (key[0], (ra or rb or {}).get("turn") or "turn%d" % (key[1] + 1)))
+        details.append("")
+        only_a, only_b = sorted(set(ha) - set(hb)), sorted(set(hb) - set(ha))
+        if ha or hb:
+            details.append("**Material.** In both: %s. Only in A: %s. Only in B: %s." % (
+                "; ".join(sorted(set(ha) & set(hb))) or "none", "; ".join(only_a) or "none", "; ".join(only_b) or "none"))
+            details.append("")
+        details.append("| Released in A | Released in B |")
+        details.append("|---|---|")
+        details.append("| %s | %s |" % (_cell(ra["released_text"] if ra else None), _cell(rb["released_text"] if rb else None)))
+        details.append("")
+    lines.append("")
+    lines.extend(details)
+    return "\n".join(lines)
+
+
 # -- command line ------------------------------------------------------------------
 
 def _load_env() -> None:
@@ -575,7 +650,21 @@ def main(argv=None) -> int:
     p.add_argument("run_dir")
     p.add_argument("--corpus-dir", default=os.environ.get("CBRA_CORPUS_DIR") or ("corpus" if os.path.isdir("corpus") else None))
     p.add_argument("--out", default=None)
+    c = sub.add_parser("compare", help="place two runs of the set side by side")
+    c.add_argument("run_a")
+    c.add_argument("run_b")
+    c.add_argument("--corpus-dir", default=os.environ.get("CBRA_CORPUS_DIR") or ("corpus" if os.path.isdir("corpus") else None))
+    c.add_argument("--out", default=None)
     args = parser.parse_args(argv)
+
+    if args.command == "compare":
+        corpus = Corpus(args.corpus_dir) if args.corpus_dir else None
+        text = compare(args.run_a, args.run_b, corpus)
+        out = args.out or os.path.join(args.run_b, "compare.md")
+        with open(out, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        print(out)
+        return 0
 
     if args.command == "report":
         corpus = Corpus(args.corpus_dir) if args.corpus_dir else None
