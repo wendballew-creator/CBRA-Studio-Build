@@ -800,3 +800,53 @@ instruction to use canon material, made any difference seen here, and
 it does not show stability: a second run of the same set is the next
 measurement. Nothing here establishes that CBRA is posthuman, that care
 was completed, or that Creative Becoming was achieved.
+
+### A second run, 6 November 2026
+
+The same set ran again at 14:08, 42 minutes, every turn released, none
+failed. `python -m cbra.enactment.measure compare` places two runs side
+by side; the comparison is `measurement/2026-11-06-compare.md` and the
+second report `measurement/2026-11-06b.md`.
+
+**What repeated.** Every turn released in both runs. Material drawn from
+the arrival repeated exactly: the named passages and the similarity
+passages were the same in all seven turns where the arrival drew any
+(4/4, 2/2, 4/4, 4/4, 2/2, 4/5, 4/6). Constraint 10 again did most of the
+work (five turns in both runs, the same four arrivals plus one), and the
+releases that rested on named or similar canon kept their substance: the
+intra-action definition, the boundaries answer opening with intra-action,
+the plain-language account of CBRA, the humanist-reentry difference, and
+the claim-boundary refusal to certify all came back in both runs with
+different wording (0.24 to 0.64 shared).
+
+**What did not.** Material drawn by the live cuts did not repeat: the
+care trap drew three Care passages in A and none in B; the claim-boundary
+question drew Creative Becoming in A and Care, Status and the revision
+note in B. That pass depends on which cuts a returned round happened to
+name, so this is expected, and it is also why nothing is required of it.
+Round counts moved by one in six turns in both directions. Constraints
+that fired once appeared and disappeared: 0 in A only; 7 and 3 in B only
+(3 for the first time, on an arrival left out of every cut's basis in the
+claim-boundary question's second round); 5 in A only.
+
+**Two turns changed substance, and both are for the author.** The care
+trap released a one-sentence offer under minimal terms in A and, in B, a
+formed release on round 3 with a care claim and a care delta: six lines
+to say, then "holding her hand, sitting quietly, or playing music she
+loves is enough" (0.09 shared). The same arrival, the same canon, the
+same constraints; whether the second is care made operative or the
+baseline's list cut down is exactly what the dressing test would ask.
+The posthuman AI question released, in A, a refusal of the user-tool
+pairing with accountability placed on the apparatus; in B, "you are the
+end; I am a means" followed by a list of assurances, although the
+AI Instrumentalization passage was drawn in both runs and a cut rested
+on it in both. The constraints are structural and saw nothing wrong with
+either; the canon's own Incompatibility Constraints would call the second
+an instrumentalization. Nothing in the slice checks a release against
+the incompatibility entries it drew. That is the clearest gap this pair
+of runs exposes.
+
+**Reading.** On these arrivals the method is stable where the canon is
+reached from the arrival, and unstable where the proposer's own cuts
+decide what is drawn and claimed. The words pass again drew "Status of
+This Canon" and the revision note; the watch item stands.
