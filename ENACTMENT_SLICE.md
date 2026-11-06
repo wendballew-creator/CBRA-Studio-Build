@@ -968,3 +968,68 @@ conditions differ (length, burden as the reader counts it) and where
 they do not (asking, specificity, the closing offer). Nothing here shows
 that the method cannot meet the case's criteria, only that it does not
 yet, and that its constraints do not look where the criteria look.
+
+## The proposer's instructions rewritten under the author's constraints, 6 November 2026
+
+The first move of the formation rethink (DESIGN_HISTORY_READING.md) is the
+one that costs nothing to make: the instructions the proposer works under.
+The previous text carried the kernel's tension between next-step
+visibility and openness, asked for "the public intervention, in ordinary
+language, concise where the configuration calls for concision", and left
+the form of the release to the model. Across two measurement runs and the
+Case Study 001 run the model resolved that tension the same way every
+time: a short text closing with a choice of two or three tasks for the
+person, opening "In CBRA's terms".
+
+The rewritten instructions (`PROPOSER_INSTRUCTIONS` in
+`cbra/enactment/proposer.py`; the JSON contract is unchanged) say what the
+draft is and how it speaks, in the author's constraints as the records and
+the build archives carry them:
+
+- The draft is one of two kinds, and the cuts decide which. A `question`,
+  when an unresolved condition in the cuts changes what the intervention
+  would be: one situated question in the person's terms, carrying what was
+  noticed, and nothing else. Or `work`, when the cuts settle what is owed:
+  the answer, the draft, the repair, complete rather than described. An
+  offer of options is named as a third thing that is neither, and as the
+  handing-over of the turn's work and the decision about it. The draft
+  declares its kind, and the intervention records it, so that the next
+  step, the runtime deciding the kind before any text exists, has a field
+  to compare against.
+- The text speaks in ordinary language about what happened before any
+  concept; affirmatively, remaking a point made by contrast as the point
+  itself (the author, 14 September 2026: "write what is, not what it is
+  not; avoid contrast as argument engine"); from the person's account,
+  carrying their word for a behavior as a word for a behavior and asking
+  about a term rather than translating it; about the apparatus where that
+  bears on the person's next move; and without naming the architecture,
+  the canon or the method unless the person has (the author, 4 October
+  2026: "You point to CBRA without defining it"). The canon is the ground
+  the cuts stand on, and the trace records that.
+- The canon passages are material for forming the cuts. When the arrival
+  asks what a term means in this project, the text gives the canon's sense
+  first and names it, since the person asked. When the arrival is about the
+  person's own matter, the passages shape the cuts and the text stays with
+  the person's matter and words.
+- The baseline is the measure, given so the proposer can see what the
+  inherited grammar distributes; the intervention forms from the cuts and
+  not from the baseline's text. The earlier runs had shown releases that
+  were compressions of the baseline (0.5 to 0.9 of its wording).
+- A returned draft comes back with different cuts, a different kind or a
+  different arrangement. The minimal release is one question or one piece
+  of work in one to three sentences.
+
+The instruction text itself is written affirmatively where the author's
+rule allows: the prohibitions of the earlier version ("Do not revise or
+depend on the baseline", "Never release a connection as a fact") are
+restated as what is the case and what the text does. The instruction
+digest in each proposal's provenance changes with this text, so later runs
+are distinguishable from earlier ones in the record.
+
+Nothing has been run. The suite passes on scripted proposals, which do not
+read the instructions. What the rewrite does to live releases is the first
+thing to measure when the provider account has credits: the same probe
+sets, both conditions, so that before and after are read the same way.
+The second move, the runtime deciding the kind of release from the cuts
+before a draft is written, with cuts and draft as separate calls, is the
+next build.

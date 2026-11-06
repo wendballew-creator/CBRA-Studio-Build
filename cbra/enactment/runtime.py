@@ -611,6 +611,7 @@ class Runtime:
             payload={
                 "turn": turn,
                 "form": formation.form,
+                "kind": draft.get("kind"),
                 "action": draft.get("action"),
                 "claims": list(formation.claims),
                 "claims_stripped": list(formation.claims_stripped),
