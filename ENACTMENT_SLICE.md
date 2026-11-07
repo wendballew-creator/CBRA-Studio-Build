@@ -1093,10 +1093,13 @@ re-made from the next round's cuts.
 The canon's Grammar v2 names thirteen release constraints. Fourteen and
 fifteen were enacted here as the slice's own and put to the author in
 three forms (`canon-drafts/2026-11-06_release_form_entries.md`); on
-6 November the author decided to keep them as constraints 14 and 15. The
-Grammar carries them from its next version; until the author writes it,
-the runtime's list is ahead of the canon's by these two, and this record
-says so.
+6 November the author decided to keep them as constraints 14 and 15. A
+draft Grammar v3 carrying them, with a Kind of Release subsection and a
+Changes from v2 record, was written the same day into the author's canon
+folder beside v2, where it stays unread until the author lists it in a
+corpus index (`canon-drafts/2026-11-06_grammar_v3_and_index.md` gives the
+proposed index). Until then the runtime's list is ahead of the canon's by
+these two, and this record says so.
 
 Tests (`cbra/test_enactment_formation.py`, twelve): the staying cut makes
 the release a question and the decision is a cut the release depends on;
