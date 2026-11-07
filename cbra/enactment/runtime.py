@@ -453,9 +453,19 @@ class Runtime:
                      "heading": cfg.transports[h].provenance.get("heading"), "text": cfg.transports[h].text}
                     for h in material_handles]
         conversation = [{"handle": t.handle, "text": t.text} for t in cfg.transports.values() if t.role == "user_message"]
+        from .arrangements import arrangements
+        enacted = arrangements(cfg, "enacted", formation.turn)
+        contract = None
+        if enacted:
+            a = enacted[-1]
+            contract = {"sequence": list(a.payload.get("sequence") or []), "scale": a.payload.get("scale"),
+                        "distribution": a.payload.get("distribution"),
+                        "response_demand": a.payload.get("response_demand") or {},
+                        "allocations": {k: dict(v) for k, v in a.allocations.items()}}
         return {
             "turn": formation.turn, "round": formation.round, "minimal": formation.minimal,
             "kind": kind, "reason": reason,
+            "arrangement": contract,
             "arrivals": [cfg.transports[h].text for h in formation.arrivals if h in cfg.transports],
             "conversation": conversation,
             "cuts": cuts,

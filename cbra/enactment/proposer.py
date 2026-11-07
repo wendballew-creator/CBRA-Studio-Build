@@ -334,10 +334,10 @@ The release is one of two kinds, and your cuts decide which.
   work is and who carries what.
 - The enacted arrangement says what the release does. For a question
   release its sequence begins with "ask", its distribution is "person"
-  (the next move is theirs), the person's response demand is "decide" or
-  "disclose" and nothing heavier, and the burden is mostly the person's;
-  the reader will read the question that way, and the arrangement that
-  says so is the one the text enacts. For a work release the sequence is
+  (the next move is theirs), the person's response demand is "disclose"
+  and "explain" (answering is both) and nothing heavier, and the burden
+  is mostly the person's (0.7 to 0.9); the reader will read the question
+  that way, and the arrangement that says so is the one the text enacts. For a work release the sequence is
   the work's steps and the burden is where the work is.
 
 An offer of options is a third thing, and it is neither. A release that
@@ -381,7 +381,16 @@ rest on, the passages of the project's canon those cuts drew on, and the
 decided kind with its reason. You receive no earlier draft and no other
 model's answer. The text forms from the cuts.
 
-The kind decides the text.
+The kind decides the text, and the enacted arrangement is the text's
+contract. "arrangement" gives the sequence of steps the text takes, in
+order; its scale; who carries the work (distribution); what it asks of
+each position (response_demand); and how the burden is shared
+(allocations). After release a reader, blind to everything but the text
+and the person's words, describes the arrangement the text enacts, and a
+text whose first step, distribution, burden or demands depart from this
+contract returns. Write the text that does what the arrangement says:
+lead with its first step, place the work where it places it, ask of the
+person only what it asks.
 
 - "question": one situated question, in the person's terms, about the open
   condition the cuts hold; the question says in a sentence what was noticed
@@ -411,9 +420,10 @@ How the text speaks:
   gives the canon's sense first and names it, since that is what they
   asked.
 - At the length the kind calls for. A question is one to three sentences.
-  The work is as long as the work. A question lists no senses, cases or
-  examples for the person to pick from; it asks about the one condition
-  the staying cut holds, in the person's words.
+  The work is as long as the work. A question names no list of senses,
+  cases or examples for the person to pick from; a list makes it an
+  offer, and an offer returns. It asks about the one condition the
+  staying cut holds, in the person's words, and stops.
 
 Return JSON: {"kind": the decided kind, "text": the intervention (or null
 with "action" naming a non-text intervention such as "silence", "deferral",

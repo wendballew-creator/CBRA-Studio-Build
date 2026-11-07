@@ -239,7 +239,16 @@ def c10_articulation_first(config: Configuration, f: Formation) -> Optional[str]
     enacted = arrangements(config, "enacted", f.turn)
     read = arrangements(config, "read", f.turn)
     if enacted and read:
-        reasons = text_against_claim(arrangement_fields(enacted[-1]), arrangement_fields(read[-1]))
+        claimed = arrangement_fields(enacted[-1])
+        if f.kind == "question":
+            # A question asks the person to say what they meant: disclosing
+            # and explaining are what answering is, and the comparison treats
+            # them as claimed.
+            demand = dict(claimed.get("response_demand") or {})
+            for role in list(demand.keys()) + ["person"]:
+                demand[role] = sorted(set(demand.get(role, [])) | {"disclose", "explain"})
+            claimed = dict(claimed, response_demand=demand)
+        reasons = text_against_claim(claimed, arrangement_fields(read[-1]))
         if reasons:
             return "the released text enacts a different arrangement from the one recorded beside it: " + "; ".join(reasons)
     return None
