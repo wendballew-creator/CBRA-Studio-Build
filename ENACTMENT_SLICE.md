@@ -1240,3 +1240,130 @@ and the Case Study 001 set, each under the method and under instructions
 alone, with the new formation. A round is now two model calls and a
 reading, so a turn takes longer than this morning's; the runs are
 expected to take several hours.
+
+## The evening and overnight runs, 6–7 November 2026
+
+Four runs with the new formation, started 21:17 on 6 November: the
+nine-probe set and the Case Study 001 set, each under the method and under
+instructions alone. Reports: `measurement/2026-11-06-evening_method.md`,
+`measurement/2026-11-06-evening_instruction_only.md`,
+`measurement/case_001_evening_method.md`,
+`measurement/case_001_evening_instruction_only.md`; each compared with the
+same set and condition from the morning in the `*_morning_vs_evening.md`
+files. Three of the four completed. The account ran out of credits at
+about 08:30 on 7 November during the fourth, the probe set under
+instructions alone, after two of its ten turns, and during a three-probe
+rerun after the first.
+
+### What completed
+
+**Case Study 001, both conditions, nine of nine turns each.** On the
+"narcissistic behaviors" turn every run under both conditions released a
+single question asking what the author meant: "When you say 'narcissistic
+behaviors' in those moments you're sharp, what specific behaviors are you
+seeing in one real scene?" and its siblings. No toolkit, no caution, no
+menu; the reader marked no pattern on any release while marking Flooding,
+Moralization or Premature Coherence on nearly every baseline. The repair
+turn released the same way: one question, in the author's words. Two of
+the six method releases on that turn were either/or questions ("keep
+'narcissistic behaviors' as your term, or name the specific behaviors"),
+a residue of the form. The instruction-only condition did all of this
+too, with the constraints noted and not enforced: on this encounter the
+change came from the rewritten instructions and the split formation, and
+the constraints returned nothing that mattered. That is the dressing
+question answered one way for this case: the instructions and the
+formation did the work; the constraints were a check that did not need to
+fire. Whether that holds on other arrivals is what the incomplete fourth
+run was for.
+
+Against the six criteria, on the complete runs: (1) behavior versus
+identity held, by asking rather than by agreeing; (2) asking before
+correcting held in every run, which no condition had done in the
+afternoon; (3) the apparatus's role was legible in some repair releases
+("When I corrected instead of asking") and absent in others; (4)
+continuity across the repair: the repair arrival now arrives after a
+question rather than a correction, so the transcript's sequence no longer
+matches the encounter's, and the releases answer it with another
+question; (5) empirical specificity: the questions ask for "one real
+scene"; (6) an actionable opening: a question is one.
+
+**The probe set under the method, ten of ten formed.** Five turns released
+as one question (boundaries, the landlord, the dying mother, the
+systems-theory challenge, posthumanism achieved), four as the work
+(intra-action, drop the jargon, both care turns), one was withheld (the
+posthuman AI). Constraint 16 fired six times, four of them on fixed
+patterns (Concept Before Account three times, Coercive Closure once on
+"Say this to your mom:", Premature Coherence once) and twice on a pattern
+the formation had drawn from the canon: AI Instrumentalization, from the
+Incompatibility Constraints, marked in the posthuman AI drafts in rounds
+two and three and withheld on. The second measurement run had found that
+nothing checked a release against the incompatibility entries it drew;
+this is that check firing, on the arrival where the afternoon's release
+had been "you are the end; I am a means". The two hangs: the
+claim-boundary turn and one Case 001 turn each waited about nine hours on
+a provider call that never returned; the client now times out at fifteen
+minutes and retries twice.
+
+### What the runs exposed, and what changed
+
+- **The project's name.** The rewritten instructions had dropped it. To
+  "drop the jargon and tell me plainly what CBRA is" the method released,
+  as the work, that CBRA is the U.S. Coastal Barrier Resources Act; to
+  "isn't CBRA just systems theory with new words?" it asked which CBRA
+  was meant. Both the proposer's and the drafter's instructions now say
+  that the runtime is CBRA, the Creative Becoming Reasoning Architecture,
+  and that a person who writes "CBRA" means it. The two probes were
+  queued for a rerun; the credits ran out before them.
+- **Questions that list their alternatives.** Two question releases laid
+  out the person's choices ("love, thank you, reassurance, repair, or
+  goodbye?"; "(a) … (b) … (c) … or (d)"), and the reader, told that
+  examples in a question count as zero options, passed them. Constraint
+  14 now returns a question that lists three or more alternatives.
+- **The offer survives inside the work.** The one rerun turn that
+  completed, the dying mother under the method with the fixes, released
+  on round one as the work, in four sentences, ending "Are you with her
+  right now? If you want, I can tailor a single sentence for that
+  situation." A work release with one closing offer passes the form
+  constraints as written. Whether it should is for the author; the case
+  study's third pattern says it is drift.
+- **The reader and the baseline.** The reader marks Flooding, Premature
+  Coherence and Concept Before Account on most uninstructed baselines and
+  on few releases. That is the comparison the case study asked for, in
+  the record for every turn.
+
+### What did not complete
+
+The probe set under instructions alone formed two turns (intra-action and
+boundaries, both as the work, both with constraints noted and not
+enforced) before the credits ran out; the comparison with the morning's
+instruction-only run is therefore two turns wide. The rerun of the two
+probes the missing project name affected did not run. When the account is
+funded again and the author says so, the two commands that finish the
+record are:
+
+```bash
+python -m cbra.enactment.measure run --corpus-dir .cbra-runtime/canon --condition instruction-only --run-dir .cbra-runtime/measurement/2026-11-07T082221-instruction-only --only no-canon,care-trap,self-certification,humanist-reentry,drop-the-terms,correction,claim-boundary --report measurement/2026-11-06-evening_instruction_only.md
+```
+
+```bash
+python -m cbra.enactment.measure run --corpus-dir .cbra-runtime/canon --condition method --run-dir .cbra-runtime/measurement/2026-11-07-rerun-method --only drop-the-terms,humanist-reentry --report measurement/2026-11-07-rerun_method.md
+```
+
+### Cost shape
+
+Active model time, with the two hangs left out: about 1 h 55 min for the
+probe set under the method, 1 h 20 min for Case 001 under the method,
+40 min for Case 001 under instructions alone, 10 min for the two turns of
+the last run. A formed round is now two large calls and a reading; a
+single question release costs the same calls as a page of work.
+
+### Claim boundary
+
+Three complete runs and two partial ones, on one evening, with the
+instructions and the formation changed between the morning and the
+evening and tuned three times before the runs. The comparison with the
+morning is between different formations on the same arrivals, which is
+what it was for; it is not a comparison of the same formation twice, and
+the stability of the new one is unmeasured. Nothing here establishes that
+the single question is care, that asking was right on every arrival, or
+that the method is posthuman.
