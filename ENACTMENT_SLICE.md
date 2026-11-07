@@ -1101,7 +1101,14 @@ corpus index. Glossary v7 and Incompatibility Constraints v3, carrying the
 nine terms and seven patterns drafted for the form of a release, were
 written there the same way the same evening
 (`canon-drafts/2026-11-06_grammar_v3_and_index.md` gives the proposed
-index that would activate all three). Until then the runtime's list is ahead of the canon's by
+index). The author activated all three the same evening: Index v5 is in
+the canon folder, and the runtime reads Grammar v3, Glossary v7 and
+Constraints v3 (199 sections and 54 glossary terms, from 191 and 44); the
+selection test set passes on the new set, and "What is an offer of
+options?" or "What is premature coherence?" now draw the new entries as
+named terms. The new sections have no cached embeddings, so the first
+server start with credits embeds them; without credits the corpus records
+the provider error and selects lexically, as designed. Until then the runtime's list is ahead of the canon's by
 these two, and this record says so.
 
 Tests (`cbra/test_enactment_formation.py`, twelve): the staying cut makes

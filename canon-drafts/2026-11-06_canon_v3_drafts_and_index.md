@@ -34,6 +34,14 @@ author's files and not here. ## What Grammar v3 changes
 - A Changes from v2 section records all of this. Changes from v1 is kept.
 - Nothing else changed.
 
+## Activated
+
+On the evening of 6 November 2026 the author decided to activate the three
+drafts, and Index v5 was saved into the canon folder as the text below.
+The runtime now reads Grammar v3, Glossary v7 and Constraints v3 (199
+sections, 54 glossary terms, from 191 and 44). The drafts remain pending
+the author's review of their wording; the index's status line says so.
+
 ## How they become active
 
 The runtime reads the active files from the corpus index, and it takes the
