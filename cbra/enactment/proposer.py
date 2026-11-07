@@ -561,15 +561,20 @@ class OpenAIResponsesProposer(Proposer):
     already uses. Not exercised by the test suite; live use records provider,
     model, instruction digest, and response id as provenance."""
 
-    def __init__(self, model: Optional[str] = None, client: Any = None, max_output_tokens: int = 24000) -> None:
+    def __init__(self, model: Optional[str] = None, client: Any = None, max_output_tokens: int = 24000,
+                 timeout: float = 900.0) -> None:
         self.model = model or os.environ.get("CBRA_OPENAI_MODEL") or "gpt-5"
         self.max_output_tokens = max_output_tokens
+        # A call that does not return within the timeout is an error the
+        # runtime records, not a wait: two turns of the 6 November evening
+        # runs hung for nine hours on calls that never came back.
+        self.timeout = timeout
         self._client = client
 
     def _get_client(self) -> Any:
         if self._client is None:
             from openai import OpenAI  # imported lazily so tests need no key
-            self._client = OpenAI()
+            self._client = OpenAI(timeout=self.timeout, max_retries=2)
         return self._client
 
     def _call(self, instructions: str, payload: Dict[str, Any], schema_name: str, schema: Dict[str, Any]) -> Dict[str, Any]:
