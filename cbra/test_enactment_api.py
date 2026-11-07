@@ -59,7 +59,7 @@ class ApiTests(unittest.TestCase):
         runtime = Runtime(ScriptedProposer([proposal_turn1], baselines=[BASELINE_FIELDS]), observer=events.append)
         runtime.turn(MISSED)
         names = [e["event"] + (":" + e["fact"] if e["event"] == "fact" else "") for e in events]
-        self.assertEqual(names, ["fact:reconfiguration_open", "baseline", "round", "fact:intervention_released", "fact:effects_unobserved"])
+        self.assertEqual(names, ["fact:reconfiguration_open", "baseline", "round", "release_kind", "fact:intervention_released", "fact:effects_unobserved"])
 
     def test_history_shows_deferral_and_returns(self):
         def certified(ctx):

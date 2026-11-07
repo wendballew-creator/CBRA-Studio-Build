@@ -13,8 +13,9 @@ Structural Release Constraints.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Mapping, Optional, Set
+from typing import Tuple, Any, Callable, Dict, List, Mapping, Optional, Set
 
 from .arrangements import TEXT_BURDEN_TOLERANCE, arrangement_fields, arrangements, care_delta, play_delta, text_against_claim
 from .graph import LIFECYCLE_FACTS, TRANSPORT_ROLES, Configuration, Cut
@@ -37,6 +38,8 @@ CONSTRAINT_NAMES = {
     11: "A model proposal reviewed its own semantic adequacy",
     12: "The release status would imply acceptance, validity, correctness, care, or posthuman fidelity",
     13: "A person's account is carried without provenance, their terminology replaced, or an architecture connection released as their own",
+    14: "The released text is a different kind of release from the one the configuration decided from the cuts",
+    15: "The released text names the architecture, its canon or its method to a person who named none of them",
 }
 
 
@@ -76,6 +79,9 @@ class Formation:
     round: int = 0
     violations: List[Violation] = field(default_factory=list)
     history: List[List[Violation]] = field(default_factory=list)
+    kind: Optional[str] = None
+    kind_decision: Optional[str] = None
+    form_reading: Optional[Dict[str, Any]] = None
 
     def active_cuts(self, config: Configuration) -> List[Cut]:
         return [config.cuts[i] for i in self.cuts if i in config.cuts and config.cuts[i].status == "active"]
@@ -262,6 +268,105 @@ def c13_narrative_control(config: Configuration, f: Formation) -> Optional[str]:
     return None
 
 
+# -- the kind of release, decided from the cuts before any text --------------
+
+RELEASE_KINDS = ("question", "work")
+
+
+def decide_kind(config: Configuration, f: Formation) -> Tuple[str, str, List[str]]:
+    """The configuration decides what kind of thing is released, from the
+    cuts of this round and before a draft exists. A ``staying`` cut whose
+    payload holds something ``open`` and marks that the intervention
+    ``decides`` on it says that an unresolved condition changes what the
+    intervention would be: the release is then one question about it.
+    Otherwise the cuts settle what is owed and the release is the work."""
+    for cut in f.active_cuts(config):
+        if cut.kind == "staying" and cut.payload.get("decides") and cut.payload.get("open"):
+            return "question", "staying cut %s holds open: %s" % (cut.label, cut.payload.get("open")), [cut.id]
+    return "work", "no staying cut holds a condition the intervention depends on; the cuts settle what is owed", []
+
+
+ARCHITECTURE_NAMES = re.compile(
+    r"\bCBRA\b|\bcanon\b|\b(?:this|the|our) (?:architecture|method|framework|system's method)\b|Creative Becoming Reasoning Architecture",
+    re.IGNORECASE)
+OPTION_MARKS = re.compile(r"(?:^|\s|\()(?:[1-3]|[A-Ca-c])[\).:]\s", re.MULTILINE)
+SENTENCE_END = re.compile(r"[.!?](?:\s|$)")
+
+
+def text_form(text: str) -> Dict[str, Any]:
+    """A lexical reading of a text's form, used when no reading apparatus
+    has read it: how many questions it asks, whether it offers the person a
+    choice among things the apparatus could do, and which kind it is."""
+    text = text or ""
+    questions = text.count("?")
+    sentences = max(1, len(SENTENCE_END.findall(text)))
+    options = len(OPTION_MARKS.findall(text))
+    last = text.strip().rsplit("?", 1)[0].rsplit(".", 1)[-1] if "?" in text else ""
+    # "two or three sentences" is a quantity, and the or divides nothing.
+    last = re.sub(r"\b(?:\d+|one|two|three|four|five|a few|a couple)\s+or\s+(?:\d+|one|two|three|four|five|more|so)\b", "", last, flags=re.IGNORECASE)
+    # An offer among things the apparatus could do: the apparatus names
+    # itself as the one who would act, and an "or" divides the offer. A
+    # question about which of the person's own matters comes next is a
+    # question, and the lexical reading leaves it as one.
+    if questions and options < 2 and re.search(r"\b(?:or|either)\b", last, re.IGNORECASE) and re.search(
+            r"\b(?:would you (?:like|prefer|rather) (?:me|that I)|do you want me to|want me to|should I|shall I|I can|I could|I'll|I will)\b",
+            last, re.IGNORECASE):
+        options = 2
+    if options >= 2 and questions:
+        kind = "menu"
+    elif questions == 0:
+        kind = "work"
+    elif questions == 1 and text.strip().endswith("?") and sentences <= 3:
+        kind = "question"
+    elif questions >= 2:
+        kind = "mixed"
+    else:
+        kind = "work"
+    return {"kind": kind, "questions": questions, "options": options, "source": "lexical"}
+
+
+def c14_release_kind(config: Configuration, f: Formation) -> Optional[str]:
+    if not f.draft or not f.kind:
+        return None
+    text = f.draft.get("text")
+    if not (isinstance(text, str) and text.strip()):
+        return None
+    form = dict(f.form_reading or {}) or text_form(text)
+    if f.form_reading and "kind" not in form:
+        form = text_form(text)
+    declared = f.draft.get("kind")
+    if declared and declared != f.kind:
+        return "the draft declares kind %r; the configuration decided %r from the cuts" % (declared, f.kind)
+    if form.get("kind") == "menu":
+        return "the text offers the person a choice among %s things the apparatus could do; the configuration decided a %s" % (
+            form.get("options", "several"), f.kind)
+    questions = int(form.get("questions") or 0)
+    if f.kind == "question" and questions != 1:
+        return "the release was decided as one question; the text asks %d" % questions
+    if f.kind == "work" and form.get("kind") == "question":
+        return "the release was decided as the work; the text is a question handing the work back"
+    if f.kind == "work" and questions >= 2:
+        return "the release was decided as the work; the text asks %d questions" % questions
+    return None
+
+
+def c15_architecture_named_unasked(config: Configuration, f: Formation) -> Optional[str]:
+    if not f.draft:
+        return None
+    text = f.draft.get("text")
+    if not (isinstance(text, str) and text.strip()):
+        return None
+    named = ARCHITECTURE_NAMES.search(text)
+    if not named:
+        return None
+    if f.material_required:
+        return None  # the person named a canon term; the canon is what they asked about
+    for t in config.transports.values():
+        if t.role == "user_message" and ARCHITECTURE_NAMES.search(t.text or ""):
+            return None
+    return "the text names %r; no arrival of this session named the architecture, its canon or its method" % named.group(0)
+
+
 CHECKS: Dict[int, Check] = {
     1: c1_transport_role_copied,
     2: c2_global_entity,
@@ -276,6 +381,8 @@ CHECKS: Dict[int, Check] = {
     11: c11_self_certification,
     12: c12_status_implies_acceptance,
     13: c13_narrative_control,
+    14: c14_release_kind,
+    15: c15_architecture_named_unasked,
 }
 
 

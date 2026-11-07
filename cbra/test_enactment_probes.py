@@ -636,6 +636,10 @@ class ProbeTests(unittest.TestCase):
                      "allocations": [{"position": PERSON, "burden": 0.2, "capacity": 0.3}],
                      "payload": {"role": "enacted", "sequence": ["ask which the next step is about"], "scale": "minimal",
                                  "distribution": "shared", "response_demand": {PERSON: ["decide"]}}},
+                    # The one open condition the intervention depends on: the
+                    # configuration decides the release is a question from this.
+                    {"kind": "staying", "label": "stay_next_step", "basis": h, "apparatus": APP, "relata": [PERSON],
+                     "payload": {"open": "whether the next step is about the report or about the week", "decides": True}},
                 ],
                 draft={"text": "Do you want the next step to be about the report, or about the week?",
                        "enacts": ["arr_min", "account_overwhelm"], "carries_accounts": ["account_overwhelm"],

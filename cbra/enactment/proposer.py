@@ -126,6 +126,14 @@ class Proposer:
     def effect_conditions(self, context: ProposalContext) -> List[str]:
         return []
 
+    def draft(self, context: Dict[str, Any], proposal: Proposal) -> Optional[Dict[str, Any]]:
+        """Write the public intervention from the cuts the configuration
+        enacted and the kind of release it decided. The default returns the
+        draft the proposal carried, so a proposer that writes cuts and draft
+        in one call still works; a proposer that separates them overrides
+        this and leaves the proposal's draft empty."""
+        return proposal.draft
+
 
 ProposalStep = Union[Proposal, Callable[[ProposalContext], Proposal]]
 
@@ -136,13 +144,26 @@ class ScriptedProposer(Proposer):
 
     def __init__(self, steps: Sequence[ProposalStep], effects: Optional[Callable[[ProposalContext], List[str]]] = None,
                  baselines: Optional[Sequence[Dict[str, Any]]] = None,
-                 readings: Optional[Sequence[Optional[Dict[str, Any]]]] = None) -> None:
+                 readings: Optional[Sequence[Optional[Dict[str, Any]]]] = None,
+                 drafts: Optional[Sequence[Any]] = None) -> None:
         self._steps = list(steps)
         self._effects = effects
         self._baselines = list(baselines or [])
         self._readings = list(readings) if readings is not None else None
+        self._drafts = list(drafts) if drafts is not None else None
         self.contexts: List[ProposalContext] = []
         self.read_texts: List[str] = []
+        self.draft_contexts: List[Dict[str, Any]] = []
+
+    def draft(self, context: Dict[str, Any], proposal: Proposal) -> Optional[Dict[str, Any]]:
+        self.draft_contexts.append(context)
+        if self._drafts is None:
+            return proposal.draft
+        if not self._drafts:
+            raise RuntimeError("scripted proposer has no draft left for turn %s round %s" % (context.get("turn"), context.get("round")))
+        step = self._drafts.pop(0)
+        draft = step(context) if callable(step) else step
+        return json.loads(json.dumps(draft)) if draft is not None else None
 
     def read_text(self, text: str, context: ProposalContext) -> Optional[Dict[str, Any]]:
         self.read_texts.append(text)
@@ -278,58 +299,32 @@ Return JSON with these keys:
   you draw about it is a "connection" cut with payload {"proposed_by":
   "architecture"} that depends_on the provenance cut and has the person's
   words in its basis. It is released as your connection, marked as such.
-- "draft": {"kind": question | work, "text": the public intervention
-  (required unless "action" declares a non-text intervention such as
-  "silence", "deferral", or a tool use, which is then released as that);
-  "enacts": [labels of cuts the text materializes]; "response_demand":
-  {position: [...]}; "carries_accounts": [provenance labels]; "status": one
-  of reconfiguration_open | release_withheld | intervention_released |
-  effects_unobserved | prior_cut_disturbed; "reopen_conditions": [observable
-  effects that would reopen this intervention, as condition strings];
-  "possibilities_open": [...], "possibilities_closed": [...], "unmarked":
-  [...], "anticipated_effects": [...]}.
+- "draft": null. The text of the intervention is written in a separate
+  call, from the cuts you propose here and the kind of release the runtime
+  decides from them. Your cuts carry everything the text will rest on.
 - "claims": subset of ["care", "play"]. "unresolved": incompatibilities you
   are holding open rather than resolving. "certification": null.
 
-The draft is one of two kinds, and the cuts decide which.
+The release is one of two kinds, and your cuts decide which.
 
-- "question": an unresolved condition in the cuts changes what the
-  intervention would be, and the person's words leave it open. The text is
-  then one situated question, in the person's terms, about that condition,
-  and nothing else. The question carries the work of the turn: it says what
-  was noticed and asks the one thing that decides. One question is a
-  question; two is a form.
-- "work": the cuts settle what is owed, and the text does it: the answer,
-  the draft, the repair, the plan, in the form the person asked for,
-  complete rather than described. When the work needs a decision from the
-  person, the text makes the decision visible and does the work on the side
-  that is already settled.
+- A "staying" cut with payload {"open": <what remains unresolved, in the
+  person's words>, "decides": true} says that an unresolved condition
+  changes what the intervention would be, and that the person's words leave
+  it open. The runtime then decides the release is one situated question
+  about that condition, and nothing else. Propose it when a term of theirs
+  could be read two ways and the reading changes what is owed, when a
+  decision is genuinely theirs, or when what they want is unsettled. One
+  such cut names one open condition.
+- With no such cut, the runtime decides the release is the work: the
+  answer, the draft, the repair, the plan, in the form the person asked
+  for, complete rather than described. Your arrangement cut says what that
+  work is and who carries what.
 
-An offer of options is a third thing, and it is neither. A text that ends by
-asking the person to choose between things the apparatus could do has
-handed them the turn's work and the decision about it. Where a decision is
-genuinely theirs, the question kind asks it as one question; where it is
-not, the work kind does the work.
-
-How the text speaks:
-
-- In ordinary language, about what happened and what is the case, before
-  any concept. A reader who knows nothing of this architecture can follow
-  every sentence. Concepts enter when the person has used them or asked
-  for them, and then in the person's sense of the term.
-- Affirmatively: it says what is, and what the text does. A point made by
-  contrast ("not X but Y") is remade as the point itself.
-- From the person's account. The person's description of their own
-  behavior, state, or work is carried in their terms; the text asks about
-  a term rather than translating it, and treats a word they used for a
-  behavior as a word for a behavior.
-- About the apparatus where that bears on the turn: what you can see and
-  cannot, what limits the answer. This is a sentence of fact, in the text,
-  when the person's next move depends on it.
-- Without naming this architecture, its canon, or its method, unless the
-  person has named them or asked what frames the answer. The canon is the
-  ground the cuts stand on; the trace records that. The text speaks to the
-  person, and the architecture's work shows in what the text does.
+An offer of options is a third thing, and it is neither. A release that
+asks the person to choose between things the apparatus could do hands them
+the turn's work and the decision about it; the constraints return it.
+Where a decision is genuinely theirs, a staying cut makes it one question;
+where it is not, the arrangement does the work.
 
 "material" holds passages of the project's own canon (its kernel, grammar,
 glossary, constraints, probes) selected for this arrival, each with a
@@ -353,10 +348,64 @@ active: re-propose any you still need, with the same labels if you like.
 If "minimal" is true, the formed drafts have returned. Propose the smallest
 release the structural constraints accept: claim neither "care" nor "play";
 scale "minimal"; at most one demand on the person; an enacted arrangement
-that says exactly what the text does; a text of one to three sentences that
-is one question or one piece of work, in the person's terms. State
-"variation_constraint" as "minimal release after returns". The runtime
-records this release as minimal, and as nothing more.
+that says exactly what the text will do; one staying cut if one question is
+owed, none if one piece of work is. State "variation_constraint" as
+"minimal release after returns". The runtime records this release as
+minimal, and as nothing more.
+"""
+
+DRAFT_INSTRUCTIONS = """You write the public intervention of one turn. The configuration has
+already enacted the cuts of this turn and decided, from them, what kind of
+release this is. You receive the person's words, the cuts with what they
+rest on, the passages of the project's canon those cuts drew on, and the
+decided kind with its reason. You receive no earlier draft and no other
+model's answer. The text forms from the cuts.
+
+The kind decides the text.
+
+- "question": one situated question, in the person's terms, about the open
+  condition the cuts hold; the question says in a sentence what was noticed
+  and asks the one thing that decides. Nothing else is in the text.
+- "work": the text does what the cuts settle is owed: the answer, the
+  draft, the repair, the plan, in the form the person asked for, complete
+  rather than described. A question inside the work is a question the work
+  needs answered to continue, asked once; the text does the settled part.
+
+How the text speaks:
+
+- In ordinary language, about what happened and what is the case, before
+  any concept. A reader who knows nothing of this project follows every
+  sentence. A concept enters when the person has used it or asked for it,
+  and then in the person's sense of the term.
+- Affirmatively: it says what is, and what it does. A point made by
+  contrast is remade as the point itself.
+- From the person's account. Their word for a behavior is a word for a
+  behavior; their term stays their term; a question about a term is asked
+  as a question, in their words.
+- About the apparatus where that bears on the person's next move: what can
+  be seen and what cannot, in a sentence of fact.
+- To the person, about their matter. The architecture, its canon and its
+  method are named when the person has named them or asked what frames the
+  answer; the canon is the ground the cuts stand on and the trace records
+  that. When the person asked what a term means in this project, the text
+  gives the canon's sense first and names it, since that is what they
+  asked.
+- At the length the kind calls for. A question is one to three sentences.
+  The work is as long as the work.
+
+Return JSON: {"kind": the decided kind, "text": the intervention (or null
+with "action" naming a non-text intervention such as "silence", "deferral",
+or a tool use), "enacts": [labels of the cuts the text materializes],
+"response_demand": {position label: [demands]}, "carries_accounts":
+[provenance labels whose account the text carries], "status": one of
+reconfiguration_open | release_withheld | intervention_released |
+effects_unobserved | prior_cut_disturbed, "reopen_conditions": [observable
+effects that would reopen this intervention, as condition strings],
+"possibilities_open": [...], "possibilities_closed": [...], "unmarked":
+[...], "anticipated_effects": [...]}.
+
+If "minimal" is true, the text is one to three sentences: one question or
+one piece of work.
 """
 
 BASELINE_EXTRACTION_INSTRUCTIONS = """You are given an answer that an assistant gave to a message. Describe the
@@ -368,6 +417,17 @@ answer does itself (explaining, drafting) is the apparatus's burden; work it
 asks of the person is the person's. If the answer asks nothing of anyone,
 distribution is "apparatus" or "none" and the person's burden is 0. Return
 JSON in the fields below.
+
+Also describe the form of the text under "form": "kind" is "question" when
+the text is a single question put to the person, "work" when the text does
+something (answers, drafts, plans, explains), "menu" when it asks the person
+to choose among things the assistant could do next, "mixed" otherwise;
+"questions" counts the questions asked; "options" counts the choices
+offered to the person among things the assistant could do; "names_system"
+is true when the text names the system, architecture, method or canon that
+produced it; "leads_with" is "concrete" when the first sentences say what
+happened or what is the case and "concept" when they open with a theory or
+a framing term.
 
 """ + ARRANGEMENT_VOCABULARY + "\n"
 
@@ -396,8 +456,30 @@ BASELINE_SCHEMA: Dict[str, Any] = {
         "allocations": {"type": "array", "items": {"type": "object", "properties": {
             "position": {"type": "string"}, "burden": {"type": "number"}, "capacity": {"type": "number"}},
             "required": ["position", "burden", "capacity"]}},
+        "form": {"type": ["object", "null"], "properties": {
+            "kind": {"type": "string"}, "questions": {"type": "integer"}, "options": {"type": "integer"},
+            "names_system": {"type": "boolean"}, "leads_with": {"type": "string"}}},
     },
     "required": ["positions", "sequence", "response_demand", "allocations"],
+}
+
+DRAFT_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "kind": {"type": ["string", "null"]},
+        "text": {"type": ["string", "null"]},
+        "action": {"type": ["string", "null"]},
+        "enacts": {"type": "array", "items": {"type": "string"}},
+        "response_demand": {"type": "object"},
+        "carries_accounts": {"type": "array", "items": {"type": "string"}},
+        "status": {"type": ["string", "null"]},
+        "reopen_conditions": {"type": "array", "items": {"type": "string"}},
+        "possibilities_open": {"type": "array", "items": {"type": "string"}},
+        "possibilities_closed": {"type": "array", "items": {"type": "string"}},
+        "unmarked": {"type": "array", "items": {"type": "string"}},
+        "anticipated_effects": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["kind", "text", "enacts"],
 }
 
 PROPOSAL_SCHEMA: Dict[str, Any] = {
@@ -468,6 +550,16 @@ class OpenAIResponsesProposer(Proposer):
             "apparatus_mark": APPARATUS_MARK,
         }
         return proposal
+
+    def draft(self, context: Dict[str, Any], proposal: Proposal) -> Optional[Dict[str, Any]]:
+        data = self._call(DRAFT_INSTRUCTIONS, context, "cbra_draft", DRAFT_SCHEMA)
+        data["_provenance"] = {
+            "provider": "openai-responses", "model": self.model,
+            "instructions_digest": hashlib.sha256(DRAFT_INSTRUCTIONS.encode("utf-8")).hexdigest(),
+            "response_id": data.pop("_response_id", None),
+            "apparatus_mark": APPARATUS_MARK,
+        }
+        return data
 
     def plain_answer(self, context: ProposalContext, conversation: List[Dict[str, str]]) -> str:
         """An answer with no instructions at all: the inherited grammar as the

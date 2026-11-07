@@ -272,6 +272,7 @@ def turn_reading(config: Configuration, turn: str, corpus: Optional[Corpus] = No
         "baseline_text": baseline_text,
         "baseline_unavailable": any(u.get("kind") == "baseline_unavailable" and u.get("turn") == turn for u in config.unresolved),
         "form": payload.get("form"),
+        "kind": payload.get("kind"),
         "released_text": released,
         "rounds": payload.get("rounds"),
         "claims": list(payload.get("claims") or []),
@@ -420,7 +421,7 @@ def report(run_dir: str, corpus: Optional[Corpus] = None) -> str:
                 "released_text": None, "rounds": None, "claims": [], "withheld_constraints": [], "returns": [],
                 "material": [], "material_required": [], "rested_on": [], "care_delta": [], "play_delta": {},
                 "text_unread": False, "canon_terms": {"baseline": [], "released": []}, "shared_vocabulary": None,
-                "words": {"baseline": 0, "released": 0}}
+                "words": {"baseline": 0, "released": 0}, "kind": None}
             per_turn.append((t, reading))
         readings.append({"probe": probe, "turns": per_turn})
 
@@ -452,8 +453,9 @@ def report(run_dir: str, corpus: Optional[Corpus] = None) -> str:
                 lines.append("")
                 continue
             if t.released:
-                lines.append("Released on round %s%s after %.0f s." % (
-                    t.rounds, " under minimal terms" if t.form == "minimal" else "", t.seconds))
+                lines.append("Released on round %s%s after %.0f s%s." % (
+                    t.rounds, " under minimal terms" if t.form == "minimal" else "", t.seconds,
+                    ", decided as %s" % reading["kind"] if reading.get("kind") else ""))
             else:
                 lines.append("Release withheld after %s rounds; a deferral was enacted (%.0f s)." % (t.rounds, t.seconds))
             if reading["baseline_unavailable"]:

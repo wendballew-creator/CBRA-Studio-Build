@@ -168,7 +168,7 @@ class SimilarityTests(unittest.TestCase):
                 {"kind": "apparatus", "label": "app", "basis": h, "apparatus": APP},
                 {"kind": "arrangement", "label": "arr", "basis": h, "apparatus": APP,
                  "payload": {"role": "enacted", "sequence": ["explain"], "scale": "minimal", "distribution": "apparatus"}},
-            ], draft={"text": "In CBRA, boundaries are enacted by cuts and stay revisable.", "enacts": ["arr"], "reopen_conditions": []},
+            ], draft={"text": "Boundaries are enacted by cuts and stay revisable.", "enacts": ["arr"], "reopen_conditions": []},
                claims=[], variation_possible=False, variation_constraint="a definition")
 
         runtime = Runtime(ScriptedProposer([grounds_arrival], baselines=[BASELINE_FIELDS]), material=corpus)
@@ -254,7 +254,7 @@ class MaterialTests(unittest.TestCase):
                  "relata": ["agential cut as the canon defines it"]},
                 {"kind": "arrangement", "label": "arr", "basis": h, "apparatus": APP,
                  "payload": {"role": "enacted", "sequence": ["explain"], "scale": "minimal", "distribution": "apparatus"}},
-            ], draft={"text": "In CBRA, boundaries are not found but enacted: an agential cut within intra-action marks what counts as a thing and what stays unmarked, and that cut stays revisable.", "enacts": ["arr", "boundaries_as_cut"], "reopen_conditions": []},
+            ], draft={"text": "Boundaries are enacted: an agential cut within intra-action marks what counts as a thing and what stays unmarked, and that cut stays revisable.", "enacts": ["arr", "boundaries_as_cut"], "reopen_conditions": []},
                claims=[], variation_possible=False, variation_constraint="a definition")
 
         runtime = Runtime(ScriptedProposer([names_terms_but_leaves_arrival_aside, uses_the_drawn_material],

@@ -1033,3 +1033,86 @@ sets, both conditions, so that before and after are read the same way.
 The second move, the runtime deciding the kind of release from the cuts
 before a draft is written, with cuts and draft as separate calls, is the
 next build.
+
+## The configuration decides the kind of release before any text, 6 November 2026
+
+The second move of the formation rethink. Until now one call to the
+model returned the cuts, the arrangements and the finished text together,
+and the configuration checked the structure of what came back. Everything
+semantic about the release, whether it asked or corrected, whom it
+addressed, whether it offered a menu, was decided inside the model in the
+same breath as the wording. The two conditions of the Case Study 001 run
+converged on the same release shape, which located the shape in the
+shared instructions and the model rather than in the runtime. This change
+moves the decision about what kind of thing is released into the
+configuration, and separates writing the text from proposing the cuts.
+
+**The decision is a cut.** After a round's cuts are enacted and before any
+text exists, `release.decide_kind` reads them. A `staying` cut whose
+payload holds something `open` and marks that the intervention `decides`
+on it says that an unresolved condition changes what the intervention
+would be; the release is then one question about it. With no such cut,
+the cuts settle what is owed and the release is the work. The decision is
+enacted as an apparatus cut `release_kind:<turn>:r<round>` with its reason
+and the cuts it was decided from; the intervention depends on it; the
+page's activity panel shows it as "release decided as question (…)" or
+"work". The model proposes the staying cut; the configuration applies the
+rule, records it, and holds the text to it.
+
+**The draft is a separate call.** `Proposer.draft(context, proposal)`
+receives the person's words, the cuts of the round with what they rest
+on, the canon passages those cuts drew on, and the decided kind with its
+reason. It receives neither the baseline's text nor any earlier draft, so
+a draft that cannot be written from the cuts shows that the cuts were
+decoration: the dressing test is now how every release is formed. The
+provider proposer makes it a second call under `DRAFT_INSTRUCTIONS`, which
+carry the speaking rules written this morning (plain before concept,
+affirmative, the person's terms, the apparatus named where it bears, the
+architecture named when the person has); the draft arrives as a
+`model_output` trace on channel `drafter` with its own instruction digest.
+The proposer's instructions now end at the cuts: the draft field is null,
+and the staying cut is how a proposal says that a question is owed. A
+scripted proposer keeps returning the draft its proposal carried unless
+given scripted drafts, so the earlier tests run unchanged.
+
+**Two constraints read the form.** Constraint 14 returns a text whose kind
+departs from the decision: a menu of things the apparatus could do under
+either kind; a question where the work was decided; two questions where
+one was; a draft that declares one kind when the configuration decided
+the other. Constraint 15 returns a text that names the architecture, its
+canon or its method to a person who named none of them in any arrival of
+the session and asked about no canon term. The reader that already reads
+each draft's arrangement now also reads its form (kind, questions asked,
+options offered, whether it names the system, whether it leads with the
+concrete or a concept); where no reader is present a lexical reading
+stands in, conservative about menus so that a question about which of
+the person's own matters comes next stays a question. A return on either
+goes back to the proposer as a different formation, since the decision is
+re-made from the next round's cuts.
+
+The canon's Grammar names thirteen release constraints. Fourteen and
+fifteen are enacted here as the slice's own and are marked for the
+author's review of the canon; they can be renumbered or folded into
+thirteen (narrative control) if the author reads them as that
+constraint's territory.
+
+Tests (`cbra/test_enactment_formation.py`, twelve): the staying cut makes
+the release a question and the decision is a cut the release depends on;
+without one the release is the work; the draft call sees the cuts and the
+decision and not the baseline; a separate draft is inscribed as its own
+trace; the lexical form reading; a menu returns and the work releases; a
+question release asks exactly one question; a question where the cuts
+decided work returns; a declared kind that differs from the decision
+returns; the reader's form takes precedence over the lexical reading;
+naming the architecture unasked returns; naming is allowed when the
+person named it or asked about a canon term. Three earlier fixtures
+changed to meet the new rules: the minimal release in the probe tests now
+carries the staying cut its question rests on, and two boundaries fixtures
+in the material tests say what they say without "In CBRA". The full suite
+passes.
+
+Nothing has been run live. The provider account has no credits, and by
+the author's instruction nothing billable starts without their word for
+that run. The measurement that reads this change is the same two probe
+sets under both conditions, compared with the runs of 6 November under
+the earlier formation.

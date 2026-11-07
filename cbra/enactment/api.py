@@ -57,7 +57,7 @@ def history(config: Configuration) -> List[Dict[str, Any]]:
         items.append({
             "order": arrival_seq.get(turn, 0) + 0.5,
             "kind": "intervention", "id": cut.id, "turn": turn, "status": cut.status,
-            "form": p.get("form"), "text": p.get("text"), "action": p.get("action"), "rounds": p.get("rounds"),
+            "form": p.get("form"), "release_kind": p.get("kind"), "text": p.get("text"), "action": p.get("action"), "rounds": p.get("rounds"),
             "returns": sorted(returns.get(turn, []), key=lambda r: r["round"]),
             "withheld_constraints": p.get("withheld_constraints", []),
             "claims": p.get("claims", []), "claims_stripped": p.get("claims_stripped", []),

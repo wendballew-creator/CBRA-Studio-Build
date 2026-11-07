@@ -143,6 +143,7 @@
     else if (e.event === "round") t = (e.minimal ? "minimal round " : "round ") + e.round + " forming";
     else if (e.event === "returned") t = "round " + e.round + " returned on " + e.constraints.map(c => c.constraint).join(", ");
     else if (e.event === "baseline") t = "uninstructed baseline read (" + e.cut + ")";
+    else if (e.event === "release_kind") t = "round " + e.round + ": release decided as " + e.kind + " (" + e.reason + ")";
     else if (e.event === "material") t = "canon material" + (e.drawn_by && e.drawn_by !== "the arrival" ? " drawn by " + e.drawn_by : "") + ": " + e.passages.map(p => p.file.replace(/^CBRA_|\.md$/g, "") + " › " + p.heading + (p.consequential ? " (names " + (p.terms || []).join(", ") + ")" : (p.via === "similarity" ? " (similar)" : ""))).join("; ");
     else if (e.event === "done") t = e.kind === "turn" ? ("done: " + (e.released ? e.form : "withheld")) : ("effect " + (e.reinserted ? "reinserted" : "recorded, not reinserted"));
     else if (e.event === "error") t = "error: " + e.error;

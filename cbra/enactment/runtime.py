@@ -21,7 +21,7 @@ from .graph import APPARATUS_MARK, Configuration, Cut, Delta, EnactmentError, Tr
 TransportTraceLike = TransportTrace
 from .material import Corpus
 from .proposer import Proposal, ProposalContext, Proposer
-from .release import Formation, Violation, check_all
+from .release import Formation, Violation, check_all, decide_kind
 
 
 @dataclass
@@ -390,6 +390,76 @@ class Runtime:
         )
         return cut
 
+    # -- the kind of release, and the draft written from the cuts ----------
+
+    def _decide_and_draft(self, formation: Formation, proposal: Proposal, proposal_handle: str,
+                          context: ProposalContext) -> Optional[str]:
+        """The configuration decides, from the cuts just enacted and before
+        any text exists, whether this release is one question or the work.
+        The decision is a cut of its own. The draft is then requested in a
+        separate call that sees the cuts, the person's words and the decided
+        kind, and neither the baseline's text nor any earlier draft."""
+        cfg = self.config
+        turn = formation.turn
+        kind, reason, basis = decide_kind(cfg, formation)
+        decision = cfg.enact(
+            kind="apparatus", label="release_kind:%s:r%d" % (turn, formation.round),
+            basis=[proposal_handle] + list(basis),
+            apparatus=["the configuration deciding the kind of release from the cuts, before any text"],
+            payload={"turn": turn, "kind": kind, "reason": reason, "decided_from": list(basis)},
+        )
+        formation.cuts.append(decision.id)
+        formation.kind = kind
+        formation.kind_decision = decision.id
+        self._notify({"event": "release_kind", "turn": turn, "round": formation.round, "kind": kind, "reason": reason})
+        draft_context = self._draft_context(formation, kind, reason, context)
+        draft = self.proposer.draft(draft_context, proposal)
+        if draft is None:
+            formation.draft = None
+            return None
+        draft = dict(draft)
+        provenance = dict(draft.pop("_provenance", {}) or {})
+        separate = draft is not proposal.draft and provenance.get("provider") is not None
+        formation.draft = draft
+        if separate or proposal.draft is None:
+            provenance.setdefault("apparatus_mark", APPARATUS_MARK)
+            provenance.update({"role": "draft", "kind": kind, "round": formation.round, "minimal": formation.minimal})
+            trace = cfg.inscribe(json.dumps(draft, ensure_ascii=False), "model_output", channel="drafter", provenance=provenance)
+            return trace.handle
+        return None
+
+    def _draft_context(self, formation: Formation, kind: str, reason: str, context: ProposalContext) -> Dict[str, Any]:
+        cfg = self.config
+        cuts = []
+        material_handles: List[str] = []
+        for cut in formation.active_cuts(cfg):
+            if cut.kind == "apparatus" and cut.label.startswith("release_kind:"):
+                continue
+            payload = cut.payload if cut.kind in ("arrangement", "provenance", "staying", "connection") else {}
+            cuts.append({"id": cut.id, "kind": cut.kind, "label": cut.label, "relata": list(cut.relata),
+                         "unmarked": list(cut.unmarked), "power": list(cut.power),
+                         "invalidation_conditions": list(cut.invalidation_conditions),
+                         "depends_on": list(cut.depends_on),
+                         "payload": json.loads(json.dumps({k: v for k, v in payload.items() if k not in ("turn",)}))})
+            for h in cut.basis:
+                t = cfg.transports.get(h)
+                if t is not None and t.role == "document" and h not in material_handles:
+                    material_handles.append(h)
+        passages = [{"handle": h, "file": cfg.transports[h].provenance.get("file"),
+                     "heading": cfg.transports[h].provenance.get("heading"), "text": cfg.transports[h].text}
+                    for h in material_handles]
+        conversation = [{"handle": t.handle, "text": t.text} for t in cfg.transports.values() if t.role == "user_message"]
+        return {
+            "turn": formation.turn, "round": formation.round, "minimal": formation.minimal,
+            "kind": kind, "reason": reason,
+            "arrivals": [cfg.transports[h].text for h in formation.arrivals if h in cfg.transports],
+            "conversation": conversation,
+            "cuts": cuts,
+            "material": passages,
+            "claims": list(formation.claims),
+            "violations": list(context.violations),
+        }
+
     def _read_draft(self, formation: Formation, context: ProposalContext, proposal_handle: str) -> None:
         """Read the draft text blind to the proposal and enact what it
         arranges as a ``read`` arrangement cut, so constraint 10 can compare
@@ -410,7 +480,9 @@ class Runtime:
             "positions", "sequence", "pace", "scale", "distribution", "boundary", "support",
             "consequence_timing", "access", "possibilities_open", "possibilities_closed")}
         payload.update({"role": "read", "turn": formation.turn, "round": formation.round,
-                        "response_demand": _response_demand(reading.get("response_demand"))})
+                        "response_demand": _response_demand(reading.get("response_demand")),
+                        "form": reading.get("form")})
+        formation.form_reading = dict(reading["form"], source="reader") if isinstance(reading.get("form"), dict) else None
         cut = cfg.enact(
             kind="arrangement", label="arr_read:%s:r%d" % (formation.turn, formation.round),
             basis=[proposal_handle],
@@ -497,7 +569,8 @@ class Runtime:
                 cfg.unresolved.append(entry)
         try:
             self._enact_proposal(proposal, formation, proposal_trace.handle)
-            self._read_draft(formation, context, proposal_trace.handle)
+            draft_handle = self._decide_and_draft(formation, proposal, proposal_trace.handle, context)
+            self._read_draft(formation, context, draft_handle or proposal_trace.handle)
         except (EnactmentError, KeyError, TypeError, ValueError) as error:
             cfg.unresolved.append({"kind": "proposal_not_enactable", "turn": turn, "round": round_number, "error": str(error)})
             result = [Violation(0, "%s: %s" % (type(error).__name__, error))]
@@ -603,7 +676,8 @@ class Runtime:
             basis=list(formation.arrivals) + [formation.proposal_trace],
             apparatus=["text delivery through %s" % (channel or self.channel)]
                       + (["canon material: %s" % self.material.describe().get("index")] if self.material and formation.material else []),
-            depends_on=[labels[l] for l in draft.get("enacts", []) if l in labels],
+            depends_on=[labels[l] for l in draft.get("enacts", []) if l in labels]
+                       + ([formation.kind_decision] if formation.kind_decision in cfg.cuts else []),
             relata=list(demand.keys()),
             unmarked=list(draft.get("unmarked", [])),
             allocations={p: {"burden": float(len(d))} for p, d in demand.items()},
@@ -611,7 +685,9 @@ class Runtime:
             payload={
                 "turn": turn,
                 "form": formation.form,
-                "kind": draft.get("kind"),
+                "kind": formation.kind,
+                "kind_decision": formation.kind_decision,
+                "declared_kind": draft.get("kind"),
                 "action": draft.get("action"),
                 "claims": list(formation.claims),
                 "claims_stripped": list(formation.claims_stripped),
