@@ -10,8 +10,9 @@ reviewer stage follows formation.
 Constraints 1 to 13 follow CBRA Recursive Reconfiguration Grammar v2,
 Structural Release Constraints. Constraints 14 and 15 read the form of the
 released text against the kind the configuration decided and against the
-person's own naming; the author decided on 6 November 2026 to keep them as
-constraints, and the Grammar carries them from its next version.
+person's own naming; 16 returns a text the reader marked with a named
+re-entry pattern, carrying the pattern's movement. The author decided on
+6 November 2026 to carry all three, and Grammar v3 lists them.
 """
 
 from __future__ import annotations

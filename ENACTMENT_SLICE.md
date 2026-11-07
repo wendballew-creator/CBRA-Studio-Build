@@ -1171,9 +1171,9 @@ the record says the text went unread, as it already did for constraint
 return carries evidence: by the Constraints' Evidence Rule a phrase is
 insufficient and the quotation is there to be read.
 
-Constraint 16 is the runtime's, like 14 and 15 were this afternoon, and
-is put to the author for Grammar v3 the same way
-(`canon-drafts/2026-11-06_canon_v3_drafts_and_index.md`).
+The author decided the same evening that constraint 16 enters Grammar
+v3, and the draft in the canon folder carries it; the Grammar now lists
+sixteen, and the runtime's list and the canon's agree again.
 
 Tests (`cbra/test_enactment_reader.py`, five): the reader is given the
 fixed patterns and the person's words for both baseline and draft; a

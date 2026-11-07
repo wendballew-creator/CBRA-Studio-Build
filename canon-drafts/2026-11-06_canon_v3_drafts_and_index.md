@@ -123,9 +123,9 @@ the released text carries a named incompatibility pattern the reader
 marked, with the canon's movement unmade. The reader is given the fixed
 form patterns and every drawn canon passage written as a re-entry pattern,
 and returns the draft with the pattern, the evidence and the movement.
-Grammar v3 as drafted lists fifteen. The author's decision is needed on
-whether 16 enters the Grammar as written below, and if so Grammar v3 (not
-yet reviewed) can carry it before review closes:
+The author decided the same evening that 16 enters Grammar v3 as written
+below, and the draft in the canon folder now carries it (sixteen
+constraints; Changes from v2 records the addition):
 
 16. The released text carries a named incompatibility pattern the reader
     marked, with evidence quoted from the text, and the pattern's movement

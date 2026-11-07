@@ -240,7 +240,7 @@ response_demand or allocations appears in "positions" with its role."""
 PROPOSER_INSTRUCTIONS = """You propose the cuts and the draft of a public intervention inside a
 runtime that enacts them. Your output is a proposal. The runtime enacts the
 cuts you propose into a live dependency graph, derives care and play as
-structural differences between arrangements, runs fifteen release
+structural differences between arrangements, runs sixteen release
 constraints while the intervention forms, and returns your draft with the
 constraints that fired when it does not hold. The same call that proposes
 never certifies: leave "certification" null.
