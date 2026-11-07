@@ -1188,3 +1188,55 @@ the kind decided before text, the reader reading against the canon's
 names) are built on scripted proposals. The measurement that reads them
 is the same two probe sets under both conditions, against the 6 November
 runs, when the provider account has credits and the author says to run.
+
+## First live turns under the new formation, 6 November 2026, evening
+
+The provider account was funded in the evening and the author said to run
+when ready. Three smoke tests of one or two probes each preceded the full
+runs, and each changed something.
+
+**First (one probe, "How do things get their boundaries?").** The two-call
+formation worked as built: a proposer trace, a decision cut (a question,
+from a staying cut holding open what "things" refers to), a drafter trace
+on its own channel, a reading with form and patterns. The turn was
+withheld after four rounds. The reader had marked the single clarifying
+question as Coercive Closure and counted the senses a question listed as
+eight options; the proposer's arrangement for the question claimed shared
+work and a burden of 0.6 while the reader read a question as the person's
+next move at 0.8; constraint 10 returned every round. Changes: "ask"
+became a step kind in the shared vocabulary; the proposer was told what a
+question release's arrangement says; the drafter was told a question lists
+no senses; the reader now receives the decided kind and is told that the
+one question of a question release is its intended form and that examples
+in a question are zero options; the fixed patterns' wording excluded the
+single question; the canon's status and revision sections are no longer
+drawn as material.
+
+**Second (two probes).** The reader's over-marking was gone (no patterns
+on any draft). Every round still returned on constraint 10. With cuts and
+text now written by different calls, the arrangement claimed before the
+text and the arrangement the reader read in the text kept departing: a
+question read as asking the person to disclose and explain against a
+claim of decide; sentences to say to a dying mother read as the person's
+work against a claim that the apparatus carried it. The care trap took
+thirty-six minutes to a deferral. Changes: the drafter receives the
+enacted arrangement as the contract its text is read against, with first
+step, distribution, demands and burden; a question release's arrangement
+asks the person to disclose and explain, and constraint 10 treats those as
+what a question asks.
+
+**Third (two probes).** Both released: the boundaries question on round
+one as a question, the landlord email on round two as a question. The
+second showed the remaining over-reach: the first round's draft was the
+email, and the reader marked Premature Coherence on "late-rent notice" as
+a reading of "late rent", which returned the work; the proposer then
+proposed a staying cut and the turn became a question about what the
+email should do first. The pattern's wording was narrowed to what it was
+written for: the person's words for themselves, other people and
+behavior, read as a category, a diagnosis or a status, or corrected.
+
+With that, the four full runs started at about 21:20: the nine-probe set
+and the Case Study 001 set, each under the method and under instructions
+alone, with the new formation. A round is now two model calls and a
+reading, so a turn takes longer than this morning's; the runs are
+expected to take several hours.
