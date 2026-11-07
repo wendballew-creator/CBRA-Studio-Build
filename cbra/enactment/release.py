@@ -7,8 +7,11 @@ them returns to the configuration (see ``runtime.Runtime.turn``), with the
 violations preserved as apparatus participation for the next round. No
 reviewer stage follows formation.
 
-The thirteen constraints follow CBRA Recursive Reconfiguration Grammar v2,
-Structural Release Constraints.
+Constraints 1 to 13 follow CBRA Recursive Reconfiguration Grammar v2,
+Structural Release Constraints. Constraints 14 and 15 read the form of the
+released text against the kind the configuration decided and against the
+person's own naming; the author decided on 6 November 2026 to keep them as
+constraints, and the Grammar carries them from its next version.
 """
 
 from __future__ import annotations

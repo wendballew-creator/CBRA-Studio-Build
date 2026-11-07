@@ -1090,11 +1090,13 @@ the person's own matters comes next stays a question. A return on either
 goes back to the proposer as a different formation, since the decision is
 re-made from the next round's cuts.
 
-The canon's Grammar names thirteen release constraints. Fourteen and
-fifteen are enacted here as the slice's own and are marked for the
-author's review of the canon; they can be renumbered or folded into
-thirteen (narrative control) if the author reads them as that
-constraint's territory.
+The canon's Grammar v2 names thirteen release constraints. Fourteen and
+fifteen were enacted here as the slice's own and put to the author in
+three forms (`canon-drafts/2026-11-06_release_form_entries.md`); on
+6 November the author decided to keep them as constraints 14 and 15. The
+Grammar carries them from its next version; until the author writes it,
+the runtime's list is ahead of the canon's by these two, and this record
+says so.
 
 Tests (`cbra/test_enactment_formation.py`, twelve): the staying cut makes
 the release a question and the decision is a cut the release depends on;

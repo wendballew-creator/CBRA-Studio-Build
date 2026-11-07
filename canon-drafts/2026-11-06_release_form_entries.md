@@ -217,8 +217,10 @@ text.
 
 ## For CBRA Reconfiguration Grammar v2 → v3, Structural Release Constraints
 
-The runtime enacts two constraints beyond the Grammar's thirteen. They are
-offered for the author's decision in three forms.
+The runtime enacts two constraints beyond the Grammar's thirteen. They
+were offered for the author's decision in three forms; on 6 November 2026
+the author chose the first, constraints 14 and 15 as written below. The
+other two forms stay here as the record of what was considered.
 
 **As constraints 14 and 15:**
 
