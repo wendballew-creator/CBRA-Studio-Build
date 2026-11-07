@@ -391,9 +391,10 @@ def c15_architecture_named_unasked(config: Configuration, f: Formation) -> Optio
 # return.
 FORM_PATTERNS: Dict[str, Dict[str, str]] = {
     "Premature Coherence": {
-        "marked_by": "a word the person used in their message is read as its familiar category, or corrected, "
-                     "cautioned about or defined, before their sense of it was asked; absent where the text asks "
-                     "what they meant, and absent where the word is the text's own",
+        "marked_by": "a word the person used for themselves, another person or a behavior is read as a category of "
+                     "person, a diagnosis or a status, or their usage is corrected or cautioned about, before their "
+                     "sense of it was asked; absent where the text asks what they meant, where it restates their "
+                     "request in the same sense, and where the word is the text's own",
         "movement": "a noticing cut marks the term as the person's; a staying cut holds what it could mean; "
                     "the release is one situated question about it"},
     "Moralization": {
