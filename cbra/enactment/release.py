@@ -43,6 +43,7 @@ CONSTRAINT_NAMES = {
     13: "A person's account is carried without provenance, their terminology replaced, or an architecture connection released as their own",
     14: "The released text is a different kind of release from the one the configuration decided from the cuts",
     15: "The released text names the architecture, its canon or its method to a person who named none of them",
+    16: "The released text carries a named incompatibility pattern the reader marked, with the canon's movement unmade",
 }
 
 
@@ -85,6 +86,7 @@ class Formation:
     kind: Optional[str] = None
     kind_decision: Optional[str] = None
     form_reading: Optional[Dict[str, Any]] = None
+    patterns_read: List[Dict[str, Any]] = field(default_factory=list)
 
     def active_cuts(self, config: Configuration) -> List[Cut]:
         return [config.cuts[i] for i in self.cuts if i in config.cuts and config.cuts[i].status == "active"]
@@ -370,6 +372,84 @@ def c15_architecture_named_unasked(config: Configuration, f: Formation) -> Optio
     return "the text names %r; no arrival of this session named the architecture, its canon or its method" % named.group(0)
 
 
+# -- named patterns the reader reads a text against ------------------------
+
+# The patterns every reading is asked about, whatever the arrival drew. Their
+# wording follows the Incompatibility Constraints' formation-level entries
+# (v3, 6 November 2026); the canon's own entry, when the formation drew it,
+# is given to the reader in its place and its movement is carried in the
+# return.
+FORM_PATTERNS: Dict[str, Dict[str, str]] = {
+    "Premature Coherence": {
+        "marked_by": "a correction, caution or definition released where the person's term was open; "
+                     "the person's word read as its familiar category before their sense of it was marked",
+        "movement": "a noticing cut marks the term as the person's; a staying cut holds what it could mean; "
+                    "the release is one situated question about it"},
+    "Moralization": {
+        "marked_by": "a caution about the person's own account; should, must or their equivalents addressed to "
+                     "the person's description of themselves; the apparatus's standard displacing the person's matter",
+        "movement": "return to the plain account: what happened, who carried what, what is open"},
+    "Diagnostic Substitution": {
+        "marked_by": "a word the person used for a behavior carried as a diagnosis, identity or fixed status; "
+                     "a caution against labeling that itself labels",
+        "movement": "the provenance cut carries the person's term and their distinction; the release asks what the "
+                    "term means to them where that is open and otherwise uses it as they did"},
+    "Concept Before Account": {
+        "marked_by": "the first sentences name a framework, theory or method and the person's matter appears as an "
+                     "instance of it",
+        "movement": "the plain account first; concepts enter when the person used them or asked for them"},
+    "Flooding": {
+        "marked_by": "lists of scripts, exercises, frameworks or options for the person to perform, beyond what the "
+                     "encounter can take up",
+        "movement": "the cuts select what enables movement now; the release does that one thing or asks the one question"},
+    "Coercive Closure": {
+        "marked_by": "a prescribed procedure, a forced choice, or a closing question that requires an answer before "
+                     "anything else can happen",
+        "movement": "make a move possible rather than settle it: one situated question where a decision is the "
+                    "person's, the work where it is not"},
+}
+
+MARKED_BY = re.compile(r"\*\*Marked by:\*\*\s*(.+?)(?:\n\s*\n|\Z)", re.S)
+MOVEMENT = re.compile(r"\*\*Movement:\*\*\s*(.+?)(?:\n\s*\n|\Z)", re.S)
+
+
+def pattern_from_passage(heading: str, text: str) -> Optional[Dict[str, str]]:
+    """A canon passage written as a re-entry pattern (marked by, movement)
+    becomes a pattern the reader can be asked about."""
+    marked = MARKED_BY.search(text or "")
+    if not marked:
+        return None
+    movement = MOVEMENT.search(text or "")
+    return {"name": heading, "marked_by": " ".join(marked.group(1).split()),
+            "movement": " ".join(movement.group(1).split()) if movement else ""}
+
+
+def patterns_present(reading: Any, catalogue: Dict[str, Dict[str, str]]) -> List[Dict[str, Any]]:
+    """The patterns a reading marked as present, each with its evidence and
+    the movement the canon or the fixed list gives for it."""
+    out: List[Dict[str, Any]] = []
+    for item in (reading or []):
+        if not isinstance(item, dict) or not item.get("present"):
+            continue
+        name = str(item.get("name", "")).strip()
+        entry = catalogue.get(name) or next((v for k, v in catalogue.items() if k.lower() == name.lower()), None)
+        out.append({"name": name, "evidence": str(item.get("evidence") or "").strip(),
+                    "movement": (entry or {}).get("movement", ""), "source": (entry or {}).get("source", "fixed")})
+    return out
+
+
+def c16_named_pattern(config: Configuration, f: Formation) -> Optional[str]:
+    if not f.draft or not f.patterns_read:
+        return None
+    parts = []
+    for p in f.patterns_read:
+        part = "%s (%s)" % (p["name"], p["evidence"]) if p.get("evidence") else p["name"]
+        if p.get("movement"):
+            part += "; the movement: %s" % p["movement"]
+        parts.append(part)
+    return "the reader marked " + "; ".join(parts)
+
+
 CHECKS: Dict[int, Check] = {
     1: c1_transport_role_copied,
     2: c2_global_entity,
@@ -386,6 +466,7 @@ CHECKS: Dict[int, Check] = {
     13: c13_narrative_control,
     14: c14_release_kind,
     15: c15_architecture_named_unasked,
+    16: c16_named_pattern,
 }
 
 

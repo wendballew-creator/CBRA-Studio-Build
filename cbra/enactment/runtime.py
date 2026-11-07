@@ -21,7 +21,7 @@ from .graph import APPARATUS_MARK, Configuration, Cut, Delta, EnactmentError, Tr
 TransportTraceLike = TransportTrace
 from .material import Corpus
 from .proposer import Proposal, ProposalContext, Proposer
-from .release import Formation, Violation, check_all, decide_kind
+from .release import FORM_PATTERNS, Formation, Violation, check_all, decide_kind, pattern_from_passage, patterns_present
 
 
 @dataclass
@@ -274,9 +274,11 @@ class Runtime:
         cfg = self.config
         context = self._context(turn, 0, [arrival_handle], [])
         conversation = self._plain_conversation(arrival_handle)
+        catalogue = self._reader_patterns(formation)
         try:
             text = self.proposer.plain_answer(context, conversation)
-            fields = self.proposer.arrangement_of(text, context)
+            fields = self.proposer.arrangement_of(text, context, patterns=list(catalogue.values()),
+                                                  message=[cfg.transports[arrival_handle].text])
         except (EnactmentError, KeyError, TypeError, ValueError) as error:
             cfg.unresolved.append({"kind": "baseline_unavailable", "turn": turn, "error": str(error)})
             return None
@@ -292,6 +294,8 @@ class Runtime:
         payload.update({
             "role": "baseline", "turn": turn, "derived_from": trace.handle, "source_text": text,
             "response_demand": _response_demand(fields.get("response_demand")),
+            "form": fields.get("form"),
+            "patterns": patterns_present(fields.get("patterns"), catalogue),
         })
         cut = cfg.enact(
             kind="arrangement", label="arr_baseline_uninstructed:%s" % turn,
@@ -460,6 +464,22 @@ class Runtime:
             "violations": list(context.violations),
         }
 
+    def _reader_patterns(self, formation: Formation) -> Dict[str, Dict[str, str]]:
+        """The named patterns a reading is asked about: the fixed list, and
+        every canon passage the formation drew that is written as a re-entry
+        pattern (marked by, movement), which replaces the fixed entry of the
+        same name so the canon's own wording and movement are what return."""
+        catalogue: Dict[str, Dict[str, str]] = {k: dict(v, name=k, source="fixed") for k, v in FORM_PATTERNS.items()}
+        cfg = self.config
+        for h in formation.material:
+            t = cfg.transports.get(h)
+            if t is None:
+                continue
+            entry = pattern_from_passage(str(t.provenance.get("heading") or ""), t.text)
+            if entry:
+                catalogue[entry["name"]] = dict(entry, source="canon:%s" % t.provenance.get("file"), handle=h)
+        return catalogue
+
     def _read_draft(self, formation: Formation, context: ProposalContext, proposal_handle: str) -> None:
         """Read the draft text blind to the proposal and enact what it
         arranges as a ``read`` arrangement cut, so constraint 10 can compare
@@ -469,7 +489,9 @@ class Runtime:
         text = draft.get("text")
         if not text:
             return
-        reading = self.proposer.read_text(str(text), context)
+        catalogue = self._reader_patterns(formation)
+        reading = self.proposer.read_text(str(text), context, patterns=list(catalogue.values()),
+                                          message=[cfg.transports[h].text for h in formation.arrivals if h in cfg.transports])
         if reading is None:
             cfg.unresolved.append({"kind": "text_unread", "turn": formation.turn, "round": formation.round,
                                    "note": "no reading apparatus; the released text was not compared with the arrangement"})
@@ -481,8 +503,10 @@ class Runtime:
             "consequence_timing", "access", "possibilities_open", "possibilities_closed")}
         payload.update({"role": "read", "turn": formation.turn, "round": formation.round,
                         "response_demand": _response_demand(reading.get("response_demand")),
-                        "form": reading.get("form")})
+                        "form": reading.get("form"),
+                        "patterns": patterns_present(reading.get("patterns"), catalogue)})
         formation.form_reading = dict(reading["form"], source="reader") if isinstance(reading.get("form"), dict) else None
+        formation.patterns_read = list(payload["patterns"])
         cut = cfg.enact(
             kind="arrangement", label="arr_read:%s:r%d" % (formation.turn, formation.round),
             basis=[proposal_handle],

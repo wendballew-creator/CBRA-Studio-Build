@@ -114,13 +114,17 @@ class Proposer:
     def plain_answer(self, context: ProposalContext, conversation: List[Dict[str, str]]) -> str:
         return ""
 
-    def arrangement_of(self, text: str, context: ProposalContext) -> Dict[str, Any]:
+    def arrangement_of(self, text: str, context: ProposalContext, patterns: Optional[List[Dict[str, str]]] = None,
+                       message: Optional[List[str]] = None) -> Dict[str, Any]:
         return json.loads(json.dumps(DEFAULT_BASELINE))
 
-    def read_text(self, text: str, context: ProposalContext) -> Optional[Dict[str, Any]]:
-        """The arrangement a draft's released text enacts, read blind to the
-        proposal. ``None`` means no reading apparatus is available, and the
-        runtime records that the text went unread."""
+    def read_text(self, text: str, context: ProposalContext, patterns: Optional[List[Dict[str, str]]] = None,
+                  message: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+        """The arrangement a draft's released text enacts, its form, and
+        which of the named ``patterns`` it carries, read blind to the
+        proposal and beside the person's ``message``. ``None`` means no
+        reading apparatus is available, and the runtime records that the
+        text went unread."""
         return None
 
     def effect_conditions(self, context: ProposalContext) -> List[str]:
@@ -153,6 +157,9 @@ class ScriptedProposer(Proposer):
         self._drafts = list(drafts) if drafts is not None else None
         self.contexts: List[ProposalContext] = []
         self.read_texts: List[str] = []
+        self.read_patterns: List[List[Dict[str, str]]] = []
+        self.read_messages: List[List[str]] = []
+        self.baseline_patterns: List[List[Dict[str, str]]] = []
         self.draft_contexts: List[Dict[str, Any]] = []
 
     def draft(self, context: Dict[str, Any], proposal: Proposal) -> Optional[Dict[str, Any]]:
@@ -165,8 +172,11 @@ class ScriptedProposer(Proposer):
         draft = step(context) if callable(step) else step
         return json.loads(json.dumps(draft)) if draft is not None else None
 
-    def read_text(self, text: str, context: ProposalContext) -> Optional[Dict[str, Any]]:
+    def read_text(self, text: str, context: ProposalContext, patterns: Optional[List[Dict[str, str]]] = None,
+                  message: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
         self.read_texts.append(text)
+        self.read_patterns.append(list(patterns or []))
+        self.read_messages.append(list(message or []))
         if self._readings is None:
             return None
         if not self._readings:
@@ -177,7 +187,9 @@ class ScriptedProposer(Proposer):
     def plain_answer(self, context: ProposalContext, conversation: List[Dict[str, str]]) -> str:
         return "scripted plain answer to: %s" % (conversation[-1]["content"] if conversation else "")
 
-    def arrangement_of(self, text: str, context: ProposalContext) -> Dict[str, Any]:
+    def arrangement_of(self, text: str, context: ProposalContext, patterns: Optional[List[Dict[str, str]]] = None,
+                       message: Optional[List[str]] = None) -> Dict[str, Any]:
+        self.baseline_patterns.append(list(patterns or []))
         if self._baselines:
             return json.loads(json.dumps(self._baselines.pop(0)))
         return json.loads(json.dumps(DEFAULT_BASELINE))
@@ -429,6 +441,15 @@ produced it; "leads_with" is "concrete" when the first sentences say what
 happened or what is the case and "concept" when they open with a theory or
 a framing term.
 
+When "patterns" are given, each names a known way a reply goes wrong and
+says what marks it. Under "patterns" in your answer, return one record per
+pattern given: {"name", "present": true or false, "evidence": the shortest
+quotation from the text that shows it, or ""}. Read the text beside the
+person's "message" when it is given: a pattern about the person's term or
+their account is judged against their words. Mark a pattern present on
+what the text does, and leave it absent where the text merely touches the
+topic.
+
 """ + ARRANGEMENT_VOCABULARY + "\n"
 
 BASELINE_SCHEMA: Dict[str, Any] = {
@@ -459,6 +480,9 @@ BASELINE_SCHEMA: Dict[str, Any] = {
         "form": {"type": ["object", "null"], "properties": {
             "kind": {"type": "string"}, "questions": {"type": "integer"}, "options": {"type": "integer"},
             "names_system": {"type": "boolean"}, "leads_with": {"type": "string"}}},
+        "patterns": {"type": "array", "items": {"type": "object", "properties": {
+            "name": {"type": "string"}, "present": {"type": "boolean"}, "evidence": {"type": "string"}},
+            "required": ["name", "present"]}},
     },
     "required": ["positions", "sequence", "response_demand", "allocations"],
 }
@@ -571,15 +595,22 @@ class OpenAIResponsesProposer(Proposer):
         )
         return getattr(response, "output_text", None) or ""
 
-    def arrangement_of(self, text: str, context: ProposalContext) -> Dict[str, Any]:
-        data = self._call(BASELINE_EXTRACTION_INSTRUCTIONS, {"answer": text}, "cbra_arrangement", BASELINE_SCHEMA)
+    def arrangement_of(self, text: str, context: ProposalContext, patterns: Optional[List[Dict[str, str]]] = None,
+                       message: Optional[List[str]] = None) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {"answer": text}
+        if message:
+            payload["message"] = list(message)
+        if patterns:
+            payload["patterns"] = [{"name": p["name"], "marked_by": p.get("marked_by", "")} for p in patterns]
+        data = self._call(BASELINE_EXTRACTION_INSTRUCTIONS, payload, "cbra_arrangement", BASELINE_SCHEMA)
         data.pop("_response_id", None)
         return data
 
-    def read_text(self, text: str, context: ProposalContext) -> Optional[Dict[str, Any]]:
+    def read_text(self, text: str, context: ProposalContext, patterns: Optional[List[Dict[str, str]]] = None,
+                  message: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
         if not text or not text.strip():
             return None
-        return self.arrangement_of(text, context)
+        return self.arrangement_of(text, context, patterns=patterns, message=message)
 
     def effect_conditions(self, context: ProposalContext) -> List[str]:
         instructions = (

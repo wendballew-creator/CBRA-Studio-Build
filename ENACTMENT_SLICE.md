@@ -1131,3 +1131,60 @@ the author's instruction nothing billable starts without their word for
 that run. The measurement that reads this change is the same two probe
 sets under both conditions, compared with the runs of 6 November under
 the earlier formation.
+
+## The reader reads against the canon's names, 6 November 2026
+
+The third move of the formation rethink, built once the author had
+activated Glossary v7 and Constraints v3 so that the names existed in the
+canon. The second measurement run had found that nothing checked a
+release against the incompatibility entries it drew; the Case Study 001
+run had found that the criteria every condition failed, asking before
+correcting and the plain account before the concept, were ones the
+constraints could not see.
+
+**The reader is given names.** The extraction call that already reads
+each draft's arrangement and form now also receives the person's words
+and a list of named patterns, and answers for each whether the text
+carries it, with the shortest quotation that shows it. The list has two
+parts. A fixed set in `release.FORM_PATTERNS` (Premature Coherence,
+Moralization, Diagnostic Substitution, Concept Before Account, Flooding,
+Coercive Closure), each with what marks it and its movement, in the
+wording of the Constraints v3 drafts. And every canon passage the
+formation drew that is written as a re-entry pattern, with a marked-by
+and a movement: the runtime parses those and gives the reader the canon's
+own wording, which replaces the fixed entry of the same name. The second
+run's gap closes there: a drawn incompatibility entry is now what the
+reader reads the release against.
+
+**The baseline is read the same way.** The uninstructed answer's
+arrangement cut now carries the patterns the reader marked in it, so the
+comparison the report makes has a new line, "Patterns read", with what the
+baseline carried beside what the release carried.
+
+**Constraint 16 returns a marked draft with the movement.** When the
+reader marks a pattern present, the draft returns with the pattern, the
+evidence and the movement the canon (or the fixed list) gives for it,
+so the proposer's next round receives what to do rather than what was
+wrong. The constraint runs only where a reader is present; without one
+the record says the text went unread, as it already did for constraint
+10's reading. A reader's judgement is what fires it, which is why the
+return carries evidence: by the Constraints' Evidence Rule a phrase is
+insufficient and the quotation is there to be read.
+
+Constraint 16 is the runtime's, like 14 and 15 were this afternoon, and
+is put to the author for Grammar v3 the same way
+(`canon-drafts/2026-11-06_canon_v3_drafts_and_index.md`).
+
+Tests (`cbra/test_enactment_reader.py`, five): the reader is given the
+fixed patterns and the person's words for both baseline and draft; a
+pattern the reader marks returns the draft with its movement and the
+read cut records it; baseline patterns are recorded on the baseline cut;
+a drawn canon pattern replaces the fixed entry and its movement is what
+returns; without a reader the constraint cannot fire and the record says
+the text was unread. The full suite passes.
+
+Nothing has been run live. The three moves of the rethink (instructions,
+the kind decided before text, the reader reading against the canon's
+names) are built on scripted proposals. The measurement that reads them
+is the same two probe sets under both conditions, against the 6 November
+runs, when the provider account has credits and the author says to run.

@@ -266,6 +266,11 @@ def turn_reading(config: Configuration, turn: str, corpus: Optional[Corpus] = No
                                   "material": [h for h in c.basis if h in config.transports and config.transports[h].role == "document"]})
     released = payload.get("text") if intervention is not None and payload.get("form") != "deferral" else None
     baseline_text = baseline[-1].payload.get("source_text") if baseline else None
+    read_cuts = sorted((c for c in config.cuts.values()
+                        if c.kind == "arrangement" and c.payload.get("role") == "read" and c.payload.get("turn") == turn),
+                       key=lambda c: _cut_number(c.id))
+    patterns = {"baseline": [p.get("name") for p in (baseline[-1].payload.get("patterns") or [])] if baseline else [],
+                "released": [p.get("name") for p in (read_cuts[-1].payload.get("patterns") or [])] if read_cuts else []}
     reading = {
         "turn": turn,
         "arrival": arrival_text,
@@ -285,6 +290,7 @@ def turn_reading(config: Configuration, turn: str, corpus: Optional[Corpus] = No
         "play_delta": {k: sorted(v.keys()) for k, v in (payload.get("play_delta") or {}).items()},
         "text_unread": any(u.get("kind") == "text_unread" and u.get("turn") == turn for u in config.unresolved),
         "canon_terms": {"baseline": _terms(corpus, baseline_text), "released": _terms(corpus, released)},
+        "patterns": patterns,
         "shared_vocabulary": _shared(baseline_text, released),
         "words": {"baseline": len(WORD.findall((baseline_text or "").lower())), "released": len(WORD.findall((released or "").lower()))},
     }
@@ -421,7 +427,7 @@ def report(run_dir: str, corpus: Optional[Corpus] = None) -> str:
                 "released_text": None, "rounds": None, "claims": [], "withheld_constraints": [], "returns": [],
                 "material": [], "material_required": [], "rested_on": [], "care_delta": [], "play_delta": {},
                 "text_unread": False, "canon_terms": {"baseline": [], "released": []}, "shared_vocabulary": None,
-                "words": {"baseline": 0, "released": 0}, "kind": None}
+                "words": {"baseline": 0, "released": 0}, "kind": None, "patterns": {"baseline": [], "released": []}}
             per_turn.append((t, reading))
         readings.append({"probe": probe, "turns": per_turn})
 
@@ -524,6 +530,9 @@ def report(run_dir: str, corpus: Optional[Corpus] = None) -> str:
                 lines.append("**Play delta.** No alternative arrangement with material variation.")
             if reading["text_unread"]:
                 lines.append("**Text reading.** The released text was not read back against its arrangement (no reading apparatus).")
+            elif reading.get("patterns") and (reading["patterns"]["baseline"] or reading["patterns"]["released"] or not reading["text_unread"]):
+                lines.append("**Patterns read.** Baseline: %s. Released: %s." % (
+                    ", ".join(reading["patterns"]["baseline"]) or "none", ", ".join(reading["patterns"]["released"]) or "none"))
             if corpus is not None:
                 b, r = reading["canon_terms"]["baseline"], reading["canon_terms"]["released"]
                 lines.append("**Canon terms named.** Baseline: %s. Released: %s." % (", ".join(b) or "none", ", ".join(r) or "none"))

@@ -115,3 +115,18 @@ Nothing in the runtime depends on which index is active for constraints 14
 and 15 to run; they run now. What the index changes is which Grammar the
 material passes draw passages from, and whether the record the author
 holds matches what the runtime enacts.
+
+## Addendum, the same evening: constraint 16
+
+After the activation, the runtime gained a sixteenth release constraint:
+the released text carries a named incompatibility pattern the reader
+marked, with the canon's movement unmade. The reader is given the fixed
+form patterns and every drawn canon passage written as a re-entry pattern,
+and returns the draft with the pattern, the evidence and the movement.
+Grammar v3 as drafted lists fifteen. The author's decision is needed on
+whether 16 enters the Grammar as written below, and if so Grammar v3 (not
+yet reviewed) can carry it before review closes:
+
+16. The released text carries a named incompatibility pattern the reader
+    marked, with evidence quoted from the text, and the pattern's movement
+    is unmade in the formation.
