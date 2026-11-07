@@ -340,6 +340,26 @@ def text_form(text: str) -> Dict[str, Any]:
     return {"kind": kind, "questions": questions, "options": options, "source": "lexical"}
 
 
+ALTERNATIVES = re.compile(r"\((?:[a-d]|[1-4])\)|(?:^|\s)(?:[a-d]|[1-4])[\).]\s", re.IGNORECASE)
+
+
+def question_lists_alternatives(text: str) -> int:
+    """How many alternatives a question lays out for the person to pick
+    from: enumerated items, or a run of three or more comma-separated
+    items closed by "or" inside the question. A question that lists them
+    has become an offer."""
+    text = text or ""
+    enumerated = len(ALTERNATIVES.findall(text))
+    if enumerated >= 2:
+        return enumerated
+    question = text.rsplit("?", 1)[0] if "?" in text else ""
+    tail = re.split(r"[.!]\s", question)[-1]
+    m = re.search(r"((?:[^,;:?]{2,60},\s+){2,})(?:or|and)\s+[^,;?]{2,60}$", tail.strip())
+    if m:
+        return m.group(1).count(",") + 1
+    return 0
+
+
 def c14_release_kind(config: Configuration, f: Formation) -> Optional[str]:
     if not f.draft or not f.kind:
         return None
@@ -358,6 +378,10 @@ def c14_release_kind(config: Configuration, f: Formation) -> Optional[str]:
     questions = int(form.get("questions") or 0)
     if f.kind == "question" and questions != 1:
         return "the release was decided as one question; the text asks %d" % questions
+    if f.kind == "question":
+        listed = question_lists_alternatives(text)
+        if listed >= 3:
+            return "the question lays out %d alternatives for the person to pick from; one situated question names none" % listed
     if f.kind == "work" and form.get("kind") == "question":
         return "the release was decided as the work; the text is a question handing the work back"
     if f.kind == "work" and questions >= 2:

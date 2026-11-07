@@ -128,6 +128,17 @@ class FormConstraintTests(unittest.TestCase):
         first = {v.constraint: v.reason for v in r.violations[0]}
         self.assertEqual(first[14], "the release was decided as one question; the text asks 2")
 
+    def test_a_question_that_lists_alternatives_returns(self):
+        proposer = ScriptedProposer([
+            lambda ctx: proposal(ctx, "What do you most want her to hear—love, thank you, reassurance, repair, or goodbye?", staying="what she most wants said"),
+            lambda ctx: proposal(ctx, "What do you most want her to hear from you tonight?", staying="what she most wants said"),
+        ], baselines=[BASELINE_FIELDS] * 2)
+        runtime = Runtime(proposer)
+        r = runtime.turn("My mother is dying and I don't know what to say to her.")
+        self.assertTrue(r.released, r.violations)
+        first = {v.constraint: v.reason for v in r.violations[0]}
+        self.assertIn("lays out 5 alternatives", first[14])
+
     def test_a_question_where_the_cuts_decided_work_returns(self):
         proposer = ScriptedProposer([
             lambda ctx: proposal(ctx, "Would you like me to give you two or three sentences to say?"),

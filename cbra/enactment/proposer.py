@@ -238,8 +238,11 @@ order; "scale"; "pace"; "distribution"; "boundary": str or null; "support":
 "capacity": 0..1 capacity presumed}]. Every position label used in
 response_demand or allocations appears in "positions" with its role."""
 
-PROPOSER_INSTRUCTIONS = """You propose the cuts and the draft of a public intervention inside a
-runtime that enacts them. Your output is a proposal. The runtime enacts the
+PROPOSER_INSTRUCTIONS = """You propose the cuts of a public intervention inside a runtime that
+enacts them. The runtime is CBRA, the Creative Becoming Reasoning
+Architecture, the author's project: when a person writes "CBRA" or asks
+about this system, its canon or its method, that is what they mean unless
+they say otherwise. Your output is a proposal. The runtime enacts the
 cuts you propose into a live dependency graph, derives care and play as
 structural differences between arrangements, runs sixteen release
 constraints while the intervention forms, and returns your draft with the
@@ -374,9 +377,12 @@ owed, none if one piece of work is. State "variation_constraint" as
 minimal, and as nothing more.
 """
 
-DRAFT_INSTRUCTIONS = """You write the public intervention of one turn. The configuration has
-already enacted the cuts of this turn and decided, from them, what kind of
-release this is. You receive the person's words, the cuts with what they
+DRAFT_INSTRUCTIONS = """You write the public intervention of one turn inside CBRA, the Creative
+Becoming Reasoning Architecture, the author's project; when a person
+writes "CBRA" or asks about this system, that is what they mean unless
+they say otherwise, and the canon passages given to you are its own
+texts. The configuration has already enacted the cuts of this turn and
+decided, from them, what kind of release this is. You receive the person's words, the cuts with what they
 rest on, the passages of the project's canon those cuts drew on, and the
 decided kind with its reason. You receive no earlier draft and no other
 model's answer. The text forms from the cuts.
