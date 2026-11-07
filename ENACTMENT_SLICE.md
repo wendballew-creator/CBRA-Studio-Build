@@ -1097,8 +1097,11 @@ three forms (`canon-drafts/2026-11-06_release_form_entries.md`); on
 draft Grammar v3 carrying them, with a Kind of Release subsection and a
 Changes from v2 record, was written the same day into the author's canon
 folder beside v2, where it stays unread until the author lists it in a
-corpus index (`canon-drafts/2026-11-06_grammar_v3_and_index.md` gives the
-proposed index). Until then the runtime's list is ahead of the canon's by
+corpus index. Glossary v7 and Incompatibility Constraints v3, carrying the
+nine terms and seven patterns drafted for the form of a release, were
+written there the same way the same evening
+(`canon-drafts/2026-11-06_grammar_v3_and_index.md` gives the proposed
+index that would activate all three). Until then the runtime's list is ahead of the canon's by
 these two, and this record says so.
 
 Tests (`cbra/test_enactment_formation.py`, twelve): the staying cut makes
