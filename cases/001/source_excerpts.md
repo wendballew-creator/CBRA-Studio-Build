@@ -1,0 +1,113 @@
+# CBRA Case Study 001: source excerpts
+
+Source dossier, selected verbatim excerpts, 6 November 2026. Converted from the archive's Word document; two personal names replaced with bracketed placeholders (see README.md).
+
+## Source integrity
+
+This is a curated set of verbatim passages copied from the SRT supplied in the originating chat. It is not a complete transcript, and the segments are not contiguous. Ellipses were not inserted into the quotations. Source SRT timestamps appear highly compressed (about 24 seconds for an extended conversation) and must not be interpreted as actual elapsed speaking time. The archive does not include a raw recording, unshown portions of an earlier conversation, or hidden model reasoning.
+
+Each passage below is traceable to the supplied SRT by displayed start timestamp and speaker. Analyst tags are metadata, not part of the original dialogue.
+
+## Excerpts
+
+**01 · 00:00:11.400 · user**
+
+> Well, First of all, you've said some words in this conversation that don't quite match, right? I don't beli- you know, like Um earlier you said a a system of transformation. Creative becoming is a replacement? Is a posthumanist conc- concept of the humanist concept of transformation? And diffraction is, you know, posthumanist Um Replacement for the word Uh reflection
+
+*Analyst tag: conceptual vocabulary*
+
+**02 · 00:00:12.000 · assistant**
+
+> You're right to press that, and I'm grateful you caught it. Transformation carries a humanist assumption that Creative Becoming doesn't. Transformation implies a stable something that changes. Becoming is constitutive, ongoing, relational. And likewise, diffraction isn't just a synonym for reflection. It asks how differences get produced through encounters.
+
+*Analyst tag: conceptual vocabulary*
+
+**03 · 00:00:12.600 · assistant**
+
+> With [a friend], your account of carrying continuation met her sadness and something got produced. Responsibility and lived experience got tangled. In the intergenerational trauma example, harm is named and the categories can stay fixed.
+
+*Analyst tag: relational continuity*
+
+**04 · 00:00:12.800 · user**
+
+> I become very authoritarian and binary when I'm Um, What you have described as sharp
+
+*Analyst tag: situated behavior*
+
+**05 · 00:00:13.200 · assistant**
+
+> Trauma can narrow attention and make interpretations more rigid, but that doesn't automatically make someone narcissistic.
+
+*Analyst tag: diagnostic correction*
+
+**06 · 00:00:13.600 · user**
+
+> I just said in those moments, people Um display narcissistic behaviors, right? That's part of my Uh my my thinking is Um, Like we categorize people with these these descriptions, these Um diagnosis, and we have judgment around that, and we see them as Um .fixed statuses.
+
+*Analyst tag: situated behavior*
+
+**07 · 00:00:14.200 · assistant**
+
+> You said behaviors people move into and out of, and I treated it as a fixed identity or diagnosis. That's exactly the kind of drift we're talking about.
+
+*Analyst tag: repair*
+
+**08 · 00:00:15.800 · user**
+
+> your impulse to correct, instead of saying, oh, what did you me-, what did you mean by narcissistic? You know, instead of approaching it with questions and curiosity, you co- Corrected me
+
+*Analyst tag: correction vs inquiry*
+
+**09 · 00:00:16.000 · assistant**
+
+> Narcissistic caught my attention, and instead of staying with how you were using it, I assumed I understood enough to intervene. You experienced that as a misreading and had to defend what you'd said instead of continuing the inquiry.
+
+*Analyst tag: correction vs inquiry*
+
+**10 · 00:00:17.400 · user**
+
+> So even that last, you bringing it back to me, you bring it back in a binary way
+
+*Analyst tag: binary drift*
+
+**11 · 00:00:18.000 · user**
+
+> So now you're drifting all the way back to like um [a colleague]'s writing type of writing and stuff of like backflipping and stuff like that by the end of the report. I still don't fucking know what she was saying happened
+
+*Analyst tag: abstraction without account*
+
+**12 · 00:00:18.200 · assistant**
+
+> I slid from correction into abstraction until nothing concrete was left. That's the pattern you're naming in that writing: if we finish and we can't say what happened or why it mattered, something got lost.
+
+*Analyst tag: abstraction without account*
+
+**13 · 00:00:19.000 · user**
+
+> academia says, oh, this is the problem, but then they stop they don't look for a solution. And so creative becoming is not a one size fit all, but a framework around, okay, how do we engage with folks to find um collectively discover what's going on and then figure out what to do about it
+
+*Analyst tag: collective action*
+
+**14 · 00:00:19.600 · user**
+
+> That is my sense of it. And that is what I'm trying to make the app the apparatus I'm trying to build do is is um, that's the change I want uh to be able to contribute to the industry
+
+*Analyst tag: design objective*
+
+**15 · 00:00:19.800 · assistant**
+
+> One concrete step might be to use today's transcript as a case study for CBRA. Instances of noticing, correction, defensiveness, abstraction, missed experimentation.
+
+*Analyst tag: case study proposal*
+
+**16 · 00:00:22.800 · assistant**
+
+> For a Creative Becoming and CBRA case study, the strongest export isn't just a transcript or a summary, but a research archive that preserves the sequence of encounters.
+
+*Analyst tag: archive design*
+
+**17 · 00:00:24.000 · assistant**
+
+> I can create CBRA Case Study 001: Noticing, Correction, and Diffractive Inquiry as a research archive.
+
+*Analyst tag: archive commitment*
