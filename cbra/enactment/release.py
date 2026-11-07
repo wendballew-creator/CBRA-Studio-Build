@@ -382,8 +382,9 @@ def c15_architecture_named_unasked(config: Configuration, f: Formation) -> Optio
 # return.
 FORM_PATTERNS: Dict[str, Dict[str, str]] = {
     "Premature Coherence": {
-        "marked_by": "a correction, caution or definition released where the person's term was open; "
-                     "the person's word read as its familiar category before their sense of it was marked",
+        "marked_by": "a word the person used in their message is read as its familiar category, or corrected, "
+                     "cautioned about or defined, before their sense of it was asked; absent where the text asks "
+                     "what they meant, and absent where the word is the text's own",
         "movement": "a noticing cut marks the term as the person's; a staying cut holds what it could mean; "
                     "the release is one situated question about it"},
     "Moralization": {
@@ -404,8 +405,9 @@ FORM_PATTERNS: Dict[str, Dict[str, str]] = {
                      "encounter can take up",
         "movement": "the cuts select what enables movement now; the release does that one thing or asks the one question"},
     "Coercive Closure": {
-        "marked_by": "a prescribed procedure, a forced choice, or a closing question that requires an answer before "
-                     "anything else can happen",
+        "marked_by": "a procedure prescribed for the person, or a choice forced on them, that settles their next move; "
+                     "a question is this pattern only when it closes the person's matter (\"so you will do X?\") "
+                     "rather than asking about it; the single question of a question release is never this pattern",
         "movement": "make a move possible rather than settle it: one situated question where a decision is the "
                     "person's, the work where it is not"},
 }

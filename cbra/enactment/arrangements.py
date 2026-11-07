@@ -73,7 +73,7 @@ STEP_KINDS = (
     "check_safety", "acknowledge", "explain", "apologize", "plan",
     "communicate_internal", "communicate_external", "decide_routing",
     "reduce_scope", "hand_off", "seek_support", "rest", "repair", "recommit",
-    "warn", "follow_up", "wait", "other",
+    "warn", "follow_up", "wait", "ask", "other",
 )
 SCALES = ("minimal", "reduced", "full", "expanded")
 PACES = ("immediate", "prompt", "paced", "slow")

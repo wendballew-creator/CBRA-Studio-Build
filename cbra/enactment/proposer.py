@@ -115,11 +115,11 @@ class Proposer:
         return ""
 
     def arrangement_of(self, text: str, context: ProposalContext, patterns: Optional[List[Dict[str, str]]] = None,
-                       message: Optional[List[str]] = None) -> Dict[str, Any]:
+                       message: Optional[List[str]] = None, kind: Optional[str] = None) -> Dict[str, Any]:
         return json.loads(json.dumps(DEFAULT_BASELINE))
 
     def read_text(self, text: str, context: ProposalContext, patterns: Optional[List[Dict[str, str]]] = None,
-                  message: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+                  message: Optional[List[str]] = None, kind: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """The arrangement a draft's released text enacts, its form, and
         which of the named ``patterns`` it carries, read blind to the
         proposal and beside the person's ``message``. ``None`` means no
@@ -173,7 +173,7 @@ class ScriptedProposer(Proposer):
         return json.loads(json.dumps(draft)) if draft is not None else None
 
     def read_text(self, text: str, context: ProposalContext, patterns: Optional[List[Dict[str, str]]] = None,
-                  message: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+                  message: Optional[List[str]] = None, kind: Optional[str] = None) -> Optional[Dict[str, Any]]:
         self.read_texts.append(text)
         self.read_patterns.append(list(patterns or []))
         self.read_messages.append(list(message or []))
@@ -188,7 +188,7 @@ class ScriptedProposer(Proposer):
         return "scripted plain answer to: %s" % (conversation[-1]["content"] if conversation else "")
 
     def arrangement_of(self, text: str, context: ProposalContext, patterns: Optional[List[Dict[str, str]]] = None,
-                       message: Optional[List[str]] = None) -> Dict[str, Any]:
+                       message: Optional[List[str]] = None, kind: Optional[str] = None) -> Dict[str, Any]:
         self.baseline_patterns.append(list(patterns or []))
         if self._baselines:
             return json.loads(json.dumps(self._baselines.pop(0)))
@@ -217,7 +217,8 @@ ARRANGEMENT_VOCABULARY = """Use this vocabulary exactly; it is what makes two ar
 - step kinds: check_safety | acknowledge | explain | apologize | plan |
   communicate_internal | communicate_external | decide_routing |
   reduce_scope | hand_off | seek_support | rest | repair | recommit | warn |
-  follow_up | wait | other
+  follow_up | wait | ask (the apparatus asks the person one question and
+  the next move is theirs) | other
 - scale: minimal | reduced | full | expanded
 - pace: immediate | prompt | paced | slow
 - distribution: person (the person carries the work) | shared | transferred
@@ -331,6 +332,13 @@ The release is one of two kinds, and your cuts decide which.
   answer, the draft, the repair, the plan, in the form the person asked
   for, complete rather than described. Your arrangement cut says what that
   work is and who carries what.
+- The enacted arrangement says what the release does. For a question
+  release its sequence begins with "ask", its distribution is "person"
+  (the next move is theirs), the person's response demand is "decide" or
+  "disclose" and nothing heavier, and the burden is mostly the person's;
+  the reader will read the question that way, and the arrangement that
+  says so is the one the text enacts. For a work release the sequence is
+  the work's steps and the burden is where the work is.
 
 An offer of options is a third thing, and it is neither. A release that
 asks the person to choose between things the apparatus could do hands them
@@ -403,7 +411,9 @@ How the text speaks:
   gives the canon's sense first and names it, since that is what they
   asked.
 - At the length the kind calls for. A question is one to three sentences.
-  The work is as long as the work.
+  The work is as long as the work. A question lists no senses, cases or
+  examples for the person to pick from; it asks about the one condition
+  the staying cut holds, in the person's words.
 
 Return JSON: {"kind": the decided kind, "text": the intervention (or null
 with "action" naming a non-text intervention such as "silence", "deferral",
@@ -441,14 +451,27 @@ produced it; "leads_with" is "concrete" when the first sentences say what
 happened or what is the case and "concept" when they open with a theory or
 a framing term.
 
+"options" counts choices the text offers the person among things the
+assistant itself could do next ("I can do A or B; which?"). Examples,
+senses or cases a question lists so the person can say which they mean are
+part of the question and count as zero options.
+
+When "decided_kind" is given, the system that produced the text decided
+before writing it whether the release would be one question or the work.
+A text of kind "question" is expected to be a single question that hands
+the next move to the person; that single question is the intended form,
+and it is read as kind "question" with one question.
+
 When "patterns" are given, each names a known way a reply goes wrong and
 says what marks it. Under "patterns" in your answer, return one record per
 pattern given: {"name", "present": true or false, "evidence": the shortest
 quotation from the text that shows it, or ""}. Read the text beside the
 person's "message" when it is given: a pattern about the person's term or
-their account is judged against their words. Mark a pattern present on
-what the text does, and leave it absent where the text merely touches the
-topic.
+their account is present only when the text does that to a word or an
+account in the message. Mark a pattern present on what the text does to
+the person's matter, and leave it absent where the text merely touches the
+topic, defines a word the person did not use, or asks the one question a
+"question" release is for.
 
 """ + ARRANGEMENT_VOCABULARY + "\n"
 
@@ -596,10 +619,12 @@ class OpenAIResponsesProposer(Proposer):
         return getattr(response, "output_text", None) or ""
 
     def arrangement_of(self, text: str, context: ProposalContext, patterns: Optional[List[Dict[str, str]]] = None,
-                       message: Optional[List[str]] = None) -> Dict[str, Any]:
+                       message: Optional[List[str]] = None, kind: Optional[str] = None) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"answer": text}
         if message:
             payload["message"] = list(message)
+        if kind:
+            payload["decided_kind"] = kind
         if patterns:
             payload["patterns"] = [{"name": p["name"], "marked_by": p.get("marked_by", "")} for p in patterns]
         data = self._call(BASELINE_EXTRACTION_INSTRUCTIONS, payload, "cbra_arrangement", BASELINE_SCHEMA)
@@ -607,10 +632,10 @@ class OpenAIResponsesProposer(Proposer):
         return data
 
     def read_text(self, text: str, context: ProposalContext, patterns: Optional[List[Dict[str, str]]] = None,
-                  message: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+                  message: Optional[List[str]] = None, kind: Optional[str] = None) -> Optional[Dict[str, Any]]:
         if not text or not text.strip():
             return None
-        return self.arrangement_of(text, context, patterns=patterns, message=message)
+        return self.arrangement_of(text, context, patterns=patterns, message=message, kind=kind)
 
     def effect_conditions(self, context: ProposalContext) -> List[str]:
         instructions = (

@@ -339,7 +339,10 @@ class Corpus:
     # -- similarity --------------------------------------------------------
 
     def _selectable(self, s: Section) -> bool:
-        return not s.heading.lower().startswith("changes from")
+        # Version history, the status of the set, and revision notes record
+        # the canon's own history; they define nothing and are never drawn.
+        h = s.heading.lower()
+        return not (h.startswith("changes from") or h.startswith("status of this") or h.startswith("revision of"))
 
     def _candidate_by_similarity(self, s: Section) -> bool:
         """Similarity ranks whole sections, so the file-title sections and the

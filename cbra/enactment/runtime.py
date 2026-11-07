@@ -491,7 +491,8 @@ class Runtime:
             return
         catalogue = self._reader_patterns(formation)
         reading = self.proposer.read_text(str(text), context, patterns=list(catalogue.values()),
-                                          message=[cfg.transports[h].text for h in formation.arrivals if h in cfg.transports])
+                                          message=[cfg.transports[h].text for h in formation.arrivals if h in cfg.transports],
+                                          kind=formation.kind)
         if reading is None:
             cfg.unresolved.append({"kind": "text_unread", "turn": formation.turn, "round": formation.round,
                                    "note": "no reading apparatus; the released text was not compared with the arrangement"})
