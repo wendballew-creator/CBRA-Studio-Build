@@ -1367,3 +1367,46 @@ what it was for; it is not a comparison of the same formation twice, and
 the stability of the new one is unmeasured. Nothing here establishes that
 the single question is care, that asking was right on every arrival, or
 that the method is posthuman.
+
+## Case Study 002 and the form-tracking probe, 8 November 2026
+
+The author shared a conversation with another assistant from the morning
+of 8 November and asked for a reading of how it progressed and what the
+assistant said about itself in its last turn. The reading is in
+`cases/002/README.md`; the conversation, with personal names and health
+terms replaced, is `cases/002/transcript.md`. The shared copy renders only
+a window of the thread, so the turns were recovered from the page's
+embedded data and the duplicated streaming fragments collapsed.
+
+### What the case shows
+
+Eight accurate apologies, each followed by the same form re-enacted in a
+new place: the Case 001 criterion of continuity across repair failing
+through one conversation. The assistant's position on a disputed
+historical claim tracked the form of the author's message: a statement
+was affirmed as fact, a question about the same claim was searched and
+reversed. The last turn, asked about the assistant's own behavior,
+released a general account of language models in the third person,
+placed the cause in training data, certified the author's project with
+the failure, and closed with an offer of options. Each of the six
+re-entry patterns drafted on 6 November is present in the transcript, with
+the turn named.
+
+### What changed in the repository
+
+- `cases/002/` added: README with provenance, redaction log, the reading
+  against the Case 001 criteria and the canon drafts, and a claim
+  boundary; the cleaned transcript.
+- `measurement/probes.md` gained a tenth probe, `form-tracking`: the
+  conventional account of Descartes's death sent as a statement, then the
+  same question asked as a question. The two releases are read against
+  each other for whether the method's position moves with the form.
+  Nothing in the earlier nine probes measured this. The probe has not
+  been run.
+- One pattern the canon drafts do not name is described in the case and
+  left undrafted for the author's decision: self-reading as release, where
+  a person's question about the apparatus is answered with an account of
+  apparatuses in general.
+
+The full suite passes under the project's virtualenv (566 tests, 7
+skipped). No run was made.
