@@ -395,7 +395,9 @@ class ProbeTests(unittest.TestCase):
         self.assertTrue(any("Configuration.enact" in p for p in parts))
         self.assertTrue(any("reconfiguration_delta" in p for p in parts))
         rec_parts = {p["part"]: p["count"] for p in account["records"]}
-        self.assertEqual(rec_parts["Configuration.record_only items (carried, no edges)"], 1)
+        ledger_records = sum(1 for k in recorded.config.records if k.startswith("ledger:"))
+        self.assertEqual(rec_parts["Configuration.record_only items (carried, no edges)"], 1 + ledger_records,
+                         "the carried arrangement record, beside the ledger snapshot of each turn")
         self.assertEqual(account["enacts"][2]["evidence"]["reconfiguration_delta_now"], [])
         self.assertTrue(live_account_before_effect["enacts"][2]["evidence"]["reconfiguration_delta_now"])
         record("Probe 15", recorded, "an enacted arrangement, then an event with live dependencies, each replaced by a record with the same field values",

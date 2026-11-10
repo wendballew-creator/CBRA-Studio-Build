@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from .arrangements import reconfiguration_delta, variation_delta
+from .ledger import account as ledger_account
 from .graph import APPARATUS_MARK, Configuration, Cut, Delta, EnactmentError, TransportTrace
 
 TransportTraceLike = TransportTrace
@@ -181,6 +182,7 @@ class Runtime:
             baseline=baseline,
             returned_cuts=returned,
             material=passages,
+            ledger=ledger_account(cfg),
         )
 
     # -- the canon as material ---------------------------------------------
@@ -666,6 +668,15 @@ class Runtime:
                                "constraints": [v.constraint for v in violations]})
         return deferral
 
+    def _post_ledger(self, turn: str) -> None:
+        """Carry the account of work through this turn as a record (no edges;
+        evidence) and emit it on the observer seam. The live account is
+        derived from the cuts on request; this is the snapshot the reports
+        and the page read."""
+        snapshot = ledger_account(self.config, through=turn)
+        self.config.record_only(snapshot, key="ledger:%s" % turn)
+        self._notify({"event": "ledger", "turn": turn, "account": snapshot})
+
     def turn(self, text: str, role: str = "user_message", channel: Optional[str] = None,
              transformations: Sequence[str] = ()) -> TurnResult:
         cfg = self.config
@@ -706,6 +717,7 @@ class Runtime:
         if violations:
             try:
                 deferral = self._defer(formation, violations, arrival)
+                self._post_ledger(turn)
             finally:
                 self._save()
             return TurnResult(turn, False, None, deferral.id, formation.round, formation.history,
@@ -749,6 +761,7 @@ class Runtime:
                 "rounds": formation.round,
             },
         )
+        self._post_ledger(turn)
         self._fact("intervention_released", turn=turn, intervention=intervention.id, rounds=formation.round, form=formation.form)
         self._fact("effects_unobserved", turn=turn, intervention=intervention.id)
         self._save()

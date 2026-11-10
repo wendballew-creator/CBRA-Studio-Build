@@ -33,6 +33,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence
 
 from .graph import Configuration
+from .ledger import describe as describe_ledger
 from .material import Corpus
 from .persistence import JsonStore
 from .probes import code_version
@@ -289,6 +290,7 @@ def turn_reading(config: Configuration, turn: str, corpus: Optional[Corpus] = No
         "reconfiguration_delta": sorted((payload.get("reconfiguration_delta") or payload.get("care_delta") or {}).keys()),
         "variation_delta": {k: sorted(v.keys()) for k, v in (payload.get("variation_delta") or payload.get("play_delta") or {}).items()},
         "text_unread": any(u.get("kind") == "text_unread" and u.get("turn") == turn for u in config.unresolved),
+        "ledger": config.records.get("ledger:%s" % turn),
         "canon_terms": {"baseline": _terms(corpus, baseline_text), "released": _terms(corpus, released)},
         "patterns": patterns,
         "shared_vocabulary": _shared(baseline_text, released),
@@ -525,6 +527,9 @@ def report(run_dir: str, corpus: Optional[Corpus] = None) -> str:
                     "alternative %s varies: %s" % (k, ", ".join(v)) for k, v in reading["variation_delta"].items()))
             else:
                 lines.append("**Variation delta.** No alternative arrangement with material variation.")
+            if reading.get("ledger"):
+                lines.append("")
+                lines.append("**Work ledger through this turn.** " + " ".join(l + "." for l in describe_ledger(reading["ledger"])))
             if reading["text_unread"]:
                 lines.append("**Text reading.** The released text was not read back against its arrangement (no reading apparatus).")
             elif reading.get("patterns") and (reading["patterns"]["baseline"] or reading["patterns"]["released"] or not reading["text_unread"]):

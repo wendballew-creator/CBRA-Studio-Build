@@ -76,6 +76,7 @@ class ProposalContext:
     minimal: bool = False
     returned_cuts: List[Dict[str, Any]] = field(default_factory=list)
     material: List[Dict[str, Any]] = field(default_factory=list)
+    ledger: Optional[Dict[str, Any]] = None
 
     def as_record(self) -> Dict[str, Any]:
         return json.loads(json.dumps(self.__dict__))
@@ -307,6 +308,17 @@ Return JSON with these keys:
   (distribution, sequence, scale, medium, responsibility, rehearsal); when
   it is impossible, set "variation_possible" false and state
   "variation_constraint".
+- "ledger" is the running account of the work this encounter has placed
+  on each position so far, posting by posting: the burden shares the
+  released arrangements set, the burden the reader read in the released
+  texts, the demands the releases made (explain, plan, recommit, repair,
+  disclose ...), the questions asked, the burden a withheld release left.
+  Each posting names the cut that made it. The arrangement you propose
+  answers to this account: a position whose account already holds the
+  explaining, planning and repairing of earlier turns is the position the
+  next arrangement moves work away from, through support, sequence,
+  scale or distribution, and a question asked of someone who has answered
+  several is a cost the account shows.
 - A person's account of their own body, history, or work enters as a
   "provenance" cut with payload {"terminology": [their words], "source":
   handle, "about": body | history | work} ("body" covers sleep, health,

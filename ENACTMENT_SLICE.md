@@ -1552,3 +1552,70 @@ a line that says care was claimed; they print the dimensions on which the
 arrangements differ, and the reader's patterns, among them Empathy–
 Accountability Sequence and Burden Concentration, remain the places where
 the canon's own account of care's failure modes is read against a text.
+
+## The work ledger, 9 November 2026
+
+Chapter 5 of the dissertation holds that declining the work of care
+delegates it, most often to the one already carrying the most. The
+reconfiguration delta measures one release against the uninstructed
+answer to the same arrival; nothing in the record said what an encounter
+had placed on each position by its third turn. This entry gives the
+configuration an account of that work, and names the coding method it
+comes from.
+
+**Ledger accounting.** In double-entry bookkeeping every movement of value
+is posted to an account with the transaction that moved it, so the balance
+can be read back to its postings and each posting to its source. The cuts
+already name the work an intervention places on a position: an enacted
+arrangement sets burden shares and demands; the reader's arrangement
+records what the released text asked of each position; the intervention
+carries its demands; a release decided as a question asks the person to
+disclose and explain; a deferral leaves the next move and its burden with
+the person. `cbra/enactment/ledger.py` reads those cuts as postings:
+
+- `postings(config, turn)` lists every posting in the order the cuts were
+  enacted, each with the decision cut it reads back to, the kind
+  (`arrangement`, `reading`, `release`, `question`, `deferral`,
+  `material`), the position, the burden share or demands, and the
+  instrument that made it (the cut's own `apparatus`). A cut invalidated
+  because its draft returned posted nothing: that release never reached
+  the person. A cut invalidated later by a revision posted what it posted
+  at the time.
+- `account(config, through)` sums the postings per position: burden the
+  enacted arrangements set, burden the reader read, burden left by
+  deferral, demands by kind, questions asked, passages drawn, and the
+  turns that posted. Accounts are keyed by role where an arrangement names
+  one for a position and by the label otherwise; each posting keeps the
+  label the cut used.
+
+The ledger is derived and stored nowhere, like the deltas. After each
+turn, released or withheld, the runtime carries a snapshot of the account
+through that turn as a record (`Configuration.record_only`, key
+`ledger:<turn>`), the kind of record the configuration already keeps for
+evidence that moves nothing, and emits it on the observer seam as a
+`ledger` event.
+
+**What the proposer sees.** Each round's context carries `ledger`, the
+account so far. The instructions say what it is for: the arrangement
+proposed answers to the account, and a position whose account already
+holds the explaining, planning and repairing of earlier turns is the
+position the next arrangement moves work away from. The report prints
+"Work ledger through this turn" under each turn, and the page prints it
+under "what formed this".
+
+**Tests.** Eleven tests in `test_enactment_ledger.py`: postings per
+position with the instrument and the decision cut; accumulation across
+turns and the `through` cut; a returned round posting nothing; a question
+release posting disclose and explain; a deferral posting the burden it
+leaves; the proposer receiving the first turn's account at the second
+turn; the snapshot recorded and emitted per turn; the report line. Full
+suite: 582 tests, 7 skipped, passing under the project's virtualenv. No
+live run was made.
+
+**Claim boundary.** The ledger counts what the cuts say was asked and
+carried; the numbers it sums are the proposer's and the reader's, and the
+account carries their instrument so a later reading can weigh them. It
+does not say whether a position could hold what was posted, and it does
+not say whether a redistribution was care: those are readings made with
+the person's response in them. Whether a proposer that sees the account
+redistributes work in a live encounter is for the next run to show.

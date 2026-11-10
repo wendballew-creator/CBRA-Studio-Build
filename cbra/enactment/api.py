@@ -74,6 +74,7 @@ def history(config: Configuration) -> List[Dict[str, Any]]:
             "response_demand": p.get("response_demand", {}),
             "unmarked": list(cut.unmarked),
             "reopened_reason": cut.invalidation_reason,
+            "ledger": config.records.get("ledger:%s" % turn),
         })
     items.sort(key=lambda i: i["order"])
     return items

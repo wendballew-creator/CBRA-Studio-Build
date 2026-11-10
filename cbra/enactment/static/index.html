@@ -123,6 +123,15 @@
     const pk = Object.keys(item.variation_delta || {});
     if (pk.length) lines.push("Variation: alternative arrangement " + pk.join(", ") + " differs in " + Object.values(item.variation_delta).map(v => v.join(", ")).join("; ") + ".");
     if (item.response_demand) lines.push("Response demand: " + Object.entries(item.response_demand).map(([p, d]) => p + " → " + d.join(", ")).join("; ") + ".");
+    if (item.ledger && item.ledger.positions) lines.push("Work ledger through this turn: " + Object.entries(item.ledger.positions).map(([p, a]) => {
+      const parts = [];
+      if (a.burden_enacted) parts.push("burden set " + a.burden_enacted.toFixed(2));
+      if (a.burden_read) parts.push("read " + a.burden_read.toFixed(2));
+      if (a.burden_deferred) parts.push("left " + a.burden_deferred.toFixed(2) + " by deferral");
+      const demands = Object.entries(a.demands || {}); if (demands.length) parts.push("asked to " + demands.map(([d, n]) => d + (n > 1 ? " ×" + n : "")).join(", "));
+      if (a.questions) parts.push(a.questions + " question" + (a.questions === 1 ? "" : "s"));
+      return p + ": " + (parts.length ? parts.join("; ") : "nothing posted") + " (" + a.turns.length + " turn" + (a.turns.length === 1 ? "" : "s") + ")";
+    }).join(" · ") + ".");
     if (item.reopen_conditions && item.reopen_conditions.length) lines.push("Reopens on: " + item.reopen_conditions.join(", ") + ".");
     if (item.unmarked && item.unmarked.length) lines.push("Left unmarked: " + item.unmarked.join("; ") + ".");
     if (item.material && item.material.length) lines.push("Canon material: " + item.material.map(m => m.file + " › " + m.heading + (m.consequential ? " (names " + (m.terms || []).join(", ") + ")" : (m.drawn_by && m.drawn_by !== "the arrival" ? " (drawn by " + m.drawn_by + ")" : (m.via === "similarity" ? " (similar)" : "")))).join("; ") + ".");
