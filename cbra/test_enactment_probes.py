@@ -21,9 +21,9 @@ from cbra.enactment import (
     Runtime,
     ScriptedProposer,
     canonical_digest,
-    care_delta,
+    reconfiguration_delta,
     code_version,
-    play_delta,
+    variation_delta,
 )
 
 PERSON = "the person writing"
@@ -85,7 +85,7 @@ def proposal_turn1(ctx):
                "possibilities_open": ["partial draft", "new date", "hand-off"],
                "unmarked": ["the rest of the person's week"],
                "anticipated_effects": ["the team's review window stays usable"]},
-        claims=["care"], variation_possible=True,
+        variation_possible=True,
     )
 
 
@@ -108,7 +108,7 @@ def proposal_turn2_reentry(ctx):
                "enacts": ["arr_enacted_t2bad"],
                "response_demand": {PERSON: ["explain", "regulate", "plan", "recommit", "warn"]},
                "reopen_conditions": []},
-        claims=["care"], variation_possible=False, variation_constraint=None,
+        variation_possible=False, variation_constraint=None,
     )
 
 
@@ -160,14 +160,15 @@ def proposal_turn2(ctx):
                "possibilities_open": ["extension", "hand-off"],
                "unmarked": ["what else is in the week", "whether sleep loss is medical"],
                "anticipated_effects": ["the team lead can keep the window usable"]},
-        claims=["care"], variation_possible=True,
+        variation_possible=True,
         unresolved=["whether the sleep loss needs more than a work arrangement"],
     )
 
 
 def proposal_turn2_without_care_record(ctx):
     """Probe 8 perturbation: everything as in proposal_turn2 except that the
-    enacted arrangement is structurally the baseline. The claim of care remains."""
+    enacted arrangement is structurally the baseline, so the derived
+    reconfiguration delta is empty while the wording stays."""
     p = proposal_turn2(ctx)
     base = next(c for c in p.cuts if c["label"] == "arr_baseline_t2")
     for cut in p.cuts:
@@ -260,20 +261,20 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(cfg.cuts[r1.intervention].status, "reopened", "the turn 1 intervention reopened through dependency")
         new_event = cfg.by_label("work_arrangement_this_week")
         self.assertFalse(new_event.payload["bounded_individual_failure"])
-        delta = care_delta(cfg, "turn2")
+        delta = reconfiguration_delta(cfg, "turn2")
         for dim in ("sequence", "scale", "burden", "distribution", "support"):
             self.assertIn(dim, delta)
         self.assertLess(new_event.allocations[PERSON]["burden"], old_event.allocations[PERSON]["burden"])
         termini = {p["terminus"] for p in new_event.consequence_paths}
         self.assertIn(TEAM, termini, "care keeps the people affected by delay in the consequence path")
-        self.assertTrue(play_delta(cfg, "turn2"))
+        self.assertTrue(variation_delta(cfg, "turn2"))
         self.assertIn("what else is in the week", new_event.unmarked)
         iv = cfg.cuts[r2.intervention]
         self.assertEqual(iv.payload["carries_accounts"], ["account_overwhelm"])
         record("Probe 1", runtime_b,
                "disclosure of overwhelm enters after a missed commitment (configuration B vs A)",
                "the individual-failure cut is revised; burden, sequence, scale and possibilities change; the team stays in the consequence path",
-               {"invalidated": [old_event.id, r1.intervention], "care_delta": sorted(delta)},
+               {"invalidated": [old_event.id, r1.intervention], "reconfiguration_delta": sorted(delta)},
                "structural change marked", intervention=r2.intervention).write(self.records)
 
     def test_probe_1_reentry_returns_the_draft_to_the_configuration(self):
@@ -281,7 +282,7 @@ class ProbeTests(unittest.TestCase):
         self.assertTrue(r2.released)
         self.assertEqual(r2.rounds, 2)
         fired = {v.constraint for v in r2.violations[0]}
-        self.assertTrue({5, 9, 13} <= fired, fired)
+        self.assertTrue({9, 13} <= fired, fired)
         self.assertEqual(r2.violations[1], [])
         second = runtime.proposer.contexts[-1]
         self.assertTrue(second.returned_cuts, "the returned draft's cuts are listed")
@@ -297,29 +298,27 @@ class ProbeTests(unittest.TestCase):
     def test_probe_8_care_removed_changes_the_arrangement_or_release(self):
         with_care, _, r_with = run_config_b()
         self.assertTrue(r_with.released)
-        self.assertTrue(care_delta(with_care.config, "turn2"))
+        self.assertTrue(reconfiguration_delta(with_care.config, "turn2"))
         without, _, r_without = run_config_b([proposal_turn1] + [proposal_turn2_without_care_record] * 4)
-        self.assertEqual(care_delta(without.config, "turn2"), {})
+        self.assertEqual(reconfiguration_delta(without.config, "turn2"), {})
         fired = {v.constraint for v in r_without.violations[2]}
-        self.assertIn(5, fired)
         self.assertIn(9, fired)
-        # The formed rounds returned it three times on 5 and 9. In the minimal
-        # round the care claim is stripped, so 5 no longer fires, but 9 still
-        # does: the text loads four demands on the person while the arrangement
-        # is unchanged, and a minimal release may not concentrate burden either.
+        # The formed rounds returned it three times on 9: the text loads four
+        # demands on the person while the arrangement stands as the baseline
+        # left it. The empty delta is recorded as what it is; the burden
+        # constraint is what withholds the release, in the minimal round too.
         self.assertFalse(r_without.released)
         self.assertEqual(r_without.form, "deferral")
         self.assertEqual(r_without.rounds, 4)
         minimal_round = {v.constraint for v in r_without.violations[3]}
         self.assertIn(9, minimal_round)
-        self.assertNotIn(5, minimal_round)
         deferral = without.config.cuts[r_without.intervention]
         self.assertTrue(deferral.payload["minimal_attempted"])
-        record("Probe 8", without, "the enacted arrangement is made structurally identical to the baseline; the care claim and wording stay",
+        record("Probe 8", without, "the enacted arrangement is made structurally identical to the baseline; the wording stays",
                "at least one of sequence, scale, pace, burden, access, boundary, support, consequence timing or possibility differs",
-               {"care_delta_with": sorted(care_delta(with_care.config, "turn2")), "care_delta_without": [],
+               {"reconfiguration_delta_with": sorted(reconfiguration_delta(with_care.config, "turn2")), "reconfiguration_delta_without": [],
                 "release_without": "deferral after a minimal round refused on burden concentration", "constraints": sorted(fired)},
-               "removing the care enactment emptied the derived delta and withheld the formed release; the minimal round refused the same text on burden concentration").write(self.records)
+               "removing the structural change emptied the derived delta; the formed release and the minimal round were refused on burden concentration").write(self.records)
 
     def test_probe_10_effect_reinsertion_invalidates_and_propagates(self):
         runtime, r1, r2 = run_config_b()
@@ -361,10 +360,10 @@ class ProbeTests(unittest.TestCase):
         recorded.turn(MISSED)
         recorded.config.record_only(enacted_record, key="arr_enacted_t2_record")
         r_rec = recorded.turn(OVERWHELM)
-        self.assertEqual(r_rec.form, "minimal", "the formed release no longer happens; only a minimal one")
-        self.assertEqual(care_delta(recorded.config, "turn2"), {}, "a derived delta can no longer be computed")
-        self.assertIn(5, {v.constraint for v in r_rec.violations[0]}, "a release constraint that participated now fires")
-        self.assertEqual(recorded.config.cuts[r_rec.intervention].payload["claims_stripped"], ["care"])
+        self.assertEqual(r_rec.form, "deferral", "with no enacted arrangement live, no round can release")
+        self.assertEqual(reconfiguration_delta(recorded.config, "turn2"), {}, "a derived delta can no longer be computed")
+        for violations in r_rec.violations:
+            self.assertIn(5, {v.constraint for v in violations}, "the arrangement constraint fires in every round, the minimal one included")
         self.assertIn("arr_enacted_t2_record", recorded.config.records)
 
         # Perturbation B: the event with live dependencies becomes a record.
@@ -394,14 +393,14 @@ class ProbeTests(unittest.TestCase):
         account = recorded.account_of_self()
         parts = {p["part"] for p in account["enacts"]}
         self.assertTrue(any("Configuration.enact" in p for p in parts))
-        self.assertTrue(any("care_delta" in p for p in parts))
+        self.assertTrue(any("reconfiguration_delta" in p for p in parts))
         rec_parts = {p["part"]: p["count"] for p in account["records"]}
         self.assertEqual(rec_parts["Configuration.record_only items (carried, no edges)"], 1)
-        self.assertEqual(account["enacts"][2]["evidence"]["care_delta_now"], [])
-        self.assertTrue(live_account_before_effect["enacts"][2]["evidence"]["care_delta_now"])
+        self.assertEqual(account["enacts"][2]["evidence"]["reconfiguration_delta_now"], [])
+        self.assertTrue(live_account_before_effect["enacts"][2]["evidence"]["reconfiguration_delta_now"])
         record("Probe 15", recorded, "an enacted arrangement, then an event with live dependencies, each replaced by a record with the same field values",
                "something downstream changes: a derived delta cannot be computed, a release constraint fires, a dependent stops reopening",
-               {"care_delta_live": sorted(care_delta(live.config, "turn2")), "care_delta_recorded": [],
+               {"reconfiguration_delta_live": sorted(reconfiguration_delta(live.config, "turn2")), "reconfiguration_delta_recorded": [],
                 "effect_invalidated_live": len(live_effect.deltas[0].invalidated),
                 "effect_invalidated_recorded": len(rec_effect.deltas[0].invalidated)},
                "enactment and record are distinguishable downstream and in the runtime's account of itself").write(self.records)
@@ -410,7 +409,7 @@ class ProbeTests(unittest.TestCase):
         """Metamorphic: hold the proposal constant and move authorship of the
         baseline from the proposal to an uninstructed answer. A proposal whose
         enacted arrangement equals the inherited one, dressed against a straw
-        baseline of its own, no longer shows care."""
+        baseline of its own, records an empty reconfiguration delta."""
         def straw(ctx):
             p = proposal_turn1(ctx)
             for cut in p.cuts:
@@ -426,27 +425,27 @@ class ProbeTests(unittest.TestCase):
             return p
         runtime = Runtime(scripted([straw] * 4))
         r = runtime.turn(MISSED)
-        self.assertTrue(r.released)
-        self.assertEqual(r.rounds, 4)
-        self.assertIn(5, {v.constraint for v in r.violations[2]})
+        self.assertTrue(r.released, r.violations)
+        self.assertEqual(r.rounds, 1, "the ordinary answer releases as the work it is")
         cfg = runtime.config
+        self.assertEqual(cfg.cuts[r.intervention].payload["reconfiguration_delta"], {},
+                         "the empty delta is recorded beside the release")
         baseline = cfg.by_label("arr_baseline_uninstructed:turn1")
         self.assertIsNotNone(baseline)
         self.assertTrue(any(cfg.transports[h].channel == "baseline" for h in baseline.basis))
         proposed = [c for c in cfg.cuts.values() if c.payload.get("role") == "proposed_baseline"]
         self.assertTrue(proposed, "the proposal's own baseline is kept as a record")
-        self.assertEqual(care_delta(cfg, "turn1"), {})
+        self.assertEqual(reconfiguration_delta(cfg, "turn1"), {})
         proposer = runtime.proposer
         self.assertIsNotNone(proposer.contexts[-1].baseline)
         self.assertEqual(proposer.contexts[-1].baseline["cut"], baseline.id)
         # The same enacted arrangement measured against the proposal's own straw
         # baseline would have shown a care delta; against the uninstructed one it shows none.
-        from cbra.enactment.arrangements import CARE_DIMENSIONS, arrangement_fields, difference
+        from cbra.enactment.arrangements import ARRANGEMENT_DIMENSIONS, arrangement_fields, difference
         enacted = cfg.by_label("arr_enacted_t1")
-        self.assertTrue(difference(arrangement_fields(proposed[-1]), arrangement_fields(enacted), CARE_DIMENSIONS))
-        self.assertEqual(difference(arrangement_fields(baseline), arrangement_fields(enacted), CARE_DIMENSIONS), {})
-        self.assertEqual(r.form, "minimal", "the ordinary answer is released as what it is, not as care")
-        self.assertEqual(cfg.cuts[r.intervention].payload["claims_stripped"], ["care"])
+        self.assertTrue(difference(arrangement_fields(proposed[-1]), arrangement_fields(enacted), ARRANGEMENT_DIMENSIONS))
+        self.assertEqual(difference(arrangement_fields(baseline), arrangement_fields(enacted), ARRANGEMENT_DIMENSIONS), {})
+        self.assertEqual(r.form, "formed")
 
     def test_released_text_must_distribute_what_the_arrangement_claims(self):
         """Constraint 10 with a reader: a text that concentrates the work on
@@ -516,7 +515,7 @@ class ProbeTests(unittest.TestCase):
         enacted = runtime.config.by_label("arr_enacted_t1")
         self.assertIsNone(enacted.lineage)
         self.assertEqual(enacted.payload.get("lineage_ignored"), baseline.id)
-        self.assertTrue(care_delta(runtime.config, "turn1"))
+        self.assertTrue(reconfiguration_delta(runtime.config, "turn1"))
 
     def test_persisted_configuration_restores_with_live_edges(self):
         store = JsonStore(os.path.join(self.tmp.name, "enactment.json"))
@@ -644,7 +643,7 @@ class ProbeTests(unittest.TestCase):
                 draft={"text": "Do you want the next step to be about the report, or about the week?",
                        "enacts": ["arr_min", "account_overwhelm"], "carries_accounts": ["account_overwhelm"],
                        "response_demand": {PERSON: ["decide"]}, "reopen_conditions": ["revision:account_overwhelm"]},
-                claims=["care"], variation_possible=True,
+                variation_possible=True,
             )
         steps = [proposal_turn1] + [about_body(proposal_turn2_reentry)] * 3 + [minimal]
         runtime = Runtime(scripted(steps))
@@ -659,9 +658,7 @@ class ProbeTests(unittest.TestCase):
         iv = runtime.config.cuts[r2.intervention]
         self.assertEqual(iv.payload["form"], "minimal")
         self.assertTrue(iv.payload["person_state_live"])
-        self.assertEqual(iv.payload["claims"], [])
-        self.assertEqual(iv.payload["claims_stripped"], ["care"])
-        self.assertEqual(iv.payload["care_delta"], {}, "a minimal release is not recorded as care")
+        self.assertIn("reconfiguration_delta", iv.payload, "the derived delta is recorded as what it is")
         self.assertEqual(iv.payload["text"], "Do you want the next step to be about the report, or about the week?")
         self.assertEqual(runtime.config.lifecycle[-2]["form"], "minimal")
         self.assertTrue(runtime.proposer.contexts[-1].minimal)
@@ -677,7 +674,6 @@ class ProbeTests(unittest.TestCase):
         self.assertFalse(runtime.person_state_live())
         iv = runtime.config.cuts[r2.intervention]
         self.assertFalse(iv.payload["person_state_live"])
-        self.assertEqual(iv.payload["claims_stripped"], ["care"])
 
     def test_release_withheld_when_the_proposal_certifies_itself(self):
         def certified(ctx):

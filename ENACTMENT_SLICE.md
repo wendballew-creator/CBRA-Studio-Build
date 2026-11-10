@@ -1483,3 +1483,72 @@ it keeps the arrangement independent of the open condition where the work
 can be done, and whether the released texts do the settled part before
 asking, is for the next live run to show. Which turns of the probe set
 decide partial under the method is unmeasured.
+
+## The care claim leaves the proposal, 9 November 2026
+
+The record of 4–7 November carried "care" in three places inside the
+machine: a `claims` list the proposer filled with `"care"` and `"play"`,
+constraint 5 that let a care claim through when the enacted arrangement
+differed from the uninstructed one on any dimension, and a "Care delta"
+column in the reports. In the evening run every release that claimed care
+differed on eight to eleven of the eleven dimensions: the word was
+attached every time and the measure separated nothing. Chapter 5 of the
+dissertation defines care as a way of being and an obligation in all
+situations, practices and decisions. A claim a release makes about itself
+has a different shape from that, and constraints 11 and 12 already return
+self-certification in other words. This entry takes the word out of the
+schema and leaves the measurement in place under the Glossary's own name.
+
+**What the proposal carries.** `claims` is gone from `Proposal`, from the
+Responses schema and from the instructions; a proposal record that still
+carries the key is read and the key is dropped. The instructions describe
+what the runtime derives: the reconfiguration delta, the enacted
+arrangement against the uninstructed one, dimension by dimension, and the
+variation delta, each alternative offered for voluntary uptake against the
+enacted. The minimal round's instruction asks for the smallest release the
+constraints accept, with scale minimal and one demand at most.
+
+**Names.** `care_delta` is `reconfiguration_delta` and `play_delta` is
+`variation_delta`; `CARE_DIMENSIONS` is `ARRANGEMENT_DIMENSIONS` and
+`PLAY_DIMENSIONS` is `VARIATION_DIMENSIONS`. The Glossary's entry for
+Arrangement already says "a changed arrangement produces a reconfiguration
+delta"; the code now uses that word for what it computes. The intervention
+payload records both deltas on every release, the minimal round included,
+as what they are; the page and the measurement report print
+"Reconfiguration delta" and "Variation delta", and the report reads runs
+recorded before this date under their old keys.
+
+**Constraint 5.** With no claim to check, the constraint's structural
+remainder is the arrangement itself: a release with no enacted arrangement
+cut live has nothing the reader can read the text against, and no delta
+can be derived from it. Constraint 5 now returns that, in every round.
+Constraint 6 keeps its variation clause and loses its play clause.
+
+**What changed in the probes.** Three scripted probes depended on the
+claim, and each now records what the mechanism does without it:
+
+- Probe 8 (the enacted arrangement made structurally identical to the
+  baseline): the delta is empty and recorded as empty; the release is
+  withheld on constraint 9, burden concentration, in the formed rounds and
+  in the minimal round.
+- Probe 15 (the enacted arrangement replaced by a record with the same
+  field values): constraint 5 fires in every round, the minimal one
+  included, and the turn ends in a traced deferral. Until now the minimal
+  round released because the claim was stripped before the check.
+- The baseline-authorship probe (an ordinary answer dressed against a
+  straw baseline of the proposal's own): the release is the work, round
+  one, with an empty reconfiguration delta recorded beside it. Until now
+  constraint 5 returned it three times and the minimal round released it.
+
+Full suite: 573 tests, 7 skipped, passing under the project's virtualenv.
+No live run was made.
+
+**Claim boundary.** The reconfiguration delta measures difference between
+two arrangements read by the same extraction apparatus. What a difference
+does for the person, whether a release was care in the dissertation's
+sense, is a reading made after release, with the person's response in it,
+and nothing in the runtime makes that reading. The reports no longer print
+a line that says care was claimed; they print the dimensions on which the
+arrangements differ, and the reader's patterns, among them Empathy–
+Accountability Sequence and Burden Concentration, remain the places where
+the canon's own account of care's failure modes is read against a text.

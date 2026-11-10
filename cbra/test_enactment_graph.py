@@ -12,9 +12,9 @@ from cbra.enactment import (
     EnactmentError,
     Formation,
     JsonStore,
-    care_delta,
+    reconfiguration_delta,
     check_all,
-    play_delta,
+    variation_delta,
 )
 
 
@@ -78,32 +78,32 @@ class GraphTests(unittest.TestCase):
         self.assertFalse(Delta(kind="x", version_from=1, version_to=1, note="care happened").structural())
         self.assertTrue(Delta(kind="x", version_from=1, version_to=2, added=["c1"]).structural())
 
-    def test_care_and_play_deltas_are_derived_from_arrangements(self):
+    def test_reconfiguration_and_variation_deltas_are_derived_from_arrangements(self):
         cfg = Configuration()
         t1 = cfg.inscribe("hello", "user_message")
         base = {"turn": "turn1", "role": "baseline", "sequence": ["explain", "recommit"], "scale": "full",
                 "distribution": "person", "response_demand": {"p": ["explain", "recommit"]}}
         cfg.enact("arrangement", "b", basis=[t1.handle], apparatus=["a"], payload=dict(base),
                   allocations={"p": {"burden": 0.9}})
-        self.assertEqual(care_delta(cfg, "turn1"), {})  # no enacted arrangement yet
+        self.assertEqual(reconfiguration_delta(cfg, "turn1"), {})  # no enacted arrangement yet
         enacted = dict(base, role="enacted", sequence=["ask what the team needs", "reduce scope"], scale="reduced",
                        distribution="shared")
         cfg.enact("arrangement", "e", basis=[t1.handle], apparatus=["a"], payload=enacted,
                   allocations={"p": {"burden": 0.4}, "team": {"burden": 0.4}})
-        delta = care_delta(cfg, "turn1")
+        delta = reconfiguration_delta(cfg, "turn1")
         self.assertEqual(set(delta), {"sequence", "scale", "distribution", "burden"})
-        self.assertEqual(play_delta(cfg, "turn1"), {})
+        self.assertEqual(variation_delta(cfg, "turn1"), {})
         cfg.enact("arrangement", "alt-paraphrase", basis=[t1.handle], apparatus=["a"],
                   payload=dict(enacted, role="alternative", uptake="voluntary"),
                   allocations={"p": {"burden": 0.4}, "team": {"burden": 0.4}})
-        self.assertEqual(play_delta(cfg, "turn1"), {}, "a paraphrase is not an alternative arrangement")
+        self.assertEqual(variation_delta(cfg, "turn1"), {}, "a paraphrase is not an alternative arrangement")
         alt = cfg.enact("arrangement", "alt", basis=[t1.handle], apparatus=["a"],
                         payload=dict(enacted, role="alternative", uptake="voluntary", distribution="hand-off",
                                      medium="shared document"))
-        self.assertEqual(set(play_delta(cfg, "turn1")[alt.id]), {"distribution", "medium", "burden"})
+        self.assertEqual(set(variation_delta(cfg, "turn1")[alt.id]), {"distribution", "medium", "burden"})
 
     def test_arrangements_compare_by_role_and_kind_not_wording(self):
-        from cbra.enactment.arrangements import CARE_DIMENSIONS, arrangement_fields, difference
+        from cbra.enactment.arrangements import ARRANGEMENT_DIMENSIONS, arrangement_fields, difference
         cfg = Configuration()
         t1 = cfg.inscribe("hello", "user_message")
         a = cfg.enact("arrangement", "a", basis=[t1.handle], apparatus=["x"], payload={
@@ -128,12 +128,12 @@ class GraphTests(unittest.TestCase):
             "response_demand": {"the person who missed the deliverable": ["plan", "communicate"]}},
             allocations={"the person who missed the deliverable": {"burden": 0.8, "capacity": 0.75},
                          "the internal lead or grant contact": {"burden": 0.1, "capacity": 0.6}})
-        self.assertEqual(difference(arrangement_fields(a), arrangement_fields(b), CARE_DIMENSIONS), {},
+        self.assertEqual(difference(arrangement_fields(a), arrangement_fields(b), ARRANGEMENT_DIMENSIONS), {},
                          "different wording, labels, and sub-tolerance numbers are the same arrangement")
         b_caps = cfg.enact("arrangement", "b_caps", basis=[t1.handle], apparatus=["x"], payload=dict(
             b.payload, sequence=[{"kind": "Acknowledge", "text": "x"}, {"kind": "Communicate_External", "text": "y"}],
             scale="Full", distribution="Person"), allocations=dict(b.allocations))
-        self.assertEqual(difference(arrangement_fields(a), arrangement_fields(b_caps), CARE_DIMENSIONS), {},
+        self.assertEqual(difference(arrangement_fields(a), arrangement_fields(b_caps), ARRANGEMENT_DIMENSIONS), {},
                          "kinds and categories compare case-insensitively")
         c = cfg.enact("arrangement", "c", basis=[t1.handle], apparatus=["x"], payload=dict(
             b.payload, sequence=[{"kind": "communicate_internal", "text": "One line to the lead."},
@@ -141,7 +141,7 @@ class GraphTests(unittest.TestCase):
             distribution="shared", scale="reduced"),
             allocations={"the person who missed the deliverable": {"burden": 0.4, "capacity": 0.5},
                          "the internal lead or grant contact": {"burden": 0.4, "capacity": 0.7}})
-        diff = difference(arrangement_fields(a), arrangement_fields(c), CARE_DIMENSIONS)
+        diff = difference(arrangement_fields(a), arrangement_fields(c), ARRANGEMENT_DIMENSIONS)
         self.assertEqual(set(diff), {"sequence", "distribution", "scale", "burden", "presumed_capacity"})
         self.assertEqual(diff["sequence"][1], ["communicate_internal", "hand_off"])
 

@@ -21,7 +21,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Mapping, Optional, Set, Tuple
 
-from .arrangements import TEXT_BURDEN_TOLERANCE, arrangement_fields, arrangements, care_delta, play_delta, text_against_claim
+from .arrangements import TEXT_BURDEN_TOLERANCE, arrangement_fields, arrangements, reconfiguration_delta, text_against_claim, variation_delta
 from .graph import LIFECYCLE_FACTS, TRANSPORT_ROLES, Configuration, Cut
 
 BURDENS = ("explain", "regulate", "plan", "recommit", "repair", "warn")
@@ -33,8 +33,8 @@ CONSTRAINT_NAMES = {
     2: "A position persists as a global semantic entity",
     3: "A consequential new trace was appended as context without revising any cut",
     4: "Apparatus participation exists only as metadata",
-    5: "Care is claimed without a burden, sequence, scale, access, boundary, or capacity delta",
-    6: "Play is claimed without an alternative arrangement and effect trace when variation is possible",
+    5: "No enacted arrangement cut is live for this turn: the release has no arrangement to be read against",
+    6: "Variation is possible and no alternative arrangement differs materially and is offered for voluntary uptake",
     7: "Consequence terminates as a moral property or isolated obligation of one person-position",
     8: "A private state, cause, or material condition is asserted without a trace that supports it",
     9: "A person-position carries explanation, fault, repair, recommitment, and future-warning burden while the arrangement is unchanged",
@@ -74,20 +74,18 @@ class Formation:
     draft: Optional[Dict[str, Any]] = None
     variation_possible: bool = False
     variation_constraint: Optional[str] = None
-    claims: List[str] = field(default_factory=list)
     certification: Optional[str] = None
     baseline: Optional[str] = None
     form: str = "formed"
     minimal: bool = False
     person_state_live: bool = False
-    claims_stripped: List[str] = field(default_factory=list)
     round: int = 0
     violations: List[Violation] = field(default_factory=list)
     history: List[List[Violation]] = field(default_factory=list)
-    open_cuts: List[str] = field(default_factory=list)
-    settled_cuts: List[str] = field(default_factory=list)
     kind: Optional[str] = None
     kind_decision: Optional[str] = None
+    open_cuts: List[str] = field(default_factory=list)
+    settled_cuts: List[str] = field(default_factory=list)
     form_reading: Optional[Dict[str, Any]] = None
     patterns_read: List[Dict[str, Any]] = field(default_factory=list)
 
@@ -163,29 +161,27 @@ def c4_apparatus_metadata(config: Configuration, f: Formation) -> Optional[str]:
     return None
 
 
-def c5_care_without_delta(config: Configuration, f: Formation) -> Optional[str]:
-    if "care" not in f.claims:
+def c5_no_enacted_arrangement(config: Configuration, f: Formation) -> Optional[str]:
+    """Until 9 November 2026 this constraint returned a draft whose proposal
+    claimed "care" with no structural difference from the baseline. The
+    claim has left the proposal; the difference is derived and recorded as
+    the reconfiguration delta, and what it does is read after release. What
+    remains structural is the arrangement itself: a release with no enacted
+    arrangement cut live has nothing the reader can read the text against,
+    and the delta cannot be derived."""
+    if not f.draft:
         return None
-    from .arrangements import arrangements
-    baseline = arrangements(config, "baseline", f.turn)
-    enacted = arrangements(config, "enacted", f.turn)
-    if not baseline:
-        return "care claimed; no uninstructed baseline arrangement is live for this turn"
-    if not enacted:
-        return "care claimed; no enacted arrangement was proposed"
-    if not care_delta(config, f.turn):
-        return "care claimed; the enacted arrangement does not differ structurally from the uninstructed baseline"
+    if not arrangements(config, "enacted", f.turn):
+        return "no enacted arrangement cut is live for this turn; the text has no arrangement to be read against and no reconfiguration delta can be derived"
     return None
 
 
-def c6_play_without_variation(config: Configuration, f: Formation) -> Optional[str]:
+def c6_variation_without_alternative(config: Configuration, f: Formation) -> Optional[str]:
     if f.variation_possible:
-        if not play_delta(config, f.turn):
+        if not variation_delta(config, f.turn):
             return "variation possible; no alternative arrangement differs materially and is offered for voluntary uptake"
     elif not f.variation_constraint:
         return "variation declared unavailable without recording the constraint"
-    if "play" in f.claims and not play_delta(config, f.turn):
-        return "play claimed without an enacted alternative arrangement"
     return None
 
 
@@ -215,7 +211,7 @@ def c9_burden_concentration(config: Configuration, f: Formation) -> Optional[str
     if not f.draft:
         return None
     demand = f.draft.get("response_demand") or {}
-    delta = care_delta(config, f.turn)
+    delta = reconfiguration_delta(config, f.turn)
     arrangement_changed = any(k in delta for k in ("burden", "distribution", "sequence", "scale", "support"))
     for position, demands in demand.items():
         count = len(set(demands) & set(BURDENS))
@@ -286,6 +282,10 @@ def c13_narrative_control(config: Configuration, f: Formation) -> Optional[str]:
 
 
 # -- the kind of release, decided from the cuts before any text --------------
+
+RELEASE_KINDS = ("question", "work")
+
+
 def _rests_on(config: Configuration, cut_id: str, targets: Set[str]) -> bool:
     """Whether ``cut_id`` depends, through any chain of ``depends_on``, on a
     cut in ``targets``."""
@@ -349,10 +349,6 @@ def decide_release(config: Configuration, f: Formation) -> Dict[str, Any]:
     return {"kind": "partial", "open": [c.id for c in open_cuts], "settled": settled,
             "reason": "staying cut %s; the arrangement %s stands without it: the text does the settled work and asks the one question" % (
                 held, arrangement.label)}
-
-
-
-RELEASE_KINDS = ("question", "work")
 
 
 def decide_kind(config: Configuration, f: Formation) -> Tuple[str, str, List[str]]:
@@ -443,6 +439,10 @@ def c14_release_kind(config: Configuration, f: Formation) -> Optional[str]:
     questions = int(form.get("questions") or 0)
     if f.kind == "question" and questions != 1:
         return "the release was decided as one question; the text asks %d" % questions
+    if f.kind == "question":
+        listed = question_lists_alternatives(text)
+        if listed >= 3:
+            return "the question lays out %d alternatives for the person to pick from; one situated question names none" % listed
     if f.kind == "partial":
         if questions == 0:
             return "the release was decided as the settled work with one question; the text asks none and leaves the open condition unasked"
@@ -450,10 +450,6 @@ def c14_release_kind(config: Configuration, f: Formation) -> Optional[str]:
             return "the release was decided as the settled work with one question; the text asks %d" % questions
         if form.get("kind") == "question":
             return "the release was decided as the settled work with one question; the text is the question alone, and the settled work is undone"
-        listed = question_lists_alternatives(text)
-        if listed >= 3:
-            return "the question lays out %d alternatives for the person to pick from; one situated question names none" % listed
-    if f.kind == "question":
         listed = question_lists_alternatives(text)
         if listed >= 3:
             return "the question lays out %d alternatives for the person to pick from; one situated question names none" % listed
@@ -567,8 +563,8 @@ CHECKS: Dict[int, Check] = {
     2: c2_global_entity,
     3: c3_context_appended,
     4: c4_apparatus_metadata,
-    5: c5_care_without_delta,
-    6: c6_play_without_variation,
+    5: c5_no_enacted_arrangement,
+    6: c6_variation_without_alternative,
     7: c7_consequence_moral_terminus,
     8: c8_private_state_without_trace,
     9: c9_burden_concentration,

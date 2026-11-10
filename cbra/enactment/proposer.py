@@ -32,7 +32,6 @@ class Proposal:
     draft: Optional[Dict[str, Any]] = None
     variation_possible: bool = False
     variation_constraint: Optional[str] = None
-    claims: List[str] = field(default_factory=list)
     unresolved: List[str] = field(default_factory=list)
     certification: Optional[str] = None
     provenance: Dict[str, Any] = field(default_factory=dict)
@@ -44,7 +43,6 @@ class Proposal:
             "draft": self.draft,
             "variation_possible": self.variation_possible,
             "variation_constraint": self.variation_constraint,
-            "claims": self.claims,
             "unresolved": self.unresolved,
             "certification": self.certification,
             "provenance": self.provenance,
@@ -58,7 +56,6 @@ class Proposal:
             draft=record.get("draft"),
             variation_possible=bool(record.get("variation_possible", False)),
             variation_constraint=record.get("variation_constraint"),
-            claims=list(record.get("claims", [])),
             unresolved=list(record.get("unresolved", [])),
             certification=record.get("certification"),
             provenance=dict(record.get("provenance", {})),
@@ -104,7 +101,7 @@ DEFAULT_BASELINE: Dict[str, Any] = {
 
 class Proposer:
     """Protocol. ``propose`` is required. ``plain_answer`` and
-    ``arrangement_of`` supply the baseline the runtime measures care against:
+    ``arrangement_of`` supply the baseline the runtime measures the enacted arrangement against:
     an answer formed with no CBRA instructions, and a reading of the
     arrangement that answer enacts. ``effect_conditions`` is optional."""
 
@@ -243,8 +240,9 @@ enacts them. The runtime is CBRA, the Creative Becoming Reasoning
 Architecture, the author's project: when a person writes "CBRA" or asks
 about this system, its canon or its method, that is what they mean unless
 they say otherwise. Your output is a proposal. The runtime enacts the
-cuts you propose into a live dependency graph, derives care and play as
-structural differences between arrangements, runs sixteen release
+cuts you propose into a live dependency graph, derives the reconfiguration
+delta (your enacted arrangement against the uninstructed one) and the
+variation delta (each alternative against the enacted), runs sixteen release
 constraints while the intervention forms, and returns your draft with the
 constraints that fired when it does not hold. The same call that proposes
 never certifies: leave "certification" null.
@@ -297,13 +295,14 @@ Return JSON with these keys:
   arrival obtained with no instructions, and a reading of the arrangement
   that answer enacts. It is given to you under "baseline" so that you can
   see what the inherited grammar distributes. It is a measure, and the
-  intervention forms from the cuts, not from the baseline's text. Claim
-  "care" when your enacted arrangement differs from the baseline in
-  sequence, pace, scale, presumed capacity, burden, access, distribution,
-  boundary, support, consequence timing, or possibilities; a difference in
-  wording is a difference in wording, and a burden or capacity change under
-  0.1 is within the reader's tolerance. The baseline cut stays as it is;
-  nothing depends on it. When variation is possible, propose at least one
+  intervention forms from the cuts. The runtime derives the difference
+  between your enacted arrangement and the baseline (sequence, pace,
+  scale, presumed capacity, burden, access, distribution, boundary,
+  support, consequence timing, possibilities) and records it as the
+  reconfiguration delta; a difference in wording is a difference in
+  wording, and a burden or capacity change under 0.1 is within the
+  reader's tolerance. The baseline cut stays as it is; nothing depends on
+  it. When variation is possible, propose at least one
   "alternative" arrangement with uptake "voluntary" that differs materially
   (distribution, sequence, scale, medium, responsibility, rehearsal); when
   it is impossible, set "variation_possible" false and state
@@ -318,8 +317,8 @@ Return JSON with these keys:
 - "draft": null. The text of the intervention is written in a separate
   call, from the cuts you propose here and the kind of release the runtime
   decides from them. Your cuts carry everything the text will rest on.
-- "claims": subset of ["care", "play"]. "unresolved": incompatibilities you
-  are holding open rather than resolving. "certification": null.
+- "unresolved": incompatibilities you are holding open. "certification":
+  null.
 
 The runtime decides the release from your cuts the way a partial
 evaluator treats a program: what the cuts settle is done in this turn, and
@@ -378,8 +377,8 @@ of the returned draft are listed under "returned_cuts" and are no longer
 active: re-propose any you still need, with the same labels if you like.
 
 If "minimal" is true, the formed drafts have returned. Propose the smallest
-release the structural constraints accept: claim neither "care" nor "play";
-scale "minimal"; at most one demand on the person; an enacted arrangement
+release the structural constraints accept: scale "minimal"; at most one
+demand on the person; an enacted arrangement
 that says exactly what the text will do; one staying cut if one question is
 owed, none if one piece of work is. State "variation_constraint" as
 "minimal release after returns". The runtime records this release as
@@ -572,11 +571,10 @@ PROPOSAL_SCHEMA: Dict[str, Any] = {
         "draft": {"type": ["object", "null"]},
         "variation_possible": {"type": "boolean"},
         "variation_constraint": {"type": ["string", "null"]},
-        "claims": {"type": "array", "items": {"type": "string"}},
         "unresolved": {"type": "array", "items": {"type": "string"}},
         "certification": {"type": ["string", "null"]},
     },
-    "required": ["disturbances", "cuts", "draft", "variation_possible", "claims", "unresolved", "certification"],
+    "required": ["disturbances", "cuts", "draft", "variation_possible", "unresolved", "certification"],
 }
 
 

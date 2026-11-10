@@ -24,7 +24,7 @@ def _definition(ctx, text, extra_cuts=(), enacts=()):
         {"kind": "arrangement", "label": "arr", "basis": h, "apparatus": APP,
          "payload": {"role": "enacted", "sequence": ["explain"], "scale": "minimal", "distribution": "apparatus"}},
     ] + list(extra_cuts), draft={"text": text, "enacts": ["arr"] + list(enacts), "reopen_conditions": []},
-        claims=[], variation_possible=False, variation_constraint="a definition")
+        variation_possible=False, variation_constraint="a definition")
 
 
 def ignores_material(ctx):

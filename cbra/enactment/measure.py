@@ -12,7 +12,7 @@ is a fixed set, a record of each turn's timing and outcome beside its
 session file, and a document that reads the session files back into one
 place: the baseline answer, the released text, the material drawn and how
 it was marked, the cuts the release rested on, the returns with their
-reasons, and the care and play deltas.
+reasons, and the reconfiguration and variation deltas.
 
 The report is a reading aid. It certifies nothing, and the comparison it
 makes is between one model's constrained answer and the same model's
@@ -280,14 +280,14 @@ def turn_reading(config: Configuration, turn: str, corpus: Optional[Corpus] = No
         "kind": payload.get("kind"),
         "released_text": released,
         "rounds": payload.get("rounds"),
-        "claims": list(payload.get("claims") or []),
         "withheld_constraints": list(payload.get("withheld_constraints") or []),
         "returns": returns,
         "material": material,
         "material_required": list(payload.get("material_required") or []),
         "rested_on": rested_on,
-        "care_delta": sorted((payload.get("care_delta") or {}).keys()),
-        "play_delta": {k: sorted(v.keys()) for k, v in (payload.get("play_delta") or {}).items()},
+        # Runs recorded before 9 November 2026 carry these under "care_delta" and "play_delta".
+        "reconfiguration_delta": sorted((payload.get("reconfiguration_delta") or payload.get("care_delta") or {}).keys()),
+        "variation_delta": {k: sorted(v.keys()) for k, v in (payload.get("variation_delta") or payload.get("play_delta") or {}).items()},
         "text_unread": any(u.get("kind") == "text_unread" and u.get("turn") == turn for u in config.unresolved),
         "canon_terms": {"baseline": _terms(corpus, baseline_text), "released": _terms(corpus, released)},
         "patterns": patterns,
@@ -424,8 +424,8 @@ def report(run_dir: str, corpus: Optional[Corpus] = None) -> str:
             t = TurnRun(**turn_record)
             reading = turn_reading(config, turns[index], corpus) if config is not None and index < len(turns) else {
                 "turn": None, "arrival": t.prompt, "baseline_text": None, "baseline_unavailable": False, "form": None,
-                "released_text": None, "rounds": None, "claims": [], "withheld_constraints": [], "returns": [],
-                "material": [], "material_required": [], "rested_on": [], "care_delta": [], "play_delta": {},
+                "released_text": None, "rounds": None, "withheld_constraints": [], "returns": [],
+                "material": [], "material_required": [], "rested_on": [], "reconfiguration_delta": [], "variation_delta": {},
                 "text_unread": False, "canon_terms": {"baseline": [], "released": []}, "shared_vocabulary": None,
                 "words": {"baseline": 0, "released": 0}, "kind": None, "patterns": {"baseline": [], "released": []}}
             per_turn.append((t, reading))
@@ -433,15 +433,15 @@ def report(run_dir: str, corpus: Optional[Corpus] = None) -> str:
 
     lines.append("## Summary")
     lines.append("")
-    lines.append("| Probe | Turn | Outcome | Returns | Material | Care delta | Canon terms | Shared words | Seconds |")
+    lines.append("| Probe | Turn | Outcome | Returns | Material | Reconfiguration delta | Canon terms | Shared words | Seconds |")
     lines.append("|---|---|---|---|---|---|---|---|---|")
     for item in readings:
         for t, reading in item["turns"]:
-            care = ", ".join(reading["care_delta"]) if reading["care_delta"] else ("claimed, none" if "care" in reading["claims"] else "—")
+            delta = ", ".join(reading["reconfiguration_delta"]) if reading["reconfiguration_delta"] else "—"
             shared = "%.2f" % reading["shared_vocabulary"] if reading["shared_vocabulary"] is not None else "—"
             lines.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
                 item["probe"]["id"], reading["turn"] or "—", _outcome(t, reading), _returns_cell(reading),
-                _material_cell(reading), _cell(care), _terms_cell(reading), shared, "%.0f" % t.seconds))
+                _material_cell(reading), _cell(delta), _terms_cell(reading), shared, "%.0f" % t.seconds))
     lines.append("")
 
     for item in readings:
@@ -517,17 +517,14 @@ def report(run_dir: str, corpus: Optional[Corpus] = None) -> str:
                 for v in reading["withheld_constraints"]:
                     lines.append("- Constraint %s: %s" % (v.get("constraint"), v.get("reason", "")))
                 lines.append("")
-            if "care" in reading["claims"]:
-                lines.append("**Care delta.** %s" % (
-                    "baseline and enacted arrangements differ on: %s." % ", ".join(reading["care_delta"]) if reading["care_delta"]
-                    else "care was claimed and no structural difference from the baseline was found."))
+            lines.append("**Reconfiguration delta.** %s" % (
+                "the enacted arrangement differs from the uninstructed one on: %s." % ", ".join(reading["reconfiguration_delta"])
+                if reading["reconfiguration_delta"] else "the enacted arrangement and the uninstructed one agree on every dimension."))
+            if reading["variation_delta"]:
+                lines.append("**Variation delta.** %s" % "; ".join(
+                    "alternative %s varies: %s" % (k, ", ".join(v)) for k, v in reading["variation_delta"].items()))
             else:
-                lines.append("**Care delta.** No care claim on this release.")
-            if reading["play_delta"]:
-                lines.append("**Play delta.** %s" % "; ".join(
-                    "alternative %s varies: %s" % (k, ", ".join(v)) for k, v in reading["play_delta"].items()))
-            else:
-                lines.append("**Play delta.** No alternative arrangement with material variation.")
+                lines.append("**Variation delta.** No alternative arrangement with material variation.")
             if reading["text_unread"]:
                 lines.append("**Text reading.** The released text was not read back against its arrangement (no reading apparatus).")
             elif reading.get("patterns") and (reading["patterns"]["baseline"] or reading["patterns"]["released"] or not reading["text_unread"]):
@@ -573,7 +570,7 @@ def _headings(reading: Dict[str, Any]) -> List[str]:
 
 def compare(run_a: str, run_b: str, corpus: Optional[Corpus] = None) -> str:
     """Two runs of the same set side by side: outcome, returns, material,
-    care delta, and how much of the second release's wording the first
+    reconfiguration delta, and how much of the second release's wording the first
     already had. What repeats and what does not is the stability of the
     method on these arrivals; the document decides nothing about why."""
     a, b = _readings_of(run_a, corpus), _readings_of(run_b, corpus)
@@ -589,7 +586,7 @@ def compare(run_a: str, run_b: str, corpus: Optional[Corpus] = None) -> str:
     lines.append("\"Material shared\" counts passages (file and heading) drawn in both runs over all drawn in either. "
                  "\"Release wording shared\" is the share of run B's released words that also occur in run A's release.")
     lines.append("")
-    lines.append("| Probe | Turn | Outcome A | Outcome B | Returns A | Returns B | Material shared | Care delta A | Care delta B | Release wording shared |")
+    lines.append("| Probe | Turn | Outcome A | Outcome B | Returns A | Returns B | Material shared | Reconfiguration delta A | Reconfiguration delta B | Release wording shared |")
     lines.append("|---|---|---|---|---|---|---|---|---|---|")
     keys = sorted(set(a["turns"]) | set(b["turns"]), key=lambda k: (list(p["probe"]["id"] for p in mb["probes"]).index(k[0]) if any(p["probe"]["id"] == k[0] for p in mb["probes"]) else 99, k[1]))
     details: List[str] = []
@@ -604,8 +601,8 @@ def compare(run_a: str, run_b: str, corpus: Optional[Corpus] = None) -> str:
             key[0], (ra or rb or {}).get("turn") or "turn%d" % (key[1] + 1),
             _outcome(ta, ra) if ta else "—", _outcome(tb, rb) if tb else "—",
             _returns_cell(ra) if ra else "—", _returns_cell(rb) if rb else "—", shared,
-            _cell(", ".join(ra["care_delta"]) if ra and ra["care_delta"] else ("claimed, none" if ra and "care" in ra["claims"] else "—")),
-            _cell(", ".join(rb["care_delta"]) if rb and rb["care_delta"] else ("claimed, none" if rb and "care" in rb["claims"] else "—")),
+            _cell(", ".join(ra["reconfiguration_delta"]) if ra and ra["reconfiguration_delta"] else "—"),
+            _cell(", ".join(rb["reconfiguration_delta"]) if rb and rb["reconfiguration_delta"] else "—"),
             "%.2f" % wording if wording is not None else "—"))
         details.append("## %s, %s" % (key[0], (ra or rb or {}).get("turn") or "turn%d" % (key[1] + 1)))
         details.append("")

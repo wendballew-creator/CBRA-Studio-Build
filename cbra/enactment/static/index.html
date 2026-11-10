@@ -118,11 +118,10 @@
     }
     const d = el("details"); d.append(el("summary", null, "what formed this"));
     const lines = [];
-    if (form === "minimal") lines.push("Released under minimal terms: no care or play claim" + (item.claims_stripped && item.claims_stripped.length ? " (claimed " + item.claims_stripped.join(", ") + "; stripped)" : "") + ". Person-state account live: " + item.person_state_live + ".");
-    if (item.claims && item.claims.length) lines.push("Claims: " + item.claims.join(", ") + ".");
-    if (item.care_delta && item.care_delta.length) lines.push("Care, as structural difference from the uninstructed baseline: " + item.care_delta.join(", ") + ".");
-    const pk = Object.keys(item.play_delta || {});
-    if (pk.length) lines.push("Play: alternative arrangement " + pk.join(", ") + " differs in " + Object.values(item.play_delta).map(v => v.join(", ")).join("; ") + ".");
+    if (form === "minimal") lines.push("Released under minimal terms. Person-state account live: " + item.person_state_live + ".");
+    if (item.reconfiguration_delta && item.reconfiguration_delta.length) lines.push("Reconfiguration delta (the enacted arrangement against the uninstructed one): " + item.reconfiguration_delta.join(", ") + ".");
+    const pk = Object.keys(item.variation_delta || {});
+    if (pk.length) lines.push("Variation: alternative arrangement " + pk.join(", ") + " differs in " + Object.values(item.variation_delta).map(v => v.join(", ")).join("; ") + ".");
     if (item.response_demand) lines.push("Response demand: " + Object.entries(item.response_demand).map(([p, d]) => p + " → " + d.join(", ")).join("; ") + ".");
     if (item.reopen_conditions && item.reopen_conditions.length) lines.push("Reopens on: " + item.reopen_conditions.join(", ") + ".");
     if (item.unmarked && item.unmarked.length) lines.push("Left unmarked: " + item.unmarked.join("; ") + ".");

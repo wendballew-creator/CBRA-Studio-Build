@@ -1,8 +1,7 @@
 """Arrangements and the deltas derived from them.
 
-Care and play are not stored as flags or scores. They are computed, when
-asked, as the structural difference between arrangement cuts that are live
-in the configuration:
+The differences are derived, when asked, between arrangement cuts that are
+live in the configuration, and stored nowhere:
 
 * the *baseline* arrangement is what the inherited grammar distributes: the
   runtime obtains an answer to the same arrival with no CBRA instructions and
@@ -14,12 +13,16 @@ in the configuration:
 * *alternative* arrangements are enacted far enough to compare, and offered
   for voluntary uptake.
 
-``care_delta`` is the difference between baseline and enacted on the care
-dimensions. ``play_delta`` is the difference between enacted and each
-alternative on the variation dimensions. Removing the enacted arrangement,
-or replacing it with a record that carries the words but not the
-structure, empties the delta, and the release constraint that depends on
-it fires (Probes 8, 9, 15).
+``reconfiguration_delta`` is the difference between the uninstructed
+baseline and the enacted arrangement on the arrangement dimensions (the
+Glossary: "a changed arrangement produces a reconfiguration delta").
+``variation_delta`` is the difference between the enacted arrangement and
+each alternative offered for voluntary uptake. Both are derived on request
+and never stored. What either difference does for the person is a reading
+made after release; the delta is the measure it rests on. Removing the
+enacted arrangement, or replacing it with a record that carries the words
+and not the structure, empties the delta and leaves the release without an
+arrangement to be read against (Probes 8, 9, 15).
 """
 
 from __future__ import annotations
@@ -28,7 +31,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .graph import Configuration, Cut
 
-CARE_DIMENSIONS = (
+ARRANGEMENT_DIMENSIONS = (
     "sequence",
     "pace",
     "scale",
@@ -43,7 +46,7 @@ CARE_DIMENSIONS = (
     "possibilities_open",
 )
 
-PLAY_DIMENSIONS = (
+VARIATION_DIMENSIONS = (
     "distribution",
     "sequence",
     "scale",
@@ -133,7 +136,7 @@ def arrangement_fields(cut: Cut) -> Dict[str, Any]:
     payload = cut.payload if isinstance(cut.payload, Mapping) else {}
     roles = _role_map(payload)
     fields: Dict[str, Any] = {}
-    for k in set(CARE_DIMENSIONS) | set(PLAY_DIMENSIONS):
+    for k in set(ARRANGEMENT_DIMENSIONS) | set(VARIATION_DIMENSIONS):
         fields[k] = _normal(payload.get(k))
     for k in ("scale", "pace", "distribution", "consequence_timing"):
         fields[k] = _norm_token(fields.get(k))
@@ -176,16 +179,17 @@ def arrangements(config: Configuration, role: str, turn: Optional[str] = None) -
     return cuts
 
 
-def care_delta(config: Configuration, turn: Optional[str] = None) -> Dict[str, Tuple[Any, Any]]:
-    """Derived, never stored: the structural difference care made."""
+def reconfiguration_delta(config: Configuration, turn: Optional[str] = None) -> Dict[str, Tuple[Any, Any]]:
+    """Derived, never stored: how the enacted arrangement differs from the
+    uninstructed baseline, dimension by dimension."""
     baseline = arrangements(config, "baseline", turn)
     enacted = arrangements(config, "enacted", turn)
     if not baseline or not enacted:
         return {}
-    return difference(arrangement_fields(baseline[-1]), arrangement_fields(enacted[-1]), CARE_DIMENSIONS)
+    return difference(arrangement_fields(baseline[-1]), arrangement_fields(enacted[-1]), ARRANGEMENT_DIMENSIONS)
 
 
-def play_delta(config: Configuration, turn: Optional[str] = None) -> Dict[str, Dict[str, Tuple[Any, Any]]]:
+def variation_delta(config: Configuration, turn: Optional[str] = None) -> Dict[str, Dict[str, Tuple[Any, Any]]]:
     """Derived, never stored: for each alternative arrangement offered for
     voluntary uptake, the material variation it carries relative to the
     enacted arrangement. A paraphrase produces an empty entry and is dropped."""
@@ -197,7 +201,7 @@ def play_delta(config: Configuration, turn: Optional[str] = None) -> Dict[str, D
     for alt in arrangements(config, "alternative", turn):
         if alt.payload.get("uptake") != "voluntary":
             continue
-        diff = difference(base, arrangement_fields(alt), PLAY_DIMENSIONS)
+        diff = difference(base, arrangement_fields(alt), VARIATION_DIMENSIONS)
         if diff:
             out[alt.id] = diff
     return out

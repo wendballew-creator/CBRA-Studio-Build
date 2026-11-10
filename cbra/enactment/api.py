@@ -60,7 +60,6 @@ def history(config: Configuration) -> List[Dict[str, Any]]:
             "form": p.get("form"), "release_kind": p.get("kind"), "text": p.get("text"), "action": p.get("action"), "rounds": p.get("rounds"),
             "returns": sorted(returns.get(turn, []), key=lambda r: r["round"]),
             "withheld_constraints": p.get("withheld_constraints", []),
-            "claims": p.get("claims", []), "claims_stripped": p.get("claims_stripped", []),
             "person_state_live": p.get("person_state_live"),
             "material": [{"handle": h, "file": config.transports[h].provenance.get("file"),
                           "heading": config.transports[h].provenance.get("heading"),
@@ -69,8 +68,8 @@ def history(config: Configuration) -> List[Dict[str, Any]]:
                           "via": config.transports[h].provenance.get("via"),
                           "consequential": bool(config.transports[h].provenance.get("consequential"))}
                          for h in p.get("material", []) if h in config.transports],
-            "care_delta": sorted((p.get("care_delta") or {}).keys()),
-            "play_delta": {k: sorted(v.keys()) for k, v in (p.get("play_delta") or {}).items()},
+            "reconfiguration_delta": sorted((p.get("reconfiguration_delta") or p.get("care_delta") or {}).keys()),
+            "variation_delta": {k: sorted(v.keys()) for k, v in (p.get("variation_delta") or p.get("play_delta") or {}).items()},
             "reopen_conditions": list(cut.invalidation_conditions),
             "response_demand": p.get("response_demand", {}),
             "unmarked": list(cut.unmarked),

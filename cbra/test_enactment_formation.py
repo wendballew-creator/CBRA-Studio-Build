@@ -42,7 +42,7 @@ def proposal(ctx, text=None, staying=None, enacts=("arr",), settled=False, **dra
     draft = None
     if text is not None:
         draft = dict({"text": text, "enacts": list(enacts), "reopen_conditions": []}, **draft_fields)
-    return Proposal(cuts=cuts_for(ctx, staying, settled), draft=draft, claims=[], variation_possible=False,
+    return Proposal(cuts=cuts_for(ctx, staying, settled), draft=draft, variation_possible=False,
                     variation_constraint="a definition")
 
 

@@ -36,7 +36,7 @@ def proposal(ctx, text, staying=None):
                      "payload": {"open": staying, "decides": True}})
         arrangement["depends_on"] = ["stay_open"]
     cuts.append(arrangement)
-    return Proposal(cuts=cuts, draft={"text": text, "enacts": ["arr"], "reopen_conditions": []}, claims=[],
+    return Proposal(cuts=cuts, draft={"text": text, "enacts": ["arr"], "reopen_conditions": []},
                     variation_possible=False, variation_constraint="a definition")
 
 

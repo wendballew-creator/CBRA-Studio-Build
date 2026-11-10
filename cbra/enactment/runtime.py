@@ -15,7 +15,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
-from .arrangements import care_delta, play_delta
+from .arrangements import reconfiguration_delta, variation_delta
 from .graph import APPARATUS_MARK, Configuration, Cut, Delta, EnactmentError, TransportTrace
 
 TransportTraceLike = TransportTrace
@@ -235,8 +235,8 @@ class Runtime:
         position, category, connection and noticing cuts.
 
         Arrangement cuts are left out: their payloads are the runtime's own
-        shared vocabulary (step kinds such as "name" and "notice", care
-        dimensions), which would draw the canon's Naming and Care entries
+        shared vocabulary (step kinds such as "name" and "notice", the
+        arrangement dimensions), which would draw the canon's Naming and Care entries
         into every formation. The draft's text is left out too: a passage
         is drawn by what a cut addresses, not by a word the prose used.
         """
@@ -482,7 +482,6 @@ class Runtime:
             "conversation": conversation,
             "cuts": cuts,
             "material": passages,
-            "claims": list(formation.claims),
             "violations": list(context.violations),
         }
 
@@ -599,15 +598,12 @@ class Runtime:
             )
         formation.proposal_trace = proposal_trace.handle
         formation.draft = proposal.draft
-        formation.claims = list(proposal.claims)
         formation.variation_possible = bool(proposal.variation_possible)
         formation.variation_constraint = proposal.variation_constraint
         formation.certification = proposal.certification
         if minimal:
-            # A minimal release claims neither care nor play; a claim made
-            # anyway is stripped and recorded, never released as care.
-            formation.claims_stripped = [c for c in formation.claims if c in ("care", "play")]
-            formation.claims = [c for c in formation.claims if c not in ("care", "play")]
+            # A minimal release offers no variation; what it does is read
+            # from its arrangement like any other release.
             formation.variation_possible = False
             formation.variation_constraint = proposal.variation_constraint or "minimal release after returns"
         for item in proposal.unresolved:
@@ -736,8 +732,6 @@ class Runtime:
                 "kind_decision": formation.kind_decision,
                 "declared_kind": draft.get("kind"),
                 "action": draft.get("action"),
-                "claims": list(formation.claims),
-                "claims_stripped": list(formation.claims_stripped),
                 "person_state_live": formation.person_state_live,
                 "text": draft.get("text"),
                 "delivered_to": [arrival.role],
@@ -750,8 +744,8 @@ class Runtime:
                 "material": list(formation.material),
                 "material_required": list(formation.material_required),
                 "text_reading": next((c.id for c in cfg.active("arrangement") if c.payload.get("role") == "read" and c.payload.get("turn") == turn), None),
-                "care_delta": {k: list(v) for k, v in care_delta(cfg, turn).items()} if "care" in formation.claims else {},
-                "play_delta": {k: {kk: list(vv) for kk, vv in d.items()} for k, d in play_delta(cfg, turn).items()} if "play" in formation.claims or formation.variation_possible else {},
+                "reconfiguration_delta": {k: list(v) for k, v in reconfiguration_delta(cfg, turn).items()},
+                "variation_delta": {k: {kk: list(vv) for kk, vv in d.items()} for k, d in variation_delta(cfg, turn).items()},
                 "rounds": formation.round,
             },
         )
@@ -800,10 +794,10 @@ class Runtime:
                 {"part": "graph.Configuration.disturb (propagation through dependents)",
                  "evidence": {"disturbances": len(disturbances),
                               "structural": sum(1 for d in disturbances if d.structural())}},
-                {"part": "arrangements.care_delta / play_delta (derived on request, not stored)",
+                {"part": "arrangements.reconfiguration_delta / variation_delta (derived on request, not stored)",
                  "evidence": {"baseline": "derived from an uninstructed answer read by an extraction call; not authored by the proposal",
-                              "care_delta_now": sorted(care_delta(cfg, last).keys()) if last else [],
-                              "play_delta_now": {k: sorted(v.keys()) for k, v in play_delta(cfg, last).items()} if last else {}}},
+                              "reconfiguration_delta_now": sorted(reconfiguration_delta(cfg, last).keys()) if last else [],
+                              "variation_delta_now": {k: sorted(v.keys()) for k, v in variation_delta(cfg, last).items()} if last else {}}},
                 {"part": "release.check_all inside Runtime.turn rounds (draft returns to configuration)",
                  "evidence": {"returns": len(returns),
                               "text_readings": sum(1 for c in cfg.cuts.values() if c.kind == "arrangement" and c.payload.get("role") == "read"),
@@ -817,7 +811,7 @@ class Runtime:
                 {"part": "graph.Delta once emitted", "count": len(cfg.deltas)},
                 {"part": "lifecycle facts", "count": len(cfg.lifecycle)},
                 {"part": "Configuration.record_only items (carried, no edges)", "count": len(cfg.records)},
-                {"part": "intervention payload copies of care_delta/play_delta (snapshots; the live values are derived)",
+                {"part": "intervention payload copies of reconfiguration_delta/variation_delta (snapshots; the live values are derived)",
                  "count": sum(1 for c in cfg.cuts.values() if c.kind == "intervention")},
                 {"part": "persistence files and probe records", "count": 1 if self.store is not None else 0},
             ],
