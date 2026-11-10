@@ -1,5 +1,6 @@
-"""The formation layer: the configuration decides the kind of release from
-the cuts before any text exists, the draft is written from the cuts in a
+"""The formation layer: the configuration decides the release from the cuts
+before any text exists (the work, one question, or the settled work with
+the one question it still needs), the draft is written from the cuts in a
 separate call, and the reader returns a text whose form departs from the
 decision or that names the architecture to a person who did not."""
 
@@ -16,26 +17,32 @@ CORPUS = os.path.join(REPO, "corpus")
 PERSON = "person"
 
 
-def cuts_for(ctx, staying=None):
+def cuts_for(ctx, staying=None, settled=False):
+    """The cuts of one scripted turn. With ``staying`` the proposal holds one
+    condition open; the enacted arrangement then rests on it (a question
+    release) or, with ``settled``, stands without it (a partial release:
+    the work and the one question)."""
     h = _arrivals(ctx)
-    cuts = [
-        {"kind": "apparatus", "label": "app", "basis": h, "apparatus": APP, "relata": [PERSON]},
-        {"kind": "arrangement", "label": "arr", "basis": h, "apparatus": APP,
-         "allocations": [{"position": PERSON, "burden": 0.2, "capacity": 0.6}],
-         "payload": {"role": "enacted", "sequence": ["explain"], "scale": "reduced", "distribution": "apparatus",
-                     "response_demand": {PERSON: ["decide"]}}},
-    ]
+    arrangement = {"kind": "arrangement", "label": "arr", "basis": h, "apparatus": APP,
+                   "allocations": [{"position": PERSON, "burden": 0.2, "capacity": 0.6}],
+                   "payload": {"role": "enacted", "sequence": ["explain"], "scale": "reduced", "distribution": "apparatus",
+                               "response_demand": {PERSON: ["decide"]}}}
+    cuts = [{"kind": "apparatus", "label": "app", "basis": h, "apparatus": APP, "relata": [PERSON]}]
     if staying:
         cuts.append({"kind": "staying", "label": "stay_open", "basis": h, "apparatus": APP, "relata": [PERSON],
                      "payload": {"open": staying, "decides": True}})
+        if not settled:
+            arrangement["depends_on"] = ["stay_open"]
+            arrangement["payload"]["sequence"] = ["ask"]
+    cuts.append(arrangement)
     return cuts
 
 
-def proposal(ctx, text=None, staying=None, enacts=("arr",), **draft_fields):
+def proposal(ctx, text=None, staying=None, enacts=("arr",), settled=False, **draft_fields):
     draft = None
     if text is not None:
         draft = dict({"text": text, "enacts": list(enacts), "reopen_conditions": []}, **draft_fields)
-    return Proposal(cuts=cuts_for(ctx, staying), draft=draft, claims=[], variation_possible=False,
+    return Proposal(cuts=cuts_for(ctx, staying, settled), draft=draft, claims=[], variation_possible=False,
                     variation_constraint="a definition")
 
 
@@ -92,6 +99,113 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(drafts[0].provenance["provider"], "scripted-drafter")
         self.assertEqual(drafts[0].provenance["kind"], "work")
         self.assertEqual(r.text, "Here is the plan.")
+
+
+class PartialReleaseTests(unittest.TestCase):
+    """The configuration evaluates the cuts the way a partial evaluator
+    evaluates a program: what they settle is done now, and what rests on an
+    open condition is asked. A staying cut beside an arrangement that stands
+    without it decides a partial release: the settled work and the one
+    question in one text."""
+
+    PARTIAL = ("Here is the email.\nSubject: Rent for November\nI will pay the rent on the 5th, as agreed in March. "
+               "Who should receive it this month, you or the management company?")
+
+    def test_an_open_condition_beside_settled_work_decides_a_partial_release(self):
+        proposer = ScriptedProposer(
+            [lambda ctx: proposal(ctx, self.PARTIAL, staying="who receives the rent this month", settled=True)],
+            baselines=[BASELINE_FIELDS])
+        runtime = Runtime(proposer)
+        r = runtime.turn("Can you draft the rent email? I don't know who it goes to this month.")
+        self.assertTrue(r.released, r.violations)
+        self.assertEqual(r.rounds, 1)
+        decision = [c for c in runtime.config.cuts.values() if c.label == "release_kind:turn1:r1"][0]
+        self.assertEqual(decision.payload["kind"], "partial")
+        self.assertEqual([runtime.config.cuts[i].label for i in decision.payload["open"]], ["stay_open"])
+        self.assertIn("arr", [runtime.config.cuts[i].label for i in decision.payload["settled"]])
+        self.assertIn("stands without it", decision.payload["reason"])
+        ctx = proposer.draft_contexts[0]
+        self.assertEqual(ctx["kind"], "partial")
+        self.assertEqual(ctx["open_conditions"], [{"label": "stay_open", "open": "who receives the rent this month"}])
+        self.assertIn("arr", ctx["settled"])
+        iv = runtime.config.cuts[r.intervention]
+        self.assertEqual(iv.payload["kind"], "partial")
+
+    def test_an_arrangement_that_rests_on_the_open_condition_decides_a_question(self):
+        proposer = ScriptedProposer(
+            [lambda ctx: proposal(ctx, "Who should the rent go to this month?", staying="who receives the rent this month")],
+            baselines=[BASELINE_FIELDS])
+        runtime = Runtime(proposer)
+        r = runtime.turn("Can you draft the rent email? I don't know who it goes to this month.")
+        self.assertTrue(r.released, r.violations)
+        decision = [c for c in runtime.config.cuts.values() if c.label == "release_kind:turn1:r1"][0]
+        self.assertEqual(decision.payload["kind"], "question")
+        self.assertEqual(decision.payload["settled"], [])
+        self.assertEqual(proposer.draft_contexts[0]["settled"], [])
+
+    def test_an_arrangement_whose_first_step_is_to_ask_decides_a_question(self):
+        from cbra.enactment.release import Formation, decide_release
+
+        def asks(ctx):
+            p = proposal(ctx, "Who should the rent go to this month?", staying="who receives the rent", settled=True)
+            p.cuts[-1]["payload"]["sequence"] = ["ask"]
+            return p
+        proposer = ScriptedProposer([asks], baselines=[BASELINE_FIELDS])
+        runtime = Runtime(proposer)
+        r = runtime.turn("Can you draft the rent email?")
+        self.assertTrue(r.released, r.violations)
+        decision = [c for c in runtime.config.cuts.values() if c.label == "release_kind:turn1:r1"][0]
+        self.assertEqual(decision.payload["kind"], "question")
+        self.assertIn("rests on it", decision.payload["reason"])
+
+    def test_a_partial_release_that_is_the_question_alone_returns(self):
+        proposer = ScriptedProposer([
+            lambda ctx: proposal(ctx, "Who should receive the rent this month?", staying="who receives the rent", settled=True),
+            lambda ctx: proposal(ctx, self.PARTIAL, staying="who receives the rent", settled=True),
+        ], baselines=[BASELINE_FIELDS] * 2)
+        r = Runtime(proposer).turn("Can you draft the rent email?")
+        self.assertTrue(r.released, r.violations)
+        self.assertEqual(r.rounds, 2)
+        first = {v.constraint: v.reason for v in r.violations[0]}
+        self.assertIn(14, first)
+        self.assertIn("the question alone, and the settled work is undone", first[14])
+
+    def test_a_partial_release_that_leaves_the_condition_unasked_returns(self):
+        proposer = ScriptedProposer([
+            lambda ctx: proposal(ctx, "Here is the email.\nSubject: Rent for November\nI will pay the rent on the 5th.",
+                                 staying="who receives the rent", settled=True),
+            lambda ctx: proposal(ctx, self.PARTIAL, staying="who receives the rent", settled=True),
+        ], baselines=[BASELINE_FIELDS] * 2)
+        r = Runtime(proposer).turn("Can you draft the rent email?")
+        self.assertTrue(r.released, r.violations)
+        self.assertEqual(r.rounds, 2)
+        first = {v.constraint: v.reason for v in r.violations[0]}
+        self.assertIn(14, first)
+        self.assertIn("leaves the open condition unasked", first[14])
+
+    def test_a_partial_release_whose_question_lists_alternatives_returns(self):
+        proposer = ScriptedProposer([
+            lambda ctx: proposal(ctx, "Here is the email.\nSubject: Rent for November\nI will pay the rent on the 5th. "
+                                      "Should it go to you, the management company, the owner, or the agent?",
+                                 staying="who receives the rent", settled=True),
+            lambda ctx: proposal(ctx, self.PARTIAL, staying="who receives the rent", settled=True),
+        ], baselines=[BASELINE_FIELDS] * 2)
+        r = Runtime(proposer).turn("Can you draft the rent email?")
+        self.assertTrue(r.released, r.violations)
+        self.assertEqual(r.rounds, 2)
+        first = {v.constraint: v.reason for v in r.violations[0]}
+        self.assertIn(14, first)
+        self.assertIn("alternatives", first[14])
+
+    def test_the_lexical_reading_names_one_question_inside_work_as_partial(self):
+        form = text_form(self.PARTIAL)
+        self.assertEqual(form["kind"], "partial")
+        self.assertEqual(form["questions"], 1)
+        # A work release keeps the question the work needs, asked once.
+        proposer = ScriptedProposer([lambda ctx: proposal(ctx, self.PARTIAL)], baselines=[BASELINE_FIELDS])
+        r = Runtime(proposer).turn("Can you draft the rent email?")
+        self.assertTrue(r.released, r.violations)
+        self.assertEqual(r.rounds, 1)
 
 
 class FormConstraintTests(unittest.TestCase):

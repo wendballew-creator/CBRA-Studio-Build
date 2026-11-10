@@ -25,16 +25,17 @@ def proposal(ctx, text, staying=None):
     h = _arrivals(ctx)
     # Canon passages the arrival named must ground a cut (constraint 3).
     grounds = h + [m["handle"] for m in ctx.material if m["consequential"]]
-    cuts = [
-        {"kind": "apparatus", "label": "app", "basis": h, "apparatus": APP, "relata": [PERSON]},
-        {"kind": "arrangement", "label": "arr", "basis": grounds, "apparatus": APP,
-         "allocations": [{"position": PERSON, "burden": 0.2, "capacity": 0.6}],
-         "payload": {"role": "enacted", "sequence": ["explain"], "scale": "reduced", "distribution": "apparatus",
-                     "response_demand": {PERSON: ["decide"]}}},
-    ]
+    arrangement = {"kind": "arrangement", "label": "arr", "basis": grounds, "apparatus": APP,
+                   "allocations": [{"position": PERSON, "burden": 0.2, "capacity": 0.6}],
+                   "payload": {"role": "enacted", "sequence": ["explain"], "scale": "reduced", "distribution": "apparatus",
+                               "response_demand": {PERSON: ["decide"]}}}
+    cuts = [{"kind": "apparatus", "label": "app", "basis": h, "apparatus": APP, "relata": [PERSON]}]
     if staying:
+        # The arrangement rests on the open condition: the release is one question.
         cuts.append({"kind": "staying", "label": "stay_open", "basis": h, "apparatus": APP, "relata": [PERSON],
                      "payload": {"open": staying, "decides": True}})
+        arrangement["depends_on"] = ["stay_open"]
+    cuts.append(arrangement)
     return Proposal(cuts=cuts, draft={"text": text, "enacts": ["arr"], "reopen_conditions": []}, claims=[],
                     variation_possible=False, variation_constraint="a definition")
 

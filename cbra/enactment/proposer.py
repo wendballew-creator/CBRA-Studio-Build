@@ -321,33 +321,42 @@ Return JSON with these keys:
 - "claims": subset of ["care", "play"]. "unresolved": incompatibilities you
   are holding open rather than resolving. "certification": null.
 
-The release is one of two kinds, and your cuts decide which.
+The runtime decides the release from your cuts the way a partial
+evaluator treats a program: what the cuts settle is done in this turn, and
+what rests on an open condition is asked. Three releases follow.
 
 - A "staying" cut with payload {"open": <what remains unresolved, in the
-  person's words>, "decides": true} says that an unresolved condition
-  changes what the intervention would be, and that the person's words leave
-  it open. The runtime then decides the release is one situated question
-  about that condition, and nothing else. Propose it when a term of theirs
-  could be read two ways and the reading changes what is owed, when a
-  decision is genuinely theirs, or when what they want is unsettled. One
-  such cut names one open condition.
-- With no such cut, the runtime decides the release is the work: the
-  answer, the draft, the repair, the plan, in the form the person asked
-  for, complete rather than described. Your arrangement cut says what that
-  work is and who carries what.
-- The enacted arrangement says what the release does. For a question
-  release its sequence begins with "ask", its distribution is "person"
-  (the next move is theirs), the person's response demand is "disclose"
-  and "explain" (answering is both) and nothing heavier, and the burden
-  is mostly the person's (0.7 to 0.9); the reader will read the question
-  that way, and the arrangement that says so is the one the text enacts. For a work release the sequence is
-  the work's steps and the burden is where the work is.
+  person's words>, "decides": true} names one open condition: a term of
+  theirs that could be read two ways where the reading changes what is
+  owed, a decision that is genuinely theirs, or what they want when it is
+  unsettled. One such cut names one open condition.
+- When the enacted arrangement rests on that condition (it lists the
+  staying cut in "depends_on", or its first step is "ask"), the whole
+  intervention waits on the answer and the release is one situated
+  question about the condition. Its sequence begins with "ask", its
+  distribution is "person" (the next move is theirs), the person's
+  response demand is "disclose" and "explain" (answering is both), and the
+  burden is mostly the person's (0.7 to 0.9).
+- When the enacted arrangement stands without the open condition, the
+  release is partial: the text does the settled work and asks the one
+  question. The arrangement's sequence is the work's steps; the question
+  adds "disclose" and "explain" to the person's demands and the burden is
+  where the work is. Propose this whenever part of what the person asked
+  for can be done now and one condition decides the rest: the email they
+  can send beside the one fact it needs, the plan beside the one choice
+  that is theirs.
+- With no staying cut, the release is the work: the answer, the draft, the
+  repair, the plan, in the form the person asked for, complete. Your
+  arrangement cut says what that work is and who carries what.
 
-An offer of options is a third thing, and it is neither. A release that
-asks the person to choose between things the apparatus could do hands them
-the turn's work and the decision about it; the constraints return it.
-Where a decision is genuinely theirs, a staying cut makes it one question;
-where it is not, the arrangement does the work.
+The reader reads the released text against the arrangement, so the
+arrangement that says what the text does is the one the text enacts.
+
+An offer of options is a fourth thing. A release that asks the person to
+choose between things the apparatus could do hands them the turn's work and
+the decision about it; the constraints return it. Where a decision is
+genuinely theirs, a staying cut makes it the question; where it is the
+apparatus's, the arrangement does the work.
 
 "material" holds passages of the project's own canon (its kernel, grammar,
 glossary, constraints, probes) selected for this arrival, each with a
@@ -402,9 +411,15 @@ person only what it asks.
   condition the cuts hold; the question says in a sentence what was noticed
   and asks the one thing that decides. Nothing else is in the text.
 - "work": the text does what the cuts settle is owed: the answer, the
-  draft, the repair, the plan, in the form the person asked for, complete
-  rather than described. A question inside the work is a question the work
-  needs answered to continue, asked once; the text does the settled part.
+  draft, the repair, the plan, in the form the person asked for, complete.
+  A question inside the work is a question the work needs answered to
+  continue, asked once; the text does the settled part.
+- "partial": the text does the settled work ("settled" lists the cuts it
+  rests on), complete and standing whatever the answer turns out to be,
+  and then asks one situated question about the open condition
+  ("open_conditions", in the person's words). The work comes first and the
+  question closes the text. One question; the settled part depends on
+  nothing the question asks.
 
 How the text speaks:
 
@@ -473,10 +488,13 @@ senses or cases a question lists so the person can say which they mean are
 part of the question and count as zero options.
 
 When "decided_kind" is given, the system that produced the text decided
-before writing it whether the release would be one question or the work.
-A text of kind "question" is expected to be a single question that hands
-the next move to the person; that single question is the intended form,
-and it is read as kind "question" with one question.
+before writing it whether the release would be the work, one question, or
+the settled work with one question ("partial"). A text of kind "question"
+is expected to be a single question that hands the next move to the
+person; that single question is the intended form, and it is read as kind
+"question" with one question. A text of kind "partial" is expected to do
+the work and then ask one question; read it as kind "partial" with one
+question when it does both.
 
 When "patterns" are given, each names a known way a reply goes wrong and
 says what marks it. Under "patterns" in your answer, return one record per

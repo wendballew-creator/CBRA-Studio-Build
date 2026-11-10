@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Tuple, Any, Callable, Dict, List, Mapping, Optional, Set
+from typing import Any, Callable, Dict, List, Mapping, Optional, Set, Tuple
 
 from .arrangements import TEXT_BURDEN_TOLERANCE, arrangement_fields, arrangements, care_delta, play_delta, text_against_claim
 from .graph import LIFECYCLE_FACTS, TRANSPORT_ROLES, Configuration, Cut
@@ -84,6 +84,8 @@ class Formation:
     round: int = 0
     violations: List[Violation] = field(default_factory=list)
     history: List[List[Violation]] = field(default_factory=list)
+    open_cuts: List[str] = field(default_factory=list)
+    settled_cuts: List[str] = field(default_factory=list)
     kind: Optional[str] = None
     kind_decision: Optional[str] = None
     form_reading: Optional[Dict[str, Any]] = None
@@ -240,7 +242,7 @@ def c10_articulation_first(config: Configuration, f: Formation) -> Optional[str]
     read = arrangements(config, "read", f.turn)
     if enacted and read:
         claimed = arrangement_fields(enacted[-1])
-        if f.kind == "question":
+        if f.kind in ("question", "partial"):
             # A question asks the person to say what they meant: disclosing
             # and explaining are what answering is, and the comparison treats
             # them as claimed.
@@ -284,21 +286,81 @@ def c13_narrative_control(config: Configuration, f: Formation) -> Optional[str]:
 
 
 # -- the kind of release, decided from the cuts before any text --------------
+def _rests_on(config: Configuration, cut_id: str, targets: Set[str]) -> bool:
+    """Whether ``cut_id`` depends, through any chain of ``depends_on``, on a
+    cut in ``targets``."""
+    seen: Set[str] = set()
+    stack = [cut_id]
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        cut = config.cuts.get(current)
+        if cut is None:
+            continue
+        for dep in cut.depends_on:
+            if dep in targets:
+                return True
+            stack.append(dep)
+    return False
+
+
+def _leads_with_ask(arrangement: Cut) -> bool:
+    sequence = list(arrangement.payload.get("sequence") or [])
+    if not sequence:
+        return False
+    first = sequence[0]
+    if isinstance(first, Mapping):
+        first = first.get("kind") or first.get("text") or ""
+    return str(first).strip().lower().startswith("ask")
+
+
+def decide_release(config: Configuration, f: Formation) -> Dict[str, Any]:
+    """The configuration evaluates the cuts of this round, before a draft
+    exists, the way a partial evaluator evaluates a program: what the cuts
+    settle is computed now, and what rests on an open condition is left as
+    a residual. A ``staying`` cut whose payload holds something ``open`` and
+    marks that the intervention ``decides`` on it is an open condition.
+
+    - no open condition: the release is the ``work``;
+    - the enacted arrangement rests on an open condition (it depends on the
+      staying cut, or its first step is to ask): the whole intervention is
+      residual, and the release is one ``question``;
+    - an open condition beside an arrangement that stands without it: the
+      release is ``partial``, the settled work and the one question in one
+      text.
+
+    Returns kind, reason, the open cuts, and the settled cuts."""
+    active = f.active_cuts(config)
+    open_cuts = [c for c in active if c.kind == "staying" and c.payload.get("decides") and c.payload.get("open")]
+    if not open_cuts:
+        return {"kind": "work", "open": [], "settled": [c.id for c in active if c.kind != "apparatus"],
+                "reason": "no staying cut holds a condition the intervention depends on; the cuts settle what is owed"}
+    open_ids = {c.id for c in open_cuts}
+    held = "; ".join("%s holds open: %s" % (c.label, c.payload.get("open")) for c in open_cuts)
+    enacted = [c for c in active if c.kind == "arrangement" and c.payload.get("role") == "enacted"]
+    arrangement = enacted[-1] if enacted else None
+    if arrangement is None or _rests_on(config, arrangement.id, open_ids) or _leads_with_ask(arrangement):
+        return {"kind": "question", "open": [c.id for c in open_cuts], "settled": [],
+                "reason": "staying cut %s; the arrangement rests on it, and the release is one question about it" % held}
+    settled = [c.id for c in active
+               if c.id not in open_ids and c.kind not in ("staying", "apparatus") and not _rests_on(config, c.id, open_ids)]
+    return {"kind": "partial", "open": [c.id for c in open_cuts], "settled": settled,
+            "reason": "staying cut %s; the arrangement %s stands without it: the text does the settled work and asks the one question" % (
+                held, arrangement.label)}
+
+
 
 RELEASE_KINDS = ("question", "work")
 
 
 def decide_kind(config: Configuration, f: Formation) -> Tuple[str, str, List[str]]:
-    """The configuration decides what kind of thing is released, from the
-    cuts of this round and before a draft exists. A ``staying`` cut whose
-    payload holds something ``open`` and marks that the intervention
-    ``decides`` on it says that an unresolved condition changes what the
-    intervention would be: the release is then one question about it.
-    Otherwise the cuts settle what is owed and the release is the work."""
-    for cut in f.active_cuts(config):
-        if cut.kind == "staying" and cut.payload.get("decides") and cut.payload.get("open"):
-            return "question", "staying cut %s holds open: %s" % (cut.label, cut.payload.get("open")), [cut.id]
-    return "work", "no staying cut holds a condition the intervention depends on; the cuts settle what is owed", []
+    """The kind of release the configuration decides from the cuts, with its
+    reason and the cuts it was decided from (see ``decide_release``)."""
+    decision = decide_release(config, f)
+    return decision["kind"], decision["reason"], list(decision["open"]) + (
+        list(decision["settled"][-1:]) if decision["kind"] == "partial" else [])
 
 
 ARCHITECTURE_NAMES = re.compile(
@@ -331,12 +393,15 @@ def text_form(text: str) -> Dict[str, Any]:
         kind = "menu"
     elif questions == 0:
         kind = "work"
-    elif questions == 1 and text.strip().endswith("?") and sentences <= 3:
+    elif (questions == 1 and text.strip().endswith("?") and sentences <= 3
+          and "\n" not in text.strip() and len(text.split()) <= 60):
+        # One question in one short paragraph: the question form. Work that
+        # carries a question has lines, length or sentences beyond it.
         kind = "question"
     elif questions >= 2:
         kind = "mixed"
     else:
-        kind = "work"
+        kind = "partial"   # one question inside text that also does something
     return {"kind": kind, "questions": questions, "options": options, "source": "lexical"}
 
 
@@ -378,6 +443,16 @@ def c14_release_kind(config: Configuration, f: Formation) -> Optional[str]:
     questions = int(form.get("questions") or 0)
     if f.kind == "question" and questions != 1:
         return "the release was decided as one question; the text asks %d" % questions
+    if f.kind == "partial":
+        if questions == 0:
+            return "the release was decided as the settled work with one question; the text asks none and leaves the open condition unasked"
+        if questions >= 2:
+            return "the release was decided as the settled work with one question; the text asks %d" % questions
+        if form.get("kind") == "question":
+            return "the release was decided as the settled work with one question; the text is the question alone, and the settled work is undone"
+        listed = question_lists_alternatives(text)
+        if listed >= 3:
+            return "the question lays out %d alternatives for the person to pick from; one situated question names none" % listed
     if f.kind == "question":
         listed = question_lists_alternatives(text)
         if listed >= 3:

@@ -21,7 +21,7 @@ from .graph import APPARATUS_MARK, Configuration, Cut, Delta, EnactmentError, Tr
 TransportTraceLike = TransportTrace
 from .material import Corpus
 from .proposer import Proposal, ProposalContext, Proposer
-from .release import FORM_PATTERNS, Formation, Violation, check_all, decide_kind, pattern_from_passage, patterns_present
+from .release import FORM_PATTERNS, Formation, Violation, check_all, decide_release, pattern_from_passage, patterns_present
 
 
 @dataclass
@@ -399,19 +399,27 @@ class Runtime:
     def _decide_and_draft(self, formation: Formation, proposal: Proposal, proposal_handle: str,
                           context: ProposalContext) -> Optional[str]:
         """The configuration decides, from the cuts just enacted and before
-        any text exists, whether this release is one question or the work.
-        The decision is a cut of its own. The draft is then requested in a
-        separate call that sees the cuts, the person's words and the decided
-        kind, and neither the baseline's text nor any earlier draft."""
+        any text exists, what this release is: the work, one question, or
+        the settled work with the one question it still needs (a partial
+        evaluation of the cuts: what they settle is done now, what rests on
+        an open condition is asked). The decision is a cut of its own. The
+        draft is then requested in a separate call that sees the cuts, the
+        person's words, the decided kind with the settled and open cuts, and
+        neither the baseline's text nor any earlier draft."""
         cfg = self.config
         turn = formation.turn
-        kind, reason, basis = decide_kind(cfg, formation)
+        decided = decide_release(cfg, formation)
+        kind, reason = decided["kind"], decided["reason"]
+        basis = list(decided["open"]) + (list(decided["settled"]) if kind == "partial" else [])
         decision = cfg.enact(
             kind="apparatus", label="release_kind:%s:r%d" % (turn, formation.round),
-            basis=[proposal_handle] + list(basis),
+            basis=[proposal_handle] + basis,
             apparatus=["the configuration deciding the kind of release from the cuts, before any text"],
-            payload={"turn": turn, "kind": kind, "reason": reason, "decided_from": list(basis)},
+            payload={"turn": turn, "kind": kind, "reason": reason, "decided_from": basis,
+                     "open": list(decided["open"]), "settled": list(decided["settled"])},
         )
+        formation.open_cuts = list(decided["open"])
+        formation.settled_cuts = list(decided["settled"])
         formation.cuts.append(decision.id)
         formation.kind = kind
         formation.kind_decision = decision.id
@@ -462,9 +470,13 @@ class Runtime:
                         "distribution": a.payload.get("distribution"),
                         "response_demand": a.payload.get("response_demand") or {},
                         "allocations": {k: dict(v) for k, v in a.allocations.items()}}
+        open_conditions = [{"label": cfg.cuts[i].label, "open": cfg.cuts[i].payload.get("open")}
+                           for i in formation.open_cuts if i in cfg.cuts]
+        settled = [cfg.cuts[i].label for i in formation.settled_cuts if i in cfg.cuts]
         return {
             "turn": formation.turn, "round": formation.round, "minimal": formation.minimal,
             "kind": kind, "reason": reason,
+            "open_conditions": open_conditions, "settled": settled,
             "arrangement": contract,
             "arrivals": [cfg.transports[h].text for h in formation.arrivals if h in cfg.transports],
             "conversation": conversation,

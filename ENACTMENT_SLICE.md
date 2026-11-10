@@ -1410,3 +1410,76 @@ the turn named.
 
 The full suite passes under the project's virtualenv (566 tests, 7
 skipped). No run was made.
+
+## The partial release: settled work beside the one open question, 9 November 2026
+
+The evening record of 6 November showed the question release handing
+work back: the landlord turn released one question with four parts, the
+dying-mother turn a question offering five things to say. The release
+was decided as one of two kinds, and a question release held the whole
+intervention until the person answered. This entry gives the
+configuration a third release and names the coding method it comes from.
+
+**Partial evaluation.** A partial evaluator takes a program and the inputs
+that are known, computes everything those inputs settle, and emits a
+residual program for what rests on the inputs still unknown. The cuts of
+a round are the program; a `staying` cut whose payload holds something
+`open` and marks that the intervention `decides` on it is an unknown
+input. `release.decide_release` evaluates the round:
+
+- with no open condition, the release is the work;
+- when the enacted arrangement rests on an open condition (it lists the
+  staying cut in `depends_on`, directly or through other cuts, or its
+  first step is to ask), the whole intervention is residual and the
+  release is one question;
+- when an open condition stands beside an arrangement that stands without
+  it, the release is partial: the text does the settled work and asks
+  the one question.
+
+The dependency graph does the evaluation. The settled cuts are those with
+no path in `depends_on` to an open staying cut; the residual is the open
+cut. The decision cut `release_kind:<turn>:r<round>` records `open` and
+`settled` by id beside the kind and its reason, and the drafter receives
+`open_conditions` (label and the open text, in the person's words) and
+`settled` (labels) with the decided kind.
+
+**The drafter and the reader.** The drafter's instructions describe the
+partial release: the settled work first, complete and standing whatever
+the answer turns out to be, and one situated question closing the text.
+The proposer's instructions describe the three releases and say when to
+propose the partial one: the email the person can send beside the one
+fact it needs, the plan beside the one choice that is theirs. The reader
+is told that a text decided as partial does the work and asks one
+question, and reads its form as `partial` when it does both. The lexical
+reading `text_form` names one question inside text that also does
+something `partial`, and keeps `question` for one question in one short
+paragraph (up to three sentences, sixty words, no line break).
+
+**Constraint 14 on a partial release.** The text asks exactly one question;
+a text that is the question alone returns with the settled work undone; a
+text that does the work and leaves the condition unasked returns; a
+question that lays out three or more alternatives returns; a menu returns.
+Constraint 10 adds `disclose` and `explain` to the person's demands for a
+partial release as it does for a question, since answering is both.
+
+**What changed for the question release.** A staying cut alone decided a
+question until now. A question is now decided when the arrangement rests
+on the open condition. The two scripted fixtures that proposed a staying
+cut now list it in the arrangement's `depends_on`; a proposer that holds
+a condition open and keeps its arrangement independent of it gets a
+partial release, which is the behavior the landlord and dying-mother turns
+called for.
+
+**Tests.** Seven tests in `test_enactment_formation.py` (`PartialReleaseTests`):
+the decision, its record and the drafter's context; the question decided
+through `depends_on` and through an arrangement that leads with `ask`;
+the three returns under constraint 14; the lexical reading, with a work
+release keeping the one question the work needs. Full suite: 573 tests,
+7 skipped, passing under the project's virtualenv. No live run was made.
+
+**Claim boundary.** The partial release has run on scripted proposals. What
+the model proposes when its instructions describe three releases, whether
+it keeps the arrangement independent of the open condition where the work
+can be done, and whether the released texts do the settled part before
+asking, is for the next live run to show. Which turns of the probe set
+decide partial under the method is unmeasured.
