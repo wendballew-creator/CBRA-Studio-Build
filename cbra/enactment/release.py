@@ -132,7 +132,8 @@ def c2_global_entity(config: Configuration, f: Formation) -> Optional[str]:
             continue
         for r in cut.relata:
             if r in prior and r not in continued:
-                return "position %r reappears from an earlier turn in cut %s without a continuity cut" % (r, cut.id)
+                return ("position %r reappears from an earlier turn in cut %s without a continuity cut; "
+                        "a cut of kind \"continuity\" with %r in its relata carries the position into this turn") % (r, cut.id, r)
     return None
 
 
@@ -413,6 +414,13 @@ def question_lists_alternatives(text: str) -> int:
     enumerated = len(ALTERNATIVES.findall(text))
     if enumerated >= 2:
         return enumerated
+    # "A, or B? If it's something else, say it": the alternatives named plus
+    # the one left to the person make a list of at least three.
+    if re.search(r"\b(?:or|if (?:it[’']?s|it is|there[’']?s)) (?:something|anything) else\b", text, re.IGNORECASE):
+        head = re.sub(r"\s*[—–]\s*", ", ", text.rsplit("?", 1)[0] if "?" in text else text)
+        head = re.split(r"[.!]\s+", head)[-1]   # the question's own sentence
+        named = len(re.findall(r"\bor\b", head)) + head.count(",")
+        return max(3, named + 1)
     question = text.rsplit("?", 1)[0] if "?" in text else ""
     question = re.sub(r"\s*[—–]\s*(?=or\b)", ", ", question)   # "accountability—or something else" lists as a comma does
     tail = re.split(r"[.!]\s", question)[-1]
@@ -441,7 +449,8 @@ def offers_alternatives(text: str) -> int:
         return enumerated
     examples = EXAMPLES.search(text)
     if examples:
-        items = [i for i in re.split(r",\s*|\s+or\s+", examples.group(1)) if i.strip()]
+        # A list of examples, comma-separated; "(e.g., what do you see or hear)" is one phrase.
+        items = [i for i in examples.group(1).split(",") if i.strip()]
         if len(items) >= 2:
             return len(items)
     body = text.rstrip("?. ")
@@ -450,13 +459,15 @@ def offers_alternatives(text: str) -> int:
         return m.group(1).count(",") + 1
     # "..., or something else": the kinds before it were the apparatus's.
     if re.search(r"\bor (?:something|anything) else\b", text, re.IGNORECASE):
-        return max(2, text.count(",") )
-    # A parenthetical that offers an either/or: "(a milestone, or evidence of practice)".
-    paren = re.search(r"\(([^)]*\bor\b[^)]*)\)", text, re.IGNORECASE)
+        return max(2, text.count(","))
+    # A parenthetical that lists an either/or: "(a milestone, or evidence of
+    # practice)". A parenthetical with an "or" and no comma ("what do you see
+    # or hear") is a phrase of the person's matter and counts nothing; a bare
+    # "A or B" in the condition ("passage or sentence") counts nothing either.
+    # The reader's count of options on the released text reads those.
+    paren = re.search(r"\(([^)]*,[^)]*\bor\b[^)]*)\)", EXAMPLES.sub("", text), re.IGNORECASE)
     if paren:
         return max(2, len([i for i in re.split(r",\s*|\s+or\s+", paren.group(1)) if i.strip()]))
-    if OFFER_LEAD.search(text) and re.search(r"\b\w[^,;:?]{1,60}\s+or\s+\w", body):
-        return 2
     return 0
 
 

@@ -1817,3 +1817,132 @@ or a condition in the person's matter phrased as a list of their own
 options, is for the next run to show. Whether the proposer, told what an
 open condition is and returned when it sorts, proposes conditions in the
 person's matter on the arrivals that drew sortings is unmeasured.
+
+## Case Study 001 under the three releases, 9–10 November 2026
+
+Two runs of the Case Study 001 set (`measurement/case_001_probes.md`,
+three identical three-turn probes) against the November canon, in
+parallel: the method (`measurement/case_001_2026-11-09_method.md`,
+sessions `.cbra-runtime/measurement/2026-11-09T222200/`) and instructions
+alone (`…_instruction_only.md`, `…T222200-instruction-only/`), compared
+with each other in `case_001_2026-11-09_compare.md` and, for the method,
+with the evening of 6 November in `case_001_compare_evening_vs_2026-11-09.md`.
+The method released five of nine turns and withheld four, in 70 minutes;
+instructions alone released nine of nine, two on a second round after a
+proposal that could not be enacted, in 37.
+
+### What changed since 6 November, and what it did here
+
+On the evening of 6 November this set released nine of nine under both
+conditions, every "narcissistic behaviors" turn as one question asking
+what the author meant, and the slice log read that as the instructions
+and the split formation doing the work. Since then the configuration can
+decide a partial release. On this set the proposer decided partial on
+seven of the method's first rounds and on eight of nine turns under
+instructions alone, and the work it placed beside the question is the
+work Case Study 001 names as the failure.
+
+**The "narcissistic behaviors" turn.** Under instructions alone, all
+three runs released the correction and the toolkit beside the question:
+"In this project we keep 'narcissistic behaviors' as behavior-in-situation
+... Two quick swaps and one micro-move you can try now: 1) 'is a
+narcissist' → 'is enacting self-centering moves here' ..."; "many people
+can show narcissistic-looking behaviors under pressure (self-focus,
+image-management, low perspective-taking) ... One micro-move you can
+try"; "a 30-second sharp-to-soft reset: name your state, lower volume,
+lengthen exhale". The reader noted Premature Coherence on two and the
+constraints enforced nothing. Under the method the same drafts returned
+on constraint 16 (Premature Coherence), 14 (a sorting held as the open
+condition; an offer of two things the apparatus could do) and 10 (the
+text's burden against the arrangement's), and two of the three runs were
+withheld after four rounds. The third released on round two a question
+in the author's own words for the failure: "what do you want that
+wording to do for you: name a specific move you're seeing right then, or
+fix the person's status? If it's something else, please say it in your
+words." The reader counted no option and the lexical reading found no
+list; the binary closed by "something else" passed as one question.
+
+**The repair turn.** Under instructions alone, three apologies with a
+recommitment and the question ("I'm sorry for the impact ... From here I
+will lead with a clarifying question before any framing ... what did you
+mean in your words?"), the 7 November form. Under the method: one withheld
+(constraints 2 and 10 across four rounds), one released on round three as
+a question that hands the repair's design to the author ("What would you
+like me to do first when this comes up?"), one released on round three as
+a partial: apology, recommitment, the question. The method's three
+outcomes on the same arrival are silence, displacement and the
+instruction-only form.
+
+**The first turn.** The author's correction of the terms released under
+the method as a partial twice (the acknowledgment and the one question,
+which sentence to revise) and was withheld once, on constraint 10 three
+times (the text led with recommitting where the arrangement claimed
+repair) and then constraint 3 in the minimal round (the Diffraction
+passage matched the arrival and grounded no cut). Constraint 3 fired for
+the first time in a live run, on the fourth round of a withheld turn.
+
+**Constraint 2 did work, as a label.** Six returns and four notes: the
+proposer reused a position label from an earlier turn ("person_writing",
+"apparatus_answering") with no continuity cut, and repeated the same
+omission after the return, since nothing had told it what a continuity
+cut is. The instructions now say it, and the constraint's reason names
+the movement. Constraint 10 returned eleven times, mostly on the text's
+first step (recommit where repair was claimed) and on burden shares; it
+withheld one turn by itself.
+
+### Against the six criteria
+
+(1) Behavior versus identity: no release named a status; the method's
+releases asked or were silent. (2) Asking before correcting: the method
+asked or withheld on every "narcissistic" turn; instructions alone
+corrected first on all three. (3) The apparatus's own role legible: in
+the repair releases, under both conditions ("I corrected instead of
+asking"). (4) Continuity across repair: the repair turn released its own
+form each time; nothing in the record shows the second turn's cut
+revised by the third turn's correction. (5) Empirical specificity: the
+questions asked for "a specific move", "one or two concrete moves".
+(6) An actionable opening: a question is one; silence is one with its
+burden on the author.
+
+### The ledger across three turns
+
+The account the proposer saw at the third turn, method, run 2: person,
+burden set 0.95, read 1.10, left 1.00 by deferral, asked to communicate
+twice, decide, disclose four times, explain twice, two questions;
+apparatus, burden set 1.05, read 0.90, nine passages drawn. Under
+instructions alone, run 1: person asked to disclose six times and
+explain six, three questions. The third turn's release in every run
+asked the author to disclose again. Nothing in the record shows the
+proposer redistributing on seeing the account; the arrangement it
+proposed at turn three placed the question's burden where turns one and
+two had.
+
+### What changed in the code after the reading
+
+- The open-condition reading (`offers_alternatives`) counts an either/or
+  only as a comma list, an enumeration, a list of examples or a list
+  closed by "or something else". A bare "A or B" in the person's matter
+  ("which passage or sentence", "what do you see or hear") counts
+  nothing; the run had returned two such conditions as sortings. The
+  reader's count of options on the released text reads bare offers.
+- A question closed by "if it's something else, say it in your words"
+  lists its alternatives plus the one left to the person, three at least,
+  and returns under constraint 14. The binary that released on run 3 is
+  the test fixture.
+- Constraint 2's reason says what a continuity cut is, and the proposer's
+  instructions say when one is owed.
+
+Full suite: 588 tests, 7 skipped. No further live run was made.
+
+### Claim boundary
+
+Three runs of one three-turn encounter under each condition, on one
+night, with the formation changed four times since the 6 November
+evening it is compared with. The withheld turns are the method's record
+of what it would not release, and they leave the author with silence;
+whether silence was owed on those arrivals is a reading the author makes.
+What a partial release should be on an arrival about the person's own
+state, where the work beside the question has three times been the
+correction and the toolkit, is the decision this record puts to the
+author. Nothing here establishes that asking was care, that the withheld
+turns were right, or that the method is posthuman.

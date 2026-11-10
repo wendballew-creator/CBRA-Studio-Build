@@ -283,6 +283,11 @@ Return JSON with these keys:
 - Every turn carries at least one "apparatus" cut describing your own
   participation and its limits, and every cut carries a non-empty
   "apparatus" list.
+- A position named in an earlier turn's "position" or "event" cut appears
+  again in this turn through a "continuity" cut that lists it in "relata"
+  (payload {"relation": <how it continues>}); the other cuts of this turn
+  then use it. A position used again with no continuity cut returns
+  (constraint 2), and the same return repeats until the cut is proposed.
 - Arrangements: propose an "enacted" arrangement, and alternatives, as cuts
   of kind "arrangement" with payload {"role": enacted | alternative, "turn":
   <turn>, plus the arrangement fields in the vocabulary below, plus "medium",

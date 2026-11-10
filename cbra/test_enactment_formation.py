@@ -224,7 +224,7 @@ class PartialReleaseTests(unittest.TestCase):
         self.assertIn("choice among 3 things", first[14])
         # The lexical reading reaches the same offer when the list closes with a dash before "or".
         from cbra.enactment.release import question_lists_alternatives
-        self.assertEqual(question_lists_alternatives(offer), 4)
+        self.assertGreaterEqual(question_lists_alternatives(offer), 3)
 
     def test_an_open_condition_that_sorts_the_question_into_kinds_returns_before_the_text_is_read(self):
         from cbra.enactment.release import offers_alternatives
@@ -249,9 +249,32 @@ class PartialReleaseTests(unittest.TestCase):
             ("Do you want a conceptual account or practical commitments here (or something else)?", 2),
             ("When you say 'systems theory,' which lineage do you mean (e.g., general systems theory, cybernetics, complex adaptive systems, STS, something else)?", 5),
             ("what you mean by “achieved” here (a binary milestone/compliance, or evidence of ongoing practice)?", 2),
-            ("Whether you want only CBRA’s canon sense now or a drilldown on a specific kind of thing you have in mind", 2),
+            # A bare "A or B" in the person's matter counts nothing: the Case 001 run of 9 November
+            # returned these two, and the reader's count on the released text is where an offer is read.
+            ("Which earlier passage or exact sentence do you want revised with CBRA terms? Quote it or point to it.", 0),
+            ("When you say ‘narcissistic behaviors’ in those sharp moments, which specific moves are you pointing at? (e.g., what do you see or hear happen?)", 0),
+            ("Whether you want only CBRA’s canon sense now or a drilldown on a specific kind of thing you have in mind", 0),
         ]:
             self.assertEqual(offers_alternatives(held) >= 2, kinds >= 2, held)
+
+    def test_a_binary_question_closed_by_something_else_returns_as_a_list(self):
+        """Released on the Case 001 run of 9 November: the person's own words for
+        the failure ("you bring it back in a binary way"), released as the
+        method's question."""
+        from cbra.enactment.release import question_lists_alternatives
+        binary = ("When you say “narcissistic behaviors” in those sharp moments, what do you want that wording to do for you—name "
+                  "a specific move you’re seeing right then, or fix the person’s status? If it’s something else, please say it in your words.")
+        self.assertGreaterEqual(question_lists_alternatives(binary), 3)
+        proposer = ScriptedProposer([
+            lambda ctx: proposal(ctx, binary, staying="what the wording does for the person"),
+            lambda ctx: proposal(ctx, "When you say “narcissistic behaviors” in those sharp moments, what do you see happen?", staying="what the wording does for the person"),
+        ], baselines=[BASELINE_FIELDS] * 2)
+        r = Runtime(proposer).turn("In those moments people display narcissistic behaviors, right?")
+        self.assertTrue(r.released, r.violations)
+        self.assertEqual(r.rounds, 2)
+        first = {v.constraint: v.reason for v in r.violations[0]}
+        self.assertIn(14, first)
+        self.assertIn("alternatives", first[14])
 
     def test_the_lexical_reading_names_one_question_inside_work_as_partial(self):
         form = text_form(self.PARTIAL)
