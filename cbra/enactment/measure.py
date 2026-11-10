@@ -33,7 +33,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence
 
 from .graph import Configuration
-from .ledger import describe as describe_ledger
+from .ledger import account as ledger_account, describe as describe_ledger
 from .material import Corpus
 from .persistence import JsonStore
 from .probes import code_version
@@ -290,7 +290,8 @@ def turn_reading(config: Configuration, turn: str, corpus: Optional[Corpus] = No
         "reconfiguration_delta": sorted((payload.get("reconfiguration_delta") or payload.get("care_delta") or {}).keys()),
         "variation_delta": {k: sorted(v.keys()) for k, v in (payload.get("variation_delta") or payload.get("play_delta") or {}).items()},
         "text_unread": any(u.get("kind") == "text_unread" and u.get("turn") == turn for u in config.unresolved),
-        "ledger": config.records.get("ledger:%s" % turn),
+        # Derived live from the cuts; the stored record is what the proposer saw at the time.
+        "ledger": ledger_account(config, through=turn),
         "canon_terms": {"baseline": _terms(corpus, baseline_text), "released": _terms(corpus, released)},
         "patterns": patterns,
         "shared_vocabulary": _shared(baseline_text, released),

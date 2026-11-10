@@ -41,7 +41,7 @@ from .graph import Configuration, Cut
 
 POSTING_KINDS = ("arrangement", "reading", "release", "question", "deferral", "material")
 
-_RETURNED = re.compile(r"^draft returned to configuration")
+_RETURNED = re.compile(r"draft returned to configuration")   # directly, or through a chain of dependents
 _NUMBER = re.compile(r"(\d+)$")
 
 
@@ -51,10 +51,18 @@ def _order(cut_id: str) -> int:
 
 
 def _posted(cut: Cut) -> bool:
-    """A cut posts work unless the draft it belonged to returned."""
-    if cut.status == "invalidated" and cut.invalidation_reason and _RETURNED.match(cut.invalidation_reason):
+    """A cut posts work unless the draft it belonged to returned, directly
+    or through a cut that depended on one that returned."""
+    if cut.status == "invalidated" and cut.invalidation_reason and _RETURNED.search(cut.invalidation_reason):
         return False
     return True
+
+
+def _withheld_turns(config: Configuration) -> set:
+    """Turns whose intervention is a deferral: no arrangement reached the
+    person, so only the deferral posts."""
+    return {c.payload.get("turn") for c in config.cuts.values()
+            if c.kind == "intervention" and c.payload.get("form") == "deferral"}
 
 
 def _roles_for_turn(config: Configuration, turn: Optional[str]) -> Dict[str, str]:
@@ -66,11 +74,23 @@ def _roles_for_turn(config: Configuration, turn: Optional[str]) -> Dict[str, str
     return roles
 
 
+_ARTICLE = re.compile(r"^(?:the|this|a)\s+", re.IGNORECASE)
+
+
 def _account_key(label: str, roles: Mapping[str, str]) -> str:
+    """The account a position label posts to: its role where an arrangement
+    names one; otherwise the label itself, with a role prefix
+    (``apparatus:this_model``), an article (``the person``) or an alias
+    (``the assistant``) resolved to the role it names."""
     if label in roles:
         return roles[label]
-    token = _norm_token(label)
-    return ROLE_ALIASES.get(token, token) if token in ROLE_ALIASES or token in ("person", "apparatus") else label
+    head = label.split(":", 1)[0].strip()
+    head = _ARTICLE.sub("", head)
+    token = _norm_token(head)
+    token = ROLE_ALIASES.get(token, token)
+    if token in ("person", "apparatus"):
+        return token
+    return label
 
 
 def _entry(cut: Cut, kind: str, position: str, roles: Mapping[str, str], burden: Optional[float] = None,
@@ -98,11 +118,14 @@ def postings(config: Configuration, turn: Optional[str] = None) -> List[Dict[str
     were enacted; with ``turn``, those of one turn."""
     out: List[Dict[str, Any]] = []
     role_cache: Dict[Optional[str], Dict[str, str]] = {}
+    withheld = _withheld_turns(config)
     for cut in sorted(config.cuts.values(), key=lambda c: _order(c.id)):
         cut_turn = cut.payload.get("turn")
         if turn is not None and cut_turn != turn:
             continue
         if not _posted(cut):
+            continue
+        if cut_turn in withheld and cut.kind != "intervention":
             continue
         if cut_turn not in role_cache:
             role_cache[cut_turn] = _roles_for_turn(config, cut_turn)

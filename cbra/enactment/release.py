@@ -414,6 +414,7 @@ def question_lists_alternatives(text: str) -> int:
     if enumerated >= 2:
         return enumerated
     question = text.rsplit("?", 1)[0] if "?" in text else ""
+    question = re.sub(r"\s*[—–]\s*(?=or\b)", ", ", question)   # "accountability—or something else" lists as a comma does
     tail = re.split(r"[.!]\s", question)[-1]
     m = re.search(r"((?:[^,;:?]{2,60},\s+){2,})(?:or|and)\s+[^,;?]{2,60}$", tail.strip())
     if m:
@@ -433,9 +434,9 @@ def c14_release_kind(config: Configuration, f: Formation) -> Optional[str]:
     declared = f.draft.get("kind")
     if declared and declared != f.kind:
         return "the draft declares kind %r; the configuration decided %r from the cuts" % (declared, f.kind)
-    if form.get("kind") == "menu":
+    if form.get("kind") == "menu" or int(form.get("options") or 0) >= 2:
         return "the text offers the person a choice among %s things the apparatus could do; the configuration decided a %s" % (
-            form.get("options", "several"), f.kind)
+            form.get("options") or "several", f.kind)
     questions = int(form.get("questions") or 0)
     if f.kind == "question" and questions != 1:
         return "the release was decided as one question; the text asks %d" % questions

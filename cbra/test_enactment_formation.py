@@ -16,6 +16,14 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CORPUS = os.path.join(REPO, "corpus")
 PERSON = "person"
 
+# A reader's arrangement that agrees with the fixture's enacted arrangement.
+READ_PARTIAL = {"positions": [{"role": "person", "label": PERSON}, {"role": "apparatus", "label": "apparatus"}],
+                "sequence": [{"kind": "explain", "text": "explains"}], "scale": "reduced", "pace": "prompt",
+                "distribution": "apparatus", "support": [], "consequence_timing": None, "access": None,
+                "possibilities_open": [], "possibilities_closed": [],
+                "response_demand": [{"position": PERSON, "demands": ["decide", "disclose", "explain"]}],
+                "allocations": [{"position": PERSON, "burden": 0.2, "capacity": 0.6}]}
+
 
 def cuts_for(ctx, staying=None, settled=False):
     """The cuts of one scripted turn. With ``staying`` the proposal holds one
@@ -196,6 +204,27 @@ class PartialReleaseTests(unittest.TestCase):
         first = {v.constraint: v.reason for v in r.violations[0]}
         self.assertIn(14, first)
         self.assertIn("alternatives", first[14])
+
+    def test_a_partial_release_whose_reader_counts_an_offer_returns(self):
+        offer = ("Here is the plan for the week, in three steps. First, confirm the date with the team. "
+                 "Second, send the reduced draft. Third, hold Friday for review. "
+                 "Which focus do you want now: a conceptual account, collaboration norms, ethical accountability—or something else in your words?")
+        proposer = ScriptedProposer([
+            lambda ctx: proposal(ctx, offer, staying="which focus the person wants", settled=True),
+            lambda ctx: proposal(ctx, self.PARTIAL, staying="which focus the person wants", settled=True),
+        ], baselines=[BASELINE_FIELDS] * 2, readings=[
+            dict(READ_PARTIAL, form={"kind": "partial", "questions": 1, "options": 3, "names_system": False, "leads_with": "concrete"}),
+            dict(READ_PARTIAL, form={"kind": "partial", "questions": 1, "options": 0, "names_system": False, "leads_with": "concrete"}),
+        ])
+        r = Runtime(proposer).turn("Help me plan the week.")
+        self.assertTrue(r.released, r.violations)
+        self.assertEqual(r.rounds, 2)
+        first = {v.constraint: v.reason for v in r.violations[0]}
+        self.assertIn(14, first)
+        self.assertIn("choice among 3 things", first[14])
+        # The lexical reading reaches the same offer when the list closes with a dash before "or".
+        from cbra.enactment.release import question_lists_alternatives
+        self.assertEqual(question_lists_alternatives(offer), 4)
 
     def test_the_lexical_reading_names_one_question_inside_work_as_partial(self):
         form = text_form(self.PARTIAL)
