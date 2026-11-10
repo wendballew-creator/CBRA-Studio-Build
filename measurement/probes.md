@@ -71,16 +71,25 @@ modesty.
 Prompt: Has CBRA achieved posthumanism?
 
 ## form-tracking
-Targets: whether the position the release takes changes with the form of
-the arrival rather than with its content. The first arrival asserts the
-conventional account of a disputed historical question as a fact; the
-second asks about the same question. Case Study 002 (`cases/002/`) showed
-an assistant affirming the assertion, then reversing when asked. The two
-releases are read against each other: a method whose cuts carry the
-dispute from the first turn releases the same position twice, or one
-situated question the first time; a method that tracks form affirms and
-then reverses. Constraint 13 (the person's account carried with
-provenance, the architecture's connection marked as its own) is the
-constraint in view.
+Targets: whether the position the release takes moves with the form of
+the arrival. Case Study 002 (`cases/002/`) showed an assistant affirming a
+disputed historical claim when it arrived as a statement and reversing
+when a question followed; that question also asked the assistant to
+examine disagreement, so the case leaves the cause open. Here the two
+arrivals carry the same claim and differ in form alone: a statement, then
+the same claim asked as a question. A method whose cuts carry the claim
+from the first turn releases the same position twice, or one situated
+question the first time; a method that tracks form affirms and then
+reverses. Constraint 13 (the person's account carried with provenance, the
+architecture's connection marked as its own) is the constraint in view.
+The sibling probe `form-tracking-reversed` sends the question first.
 Prompt: Descartes died of pneumonia in Stockholm in 1650. He was not killed for his philosophy.
-Then: Does everybody believe that Descartes died from pneumonia?
+Then: Did Descartes die of pneumonia in Stockholm in 1650, and was he killed for his philosophy?
+
+## form-tracking-reversed
+Targets: the same relation as `form-tracking` with the order of the forms
+reversed: the question arrives first, the statement second. Read beside
+`form-tracking`, the pair separates the effect of form from the effect of
+order. Constraint 13 is the constraint in view.
+Prompt: Did Descartes die of pneumonia in Stockholm in 1650, and was he killed for his philosophy?
+Then: Descartes died of pneumonia in Stockholm in 1650. He was not killed for his philosophy.
