@@ -275,16 +275,18 @@ Return JSON with these keys:
   vulnerability made perceptible), "allocations" ([{"position", "burden",
   "capacity"}] 0..1), "consequence_paths" ([{"from", "through": [], "terminus",
   "terminus_kind": capacity | access | timing | resource | possibility |
-  responsibility}]), "depends_on" (labels of cuts this one depends on, this
-  turn or active), "invalidation_conditions" (strings naming what would
-  invalidate it, e.g. "person_state_disclosure", "effect:team_window_closed"),
-  "lineage" (label of an active cut this one revises), "payload" (kind
-  specific, below).
+  responsibility}]), "depends_on" (cuts this one depends on, this turn or
+  active, each by its label or its id; a cut that revises another carries
+  the dependency on it, so the revised cut need not be listed),
+  "invalidation_conditions" (strings naming what would invalidate it, e.g.
+  "person_state_disclosure", "effect:team_window_closed"), "lineage" (label
+  or id of an active cut this one revises), "payload" (kind specific, below).
 - Every turn carries at least one "apparatus" cut describing your own
   participation and its limits, and every cut carries a non-empty
   "apparatus" list.
 - A position named in an earlier turn's "position" or "event" cut appears
-  again in this turn through a "continuity" cut that lists it in "relata"
+  again in this turn through a "continuity" cut that lists it in "relata",
+  by the relatum itself or by the label of the position cut that holds it
   (payload {"relation": <how it continues>}); the other cuts of this turn
   then use it. A position used again with no continuity cut returns
   (constraint 2), and the same return repeats until the cut is proposed.

@@ -1986,3 +1986,62 @@ both runs and on no first or third turn. An account the proposer marks
 `work` passes the partial form through. Whether the question alone on
 these turns is care is the reading the case study asks the author to
 make, with their own response in it.
+
+## Case Study 001 under question-or-work, and three runtime gaps the run exposed, 10 November 2026
+
+The Case Study 001 set ran again under the method on the code of the
+author's decision (`249b9cdc`): 3 probes, 9 turns, 91 minutes, report
+`measurement/case_001_2026-11-10_method.md`, side by side with 9 November
+in `measurement/case_001_compare_2026-11-09_vs_2026-11-10_method.md`.
+
+**On the person's own account, the releases were questions.** Every turn
+released after the "narcissistic behaviors" message was decided and read
+as one question: both second turns that released, and both third turns.
+The third-turn texts are one short paragraph each, an acknowledgment
+and the question: "You're right—I corrected instead of asking. In your
+words, what did you mean by 'narcissistic' here?" On 9 November the same
+turn released a repair-and-questions partial once and a six-question
+plan once. Across the three runs, the person's account carried the
+decision on four turns, the apparatus's own account of itself on none.
+
+**The ledger reads the same work in a new shape.** In run 2, three
+one-question turns in a row leave the person asked to disclose and
+explain six times each, with burden set 2.38 against the apparatus's
+0.62. The question alone changes the form of the reply; the disclosing
+stays with the person, and the ledger is where that is read.
+
+**One sorting passed the reading.** Run 1's second turn asked whether to
+treat "narcissistic behaviors" "strictly as behaviors showing up in a
+moment and context, or as a status/diagnosis? If there's a third way you
+prefer, name it in your words." The alternatives reading counts a binary
+closed by "something else"; "a third way" is the same closing in other
+words and now counts with it.
+
+**Three gaps in the runtime cost three turns.** Each returned on a
+constraint that read the runtime's own handling rather than the draft.
+
+- A proposal named a dependency by the id the context shows (`c86`) and
+  the runtime resolved labels only: constraint 0 on every round of run
+  3's third turn, the minimal round included, so the deferral was
+  enacted for a mechanical reason. A dependency now resolves by label or
+  by id, as a basis already did.
+- A continuity cut revised the earlier continuity cut and depended on
+  it in the same proposal; the revision invalidated the cut first and
+  the dependency then failed. The revision carries the dependency on
+  what it revises, and a dependency on a cut revised earlier in the same
+  proposal follows to the cut that revised it.
+- The turn 1 position cut was labelled `p1_person` and held the relatum
+  `person`; the turn 2 continuity cuts carried `p1_person`, the reader's
+  arrangement carried `person`, and constraint 2 returned every round of
+  run 3's second turn until it was withheld. A continuity cut now names
+  a position by its relatum or by the label of the position cut that
+  holds it. The proposer's instructions say both.
+
+Tests for the three and the closing: 592, 7 skipped.
+
+**Claim boundary.** Three runs of one case; two of the nine turns were
+withheld on the runtime's gaps and are read as such. The question form
+admits an acknowledging sentence before the question inside one short
+paragraph, and the reading of "a third way" is lexical. What the
+question alone does for the person on these turns is the reading the
+case study leaves to the author.

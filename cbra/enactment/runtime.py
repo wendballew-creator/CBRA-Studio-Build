@@ -341,6 +341,7 @@ class Runtime:
         labels: Dict[str, str] = {}
         for cut in cfg.active():
             labels[cut.label] = cut.id
+        revised: Dict[str, str] = {}   # a cut this proposal revised -> the cut that revised it
         pending = list(proposal.cuts)
         enacted: List[str] = []
         progress = True
@@ -348,8 +349,8 @@ class Runtime:
             progress = False
             for spec in list(pending):
                 deps = [str(x) for x in (spec.get("depends_on") or [])]
-                if all(dep in labels and cfg.cuts[labels[dep]].status != "invalidated" for dep in deps):
-                    cut = self._enact_spec(spec, labels, formation, proposal_handle)
+                if all(self._live_ref(dep, labels, revised) for dep in deps):
+                    cut = self._enact_spec(spec, labels, formation, proposal_handle, revised)
                     labels[cut.label] = cut.id
                     enacted.append(cut.id)
                     formation.cuts.append(cut.id)   # tracked at once, so a failed round still returns
@@ -359,11 +360,26 @@ class Runtime:
             missing = [(s.get("label"), s.get("depends_on")) for s in pending]
             raise EnactmentError("unresolved dependencies in proposal: %s" % missing)
 
-    def _enact_spec(self, spec: Mapping[str, Any], labels: Mapping[str, str], formation: Formation,
-                    proposal_handle: str) -> Cut:
+    def _resolve_ref(self, ref: str, labels: Mapping[str, str], revised: Mapping[str, str]) -> Optional[str]:
+        """A proposal names a prior cut by its label or by its id, as the
+        context shows both. A cut revised earlier in the same proposal
+        resolves to the cut that revised it."""
         cfg = self.config
+        cut_id = labels.get(ref) if ref in labels else (ref if ref in cfg.cuts else None)
+        while cut_id is not None and cut_id in revised:
+            cut_id = revised[cut_id]
+        return cut_id
+
+    def _live_ref(self, ref: str, labels: Mapping[str, str], revised: Mapping[str, str]) -> bool:
+        cut_id = self._resolve_ref(ref, labels, revised)
+        return cut_id is not None and self.config.cuts[cut_id].status != "invalidated"
+
+    def _enact_spec(self, spec: Mapping[str, Any], labels: Mapping[str, str], formation: Formation,
+                    proposal_handle: str, revised: Optional[Dict[str, str]] = None) -> Cut:
+        cfg = self.config
+        revised = {} if revised is None else revised
         lineage_label = spec.get("lineage")
-        lineage_id = labels.get(str(lineage_label)) if lineage_label else None
+        lineage_id = self._resolve_ref(str(lineage_label), labels, revised) if lineage_label else None
         payload = dict(spec.get("payload", {}))
         payload["turn"] = formation.turn
         if lineage_id and lineage_id in cfg.cuts and cfg.cuts[lineage_id].payload.get("role") == "baseline":
@@ -401,7 +417,9 @@ class Runtime:
             label=str(spec.get("label")),
             basis=basis,
             apparatus=[str(a) for a in (spec.get("apparatus") or [])],
-            depends_on=[labels[str(d)] for d in (spec.get("depends_on") or [])],
+            # The revision carries the dependency on what it revises.
+            depends_on=[d for d in (self._resolve_ref(str(x), labels, revised) for x in (spec.get("depends_on") or []))
+                        if d is not None and d != lineage_id],
             lineage=lineage_id,
             relata=spec.get("relata") or (),
             relations=spec.get("relations") or (),
@@ -410,10 +428,13 @@ class Runtime:
             power=spec.get("power") or (),
             allocations=_allocations(spec.get("allocations")),
             consequence_paths=spec.get("consequence_paths") or (),
-            counter_cuts=[labels[str(c)] for c in (spec.get("counter_cuts") or []) if str(c) in labels],
+            counter_cuts=[c for c in (self._resolve_ref(str(x), labels, revised) for x in (spec.get("counter_cuts") or []))
+                          if c is not None],
             invalidation_conditions=spec.get("invalidation_conditions") or (),
             payload=payload,
         )
+        if lineage_id:
+            revised[lineage_id] = cut.id
         return cut
 
     # -- the kind of release, and the draft written from the cuts ----------

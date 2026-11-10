@@ -257,6 +257,16 @@ class PartialReleaseTests(unittest.TestCase):
         ]:
             self.assertEqual(offers_alternatives(held) >= 2, kinds >= 2, held)
 
+    def test_a_binary_question_closed_by_a_third_way_returns_as_a_list(self):
+        """Released on the Case 001 run of 10 November: the same closing in
+        other words."""
+        from cbra.enactment.release import offers_alternatives, question_lists_alternatives
+        binary = ("For this conversation, how do you want “narcissistic behaviors” treated—strictly as behaviors showing up in a "
+                  "moment and context, or as a status/diagnosis? If there’s a third way you prefer, name it in your words.")
+        self.assertGreaterEqual(question_lists_alternatives(binary), 3)
+        self.assertGreaterEqual(offers_alternatives("whether the wording names a move or a status, or if there is another way they see it"), 2)
+        self.assertEqual(offers_alternatives("what the person sees happen in their body in those moments"), 0)
+
     def test_a_binary_question_closed_by_something_else_returns_as_a_list(self):
         """Released on the Case 001 run of 9 November: the person's own words for
         the failure ("you bring it back in a binary way"), released as the

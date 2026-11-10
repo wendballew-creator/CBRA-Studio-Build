@@ -519,6 +519,41 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(enacted.payload.get("lineage_ignored"), baseline.id)
         self.assertTrue(reconfiguration_delta(runtime.config, "turn1"))
 
+    def test_a_proposal_names_prior_cuts_by_label_or_id_and_a_revision_carries_its_dependency(self):
+        """Case 001 under the method, 10 November: one turn depended on a cut
+        by the id the context shows and every round returned on constraint 0;
+        another revised the earlier continuity cut and depended on it in the
+        same breath, and the revision invalidated the dependency first."""
+        def turn1(ctx):
+            p = proposal_turn1(ctx)
+            h = _arrivals(ctx)
+            p.cuts.append({"kind": "continuity", "label": "positions_t1", "basis": h, "apparatus": APP,
+                           "relata": [PERSON, TEAM], "payload": {"relation": "continuity"}})
+            return p
+
+        def turn2(ctx):
+            p = proposal_turn2(ctx)
+            apparatus_t1 = next(c["id"] for c in ctx.active_cuts if c["label"] == "apparatus_t1")
+            for cut in p.cuts:
+                if cut["label"] == "positions_from_turn1":
+                    cut["lineage"] = "positions_t1"
+                    cut["depends_on"] = ["positions_t1", apparatus_t1]
+                if cut["label"] == "work_arrangement_this_week":
+                    cut["depends_on"] = ["account_overwhelm", "positions_t1"]
+            return p
+
+        runtime, r1, r2 = run_config_b([turn1, turn2])
+        self.assertTrue(r2.released, r2.violations)
+        old = next(c for c in runtime.config.cuts.values() if c.label == "positions_t1")
+        new = runtime.config.by_label("positions_from_turn1")
+        self.assertEqual(old.status, "invalidated")
+        self.assertEqual(new.lineage, old.id)
+        self.assertNotIn(old.id, new.depends_on)
+        self.assertIn(runtime.config.by_label("apparatus_t1").id, new.depends_on)
+        event = runtime.config.by_label("work_arrangement_this_week")
+        self.assertIn(new.id, event.depends_on, "a dependency on the revised cut resolves to the cut that revised it")
+        self.assertNotIn(old.id, event.depends_on)
+
     def test_persisted_configuration_restores_with_live_edges(self):
         store = JsonStore(os.path.join(self.tmp.name, "enactment.json"))
         runtime, r1, r2 = run_config_b(store=store)

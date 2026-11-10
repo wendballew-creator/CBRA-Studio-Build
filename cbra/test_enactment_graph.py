@@ -221,6 +221,26 @@ class GraphTests(unittest.TestCase):
         f.cuts.append(cont.id)
         self.assertNotIn(2, [v.constraint for v in check_all(cfg, f)])
 
+    def test_continuity_cut_may_name_the_position_by_its_cuts_label(self):
+        """Case 001 under the method, 10 November: the turn 1 position cut was
+        labelled p1_person and held the relatum person; the turn 2 continuity
+        cut carried p1_person, and the reader's arrangement, which carries
+        person, returned on constraint 2 every round."""
+        cfg = Configuration()
+        t0 = cfg.inscribe("earlier", "user_message")
+        cfg.enact("position", "p1_person", basis=[t0.handle], apparatus=["a"],
+                  relata=["person"], payload={"turn": "turn0"})
+        t1 = cfg.inscribe("now", "user_message")
+        app = cfg.enact("apparatus", "app", basis=[t1.handle], apparatus=["a"], payload={"turn": "turn1"})
+        read = cfg.enact("arrangement", "arr_read:turn1:r1", basis=[t1.handle], apparatus=["reader"],
+                         relata=["person"], payload={"turn": "turn1", "role": "read"})
+        f = Formation(turn="turn1", arrivals=[t1.handle], cuts=[app.id, read.id], variation_constraint="n/a")
+        self.assertIn(2, [v.constraint for v in check_all(cfg, f)])
+        cont = cfg.enact("continuity", "cont_p1_person", basis=[t1.handle], apparatus=["a"], relata=["p1_person"],
+                         payload={"turn": "turn1"})
+        f.cuts.append(cont.id)
+        self.assertNotIn(2, [v.constraint for v in check_all(cfg, f)])
+
     def test_restoration_keeps_relata_local_and_edges_live(self):
         cfg, t1, a, e, arr, iv = _config_with_chain()
         cfg.fact("intervention_released", intervention=iv.id)

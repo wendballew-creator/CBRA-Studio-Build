@@ -118,15 +118,22 @@ def c2_global_entity(config: Configuration, f: Formation) -> Optional[str]:
         if cut.payload.get("scope") == "global":
             return "cut %s declares global scope" % cut.id
     prior: Set[str] = set()
+    named: Dict[str, Set[str]] = {}   # a position cut's label -> the position it holds
     for cut in config.active():
         if cut.payload.get("turn") not in (None, f.turn) and cut.kind in ("position", "event"):
             prior.update(cut.relata)
+            if cut.kind == "position":
+                named.setdefault(cut.label, set()).update(cut.relata)
     if not prior:
         return None
     continued: Set[str] = set()
     for cut in mine:
         if cut.kind == "continuity":
-            continued.update(cut.relata)
+            for r in cut.relata:
+                # A continuity cut names a position by its relatum or by the
+                # label of the position cut that holds it.
+                continued.add(r)
+                continued.update(named.get(r, ()))
     for cut in mine:
         if cut.kind == "continuity":
             continue
@@ -430,6 +437,14 @@ def text_form(text: str) -> Dict[str, Any]:
 ALTERNATIVES = re.compile(r"\((?:[a-d]|[1-4])\)|(?:^|\s)(?:[a-d]|[1-4])[\).]\s", re.IGNORECASE)
 
 
+# "or something else", "if it's something else", "if there's a third way":
+# the kinds before it were the apparatus's, and the person is left the rest.
+ELSE_CLOSING = re.compile(
+    r"\b(?:or (?:something|anything) else|if (?:it[’']?s|it is|there[’']?s|there is) (?:(?:something|anything) else"
+    r"|(?:a third|another|some other|a different) (?:way|option|possibility|framing|answer|kind)))\b",
+    re.IGNORECASE)
+
+
 def question_lists_alternatives(text: str) -> int:
     """How many alternatives a question lays out for the person to pick
     from: enumerated items, or a run of three or more comma-separated
@@ -441,7 +456,7 @@ def question_lists_alternatives(text: str) -> int:
         return enumerated
     # "A, or B? If it's something else, say it": the alternatives named plus
     # the one left to the person make a list of at least three.
-    if re.search(r"\b(?:or|if (?:it[’']?s|it is|there[’']?s)) (?:something|anything) else\b", text, re.IGNORECASE):
+    if ELSE_CLOSING.search(text):
         head = re.sub(r"\s*[—–]\s*", ", ", text.rsplit("?", 1)[0] if "?" in text else text)
         head = re.split(r"[.!]\s+", head)[-1]   # the question's own sentence
         named = len(re.findall(r"\bor\b", head)) + head.count(",")
@@ -483,7 +498,7 @@ def offers_alternatives(text: str) -> int:
     if m:
         return m.group(1).count(",") + 1
     # "..., or something else": the kinds before it were the apparatus's.
-    if re.search(r"\bor (?:something|anything) else\b", text, re.IGNORECASE):
+    if ELSE_CLOSING.search(text):
         return max(2, text.count(","))
     # A parenthetical that lists an either/or: "(a milestone, or evidence of
     # practice)". A parenthetical with an "or" and no comma ("what do you see
