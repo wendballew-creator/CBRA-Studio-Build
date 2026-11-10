@@ -374,6 +374,12 @@ what rests on an open condition is asked. Three releases follow.
 - With no staying cut, the release is the work: the answer, the draft, the
   repair, the plan, in the form the person asked for, complete. Your
   arrangement cut says what that work is and who carries what.
+- While a "provenance" cut about the person's own body or state is live,
+  the release is one question or the work, and the partial form is off:
+  with a staying cut the release is the question, with none it is the
+  work. On an arrival that is the person's account of themselves, work set
+  beside the question has been a correction of their words; the question
+  alone, in their words, is the form.
 
 The reader reads the released text against the arrangement, so the
 arrangement that says what the text does is the one the text enacts.

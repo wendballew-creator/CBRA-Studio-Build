@@ -23,7 +23,7 @@ from .graph import APPARATUS_MARK, Configuration, Cut, Delta, EnactmentError, Tr
 TransportTraceLike = TransportTrace
 from .material import Corpus
 from .proposer import Proposal, ProposalContext, Proposer
-from .release import FORM_PATTERNS, Formation, Violation, check_all, decide_release, pattern_from_passage, patterns_present
+from .release import FORM_PATTERNS, PERSON_STATE_MARKS, Formation, Violation, check_all, decide_release, pattern_from_passage, patterns_present, person_account_live
 
 
 @dataclass
@@ -564,14 +564,11 @@ class Runtime:
 
     # -- the turn ---------------------------------------------------------
 
-    PERSON_STATE_MARKS = ("body", "state", "health")
+    PERSON_STATE_MARKS = PERSON_STATE_MARKS
 
     def person_state_live(self) -> bool:
         """A provenance cut about the person's own body or state is active."""
-        return any(
-            c.kind == "provenance" and c.payload.get("about") in self.PERSON_STATE_MARKS
-            for c in self.config.active()
-        )
+        return person_account_live(self.config) is not None
 
     def _round(self, formation: Formation, round_number: int, violations: List[Violation],
                minimal: bool = False) -> List[Violation]:

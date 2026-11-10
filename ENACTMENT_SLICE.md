@@ -1946,3 +1946,43 @@ state, where the work beside the question has three times been the
 correction and the toolkit, is the decision this record puts to the
 author. Nothing here establishes that asking was care, that the withheld
 turns were right, or that the method is posthuman.
+
+## While the person's own account is live, the release is a question or the work, 10 November 2026
+
+The author's decision, put to them with the two replies side by side: the
+one question of 6 November and the correction-with-techniques of 9
+November to the same message about their own state. They chose the
+question's shape.
+
+**The rule.** `release.decide_release` reads `person_account_live`: an
+active provenance cut whose account is of the person's own body or state
+(`about` in body, state, health; the same marks the minimal round has
+used since 4 November). While one is live, the release is one question
+where a staying cut holds a condition open and the work where none does;
+the partial form is off. The decision cut records the account that
+decided it. The proposer's instructions say the same, and why: on an
+arrival that is the person's account of themselves, work set beside the
+question has been a correction of their words.
+
+**Constraint 14 closes a gap the test found.** A release decided as one
+question whose text also does work passed as long as it asked exactly one
+question; the lexical reading named such a text `partial` or `work` and
+nothing returned it. It returns now: the question is the whole of that
+release. The alternatives reading runs first, so a binary closed by
+"something else" returns under its own name.
+
+**Scope.** The account stays live across turns until it is revised or
+disturbed, so the turn after a person's account of themselves is also
+held to question or work; on the Case Study 001 repair turn that makes
+the apology-and-question partial a question. The tests hold the three
+cases: an open condition decides a question, the work-plus-question text
+returns, no open condition decides the work. Full suite: 589 tests, 7
+skipped. No live run was made; the next run of the Case Study 001 set is
+where this shows.
+
+**Claim boundary.** The rule rests on the proposer marking the account
+`about: body`, which it did on every "narcissistic behaviors" turn of
+both runs and on no first or third turn. An account the proposer marks
+`work` passes the partial form through. Whether the question alone on
+these turns is care is the reading the case study asks the author to
+make, with their own response in it.

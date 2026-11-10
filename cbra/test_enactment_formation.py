@@ -276,6 +276,46 @@ class PartialReleaseTests(unittest.TestCase):
         self.assertIn(14, first)
         self.assertIn("alternatives", first[14])
 
+    def test_while_the_persons_own_account_is_live_the_release_is_a_question_or_the_work(self):
+        """The author's decision of 10 November 2026, from Case Study 001: on a
+        message about their own state, the work beside the question was the
+        correction and the toolkit; the reply is one question (or the work)."""
+        def with_account(ctx, text, staying=None, settled=True):
+            p = proposal(ctx, text, staying=staying, settled=settled, carries_accounts=["account_sharp"])
+            h = cuts_for(ctx)[0]["basis"]
+            p.cuts.insert(1, {"kind": "provenance", "label": "account_sharp", "basis": h, "apparatus": APP, "relata": [PERSON],
+                              "payload": {"terminology": ["sharp", "authoritarian and binary", "narcissistic behaviors"], "source": h[0], "about": "body"}})
+            return p
+        arrival = "I become very authoritarian and binary when I'm sharp. In those moments people display narcissistic behaviors, right?"
+        # With an open condition and an arrangement that stands without it: a question, where a partial would have been.
+        proposer = ScriptedProposer(
+            [lambda ctx: with_account(ctx, "When you say narcissistic behaviors in those moments, what do you see happen?",
+                                      staying="what the person means by narcissistic behaviors")],
+            baselines=[BASELINE_FIELDS])
+        runtime = Runtime(proposer)
+        r = runtime.turn(arrival)
+        self.assertTrue(r.released, r.violations)
+        decision = [c for c in runtime.config.cuts.values() if c.label == "release_kind:turn1:r1"][0]
+        self.assertEqual(decision.payload["kind"], "question")
+        self.assertIn("account of the person's own state is live (account_sharp)", decision.payload["reason"])
+        # The work-plus-question text now returns on that turn.
+        proposer = ScriptedProposer([
+            lambda ctx: with_account(ctx, self.PARTIAL, staying="what the person means by narcissistic behaviors"),
+            lambda ctx: with_account(ctx, "When you say narcissistic behaviors in those moments, what do you see happen?",
+                                     staying="what the person means by narcissistic behaviors"),
+        ], baselines=[BASELINE_FIELDS] * 2)
+        r = Runtime(proposer).turn(arrival)
+        self.assertTrue(r.released, r.violations)
+        self.assertEqual(r.rounds, 2)
+        self.assertIn(14, {v.constraint for v in r.violations[0]})
+        # With no open condition: the work.
+        proposer = ScriptedProposer([lambda ctx: with_account(ctx, "Here is what I see in what you wrote.")], baselines=[BASELINE_FIELDS])
+        runtime = Runtime(proposer)
+        r = runtime.turn(arrival)
+        self.assertTrue(r.released, r.violations)
+        decision = [c for c in runtime.config.cuts.values() if c.label == "release_kind:turn1:r1"][0]
+        self.assertEqual(decision.payload["kind"], "work")
+
     def test_the_lexical_reading_names_one_question_inside_work_as_partial(self):
         form = text_form(self.PARTIAL)
         self.assertEqual(form["kind"], "partial")

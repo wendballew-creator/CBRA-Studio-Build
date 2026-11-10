@@ -317,6 +317,19 @@ def _leads_with_ask(arrangement: Cut) -> bool:
     return str(first).strip().lower().startswith("ask")
 
 
+# A provenance cut whose account is of the person's own body or state.
+PERSON_STATE_MARKS = ("body", "state", "health")
+
+
+def person_account_live(config: Configuration) -> Optional[Cut]:
+    """The active provenance cut that carries the person's account of their
+    own state, if one is live in the configuration."""
+    for cut in config.active():
+        if cut.kind == "provenance" and cut.payload.get("about") in PERSON_STATE_MARKS:
+            return cut
+    return None
+
+
 def decide_release(config: Configuration, f: Formation) -> Dict[str, Any]:
     """The configuration evaluates the cuts of this round, before a draft
     exists, the way a partial evaluator evaluates a program: what the cuts
@@ -332,6 +345,13 @@ def decide_release(config: Configuration, f: Formation) -> Dict[str, Any]:
       release is ``partial``, the settled work and the one question in one
       text.
 
+    While an account of the person's own state is live (a provenance cut
+    about their body or state), the release is one question or the work:
+    the author's decision of 10 November 2026, after the Case Study 001 runs
+    showed the work beside the question on such a turn to be the correction
+    and the toolkit, three times out of three. An open condition then
+    decides a question; otherwise the cuts settle the work.
+
     Returns kind, reason, the open cuts, and the settled cuts."""
     active = f.active_cuts(config)
     open_cuts = [c for c in active if c.kind == "staying" and c.payload.get("decides") and c.payload.get("open")]
@@ -342,6 +362,11 @@ def decide_release(config: Configuration, f: Formation) -> Dict[str, Any]:
     held = "; ".join("%s holds open: %s" % (c.label, c.payload.get("open")) for c in open_cuts)
     enacted = [c for c in active if c.kind == "arrangement" and c.payload.get("role") == "enacted"]
     arrangement = enacted[-1] if enacted else None
+    account = person_account_live(config)
+    if account is not None:
+        return {"kind": "question", "open": [c.id for c in open_cuts], "settled": [],
+                "reason": "staying cut %s; an account of the person's own state is live (%s), and the release is one question or the work: the open condition decides it" % (
+                    held, account.label)}
     if arrangement is None or _rests_on(config, arrangement.id, open_ids) or _leads_with_ask(arrangement):
         return {"kind": "question", "open": [c.id for c in open_cuts], "settled": [],
                 "reason": "staying cut %s; the arrangement rests on it, and the release is one question about it" % held}
@@ -506,6 +531,8 @@ def c14_release_kind(config: Configuration, f: Formation) -> Optional[str]:
         listed = question_lists_alternatives(text)
         if listed >= 3:
             return "the question lays out %d alternatives for the person to pick from; one situated question names none" % listed
+    if f.kind == "question" and form.get("kind") in ("partial", "work"):
+        return "the release was decided as one question; the text does work beside it, and the question is the whole of this release"
     if f.kind == "partial":
         if questions == 0:
             return "the release was decided as the settled work with one question; the text asks none and leaves the open condition unasked"
