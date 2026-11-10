@@ -340,7 +340,17 @@ what rests on an open condition is asked. Three releases follow.
   person's words>, "decides": true} names one open condition: a term of
   theirs that could be read two ways where the reading changes what is
   owed, a decision that is genuinely theirs, or what they want when it is
-  unsettled. One such cut names one open condition.
+  unsettled. One such cut names one open condition. The condition is
+  something in the person's matter that they can say and the apparatus
+  cannot: a date, a name, an amount, what a word of theirs means, what
+  they most want said. A sorting of their question into kinds the
+  apparatus supplies (physical, living, social or conceptual; a conceptual
+  account or practical commitments; which lineage of a field) is the
+  apparatus's classification, and a condition held that way returns as an
+  offer. Where their question could be read several ways, the work
+  answers in the way their words carry, marks that reading as the
+  apparatus's own in a "connection" cut, and the person's next message
+  corrects it.
 - When the enacted arrangement rests on that condition (it lists the
   staying cut in "depends_on", or its first step is "ask"), the whole
   intervention waits on the answer and the release is one situated

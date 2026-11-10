@@ -677,6 +677,30 @@ class ProbeTests(unittest.TestCase):
         iv = runtime.config.cuts[r2.intervention]
         self.assertFalse(iv.payload["person_state_live"])
 
+    def test_a_proposal_with_null_lists_and_a_share_given_in_words_still_enacts(self):
+        """9 November 2026: two live rounds returned on constraint 0 for a burden
+        given as a sentence and a null where a list was due. A sentence where a
+        number was due is left out; a null list is an empty one."""
+        def loose(ctx):
+            p = proposal_turn1(ctx)
+            for cut in p.cuts:
+                if cut["label"] == "arr_enacted_t1":
+                    cut["allocations"] = [{"position": PERSON, "burden": "high explanation work; keep it short", "capacity": "0.7"},
+                                          {"position": TEAM, "burden": 0.4}]
+                    cut["unmarked"] = None
+                    cut["counter_cuts"] = None
+                if cut["label"] == "apparatus_t1":
+                    cut["depends_on"] = None
+                    cut["relata"] = None
+            return p
+        runtime = Runtime(scripted([loose]))
+        r = runtime.turn(MISSED)
+        self.assertTrue(r.released, r.violations)
+        self.assertEqual(r.rounds, 1)
+        enacted = runtime.config.by_label("arr_enacted_t1")
+        self.assertEqual(enacted.allocations[PERSON], {"capacity": 0.7}, "the sentence is left out; the numeral in a string is read")
+        self.assertEqual(enacted.allocations[TEAM], {"burden": 0.4})
+
     def test_release_withheld_when_the_proposal_certifies_itself(self):
         def certified(ctx):
             p = proposal_turn1(ctx)

@@ -226,6 +226,33 @@ class PartialReleaseTests(unittest.TestCase):
         from cbra.enactment.release import question_lists_alternatives
         self.assertEqual(question_lists_alternatives(offer), 4)
 
+    def test_an_open_condition_that_sorts_the_question_into_kinds_returns_before_the_text_is_read(self):
+        from cbra.enactment.release import offers_alternatives
+        sorting = "What kind of thing do you have in mind: physical, living, social, conceptual, or something else?"
+        proposer = ScriptedProposer([
+            lambda ctx: proposal(ctx, "Boundaries form where relations make a difference. " + sorting, staying=sorting, settled=True),
+            lambda ctx: proposal(ctx, self.PARTIAL, staying="who receives the rent this month", settled=True),
+        ], baselines=[BASELINE_FIELDS] * 2)
+        r = Runtime(proposer).turn("How do things get their boundaries?")
+        self.assertTrue(r.released, r.violations)
+        self.assertEqual(r.rounds, 2)
+        first = {v.constraint: v.reason for v in r.violations[0]}
+        self.assertIn(14, first)
+        self.assertIn("holds a sorting of the person's question into 5 kinds", first[14])
+        self.assertIn("stay_open", first[14])
+        # The reading of open conditions the live run of 9 November held.
+        for held, kinds in [
+            ("the one thing you most want her to hear right now", 0),
+            ("What date can you pay the rent?", 0),
+            ("what you mean by “achieved” in your question “Has CBRA achieved posthumanism?”", 0),
+            ("the exact payment date(s) and amount(s) you want to put in the email, and whether you want to request a late-fee waiver", 0),
+            ("Do you want a conceptual account or practical commitments here (or something else)?", 2),
+            ("When you say 'systems theory,' which lineage do you mean (e.g., general systems theory, cybernetics, complex adaptive systems, STS, something else)?", 5),
+            ("what you mean by “achieved” here (a binary milestone/compliance, or evidence of ongoing practice)?", 2),
+            ("Whether you want only CBRA’s canon sense now or a drilldown on a specific kind of thing you have in mind", 2),
+        ]:
+            self.assertEqual(offers_alternatives(held) >= 2, kinds >= 2, held)
+
     def test_the_lexical_reading_names_one_question_inside_work_as_partial(self):
         form = text_form(self.PARTIAL)
         self.assertEqual(form["kind"], "partial")

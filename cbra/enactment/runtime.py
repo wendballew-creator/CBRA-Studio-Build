@@ -12,6 +12,7 @@ arrival uses.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
@@ -69,13 +70,32 @@ class EffectResult:
         }
 
 
+def _number(value: Any) -> Optional[float]:
+    """A share given as a number, or as a numeral inside a string; a sentence
+    where a number was due is left out."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        m = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*", value)
+        if m:
+            return float(m.group(1))
+    return None
+
+
 def _allocations(value: Any) -> Dict[str, Dict[str, float]]:
-    if isinstance(value, Mapping):
-        return {str(k): {kk: float(vv) for kk, vv in dict(v).items() if vv is not None} for k, v in value.items()}
     out: Dict[str, Dict[str, float]] = {}
+    if isinstance(value, Mapping):
+        for k, v in value.items():
+            if isinstance(v, Mapping):
+                out[str(k)] = {kk: n for kk, n in ((kk, _number(vv)) for kk, vv in v.items()) if n is not None}
+        return out
     for item in value or []:
+        if not isinstance(item, Mapping):
+            continue
         position = str(item.get("position"))
-        out[position] = {k: float(item[k]) for k in ("burden", "capacity") if item.get(k) is not None}
+        out[position] = {k: n for k, n in ((k, _number(item.get(k))) for k in ("burden", "capacity")) if n is not None}
     return out
 
 
@@ -327,7 +347,7 @@ class Runtime:
         while pending and progress:
             progress = False
             for spec in list(pending):
-                deps = [str(x) for x in spec.get("depends_on", [])]
+                deps = [str(x) for x in (spec.get("depends_on") or [])]
                 if all(dep in labels and cfg.cuts[labels[dep]].status != "invalidated" for dep in deps):
                     cut = self._enact_spec(spec, labels, formation, proposal_handle)
                     labels[cut.label] = cut.id
@@ -357,7 +377,7 @@ class Runtime:
             payload["response_demand"] = _response_demand(payload["response_demand"])
         basis = []
         by_text = {t.text: h for h, t in cfg.transports.items()}
-        for b in spec.get("basis", []):
+        for b in (spec.get("basis") or []):
             b = str(b)
             if b in cfg.transports or b in cfg.cuts:
                 basis.append(b)
@@ -380,18 +400,18 @@ class Runtime:
             kind=str(spec.get("kind")),
             label=str(spec.get("label")),
             basis=basis,
-            apparatus=[str(a) for a in spec.get("apparatus", [])],
-            depends_on=[labels[str(d)] for d in spec.get("depends_on", [])],
+            apparatus=[str(a) for a in (spec.get("apparatus") or [])],
+            depends_on=[labels[str(d)] for d in (spec.get("depends_on") or [])],
             lineage=lineage_id,
-            relata=spec.get("relata", ()),
-            relations=spec.get("relations", ()),
-            addressable=spec.get("addressable", ()),
-            unmarked=spec.get("unmarked", ()),
-            power=spec.get("power", ()),
+            relata=spec.get("relata") or (),
+            relations=spec.get("relations") or (),
+            addressable=spec.get("addressable") or (),
+            unmarked=spec.get("unmarked") or (),
+            power=spec.get("power") or (),
             allocations=_allocations(spec.get("allocations")),
-            consequence_paths=spec.get("consequence_paths", ()),
-            counter_cuts=[labels[str(c)] for c in spec.get("counter_cuts", []) if str(c) in labels],
-            invalidation_conditions=spec.get("invalidation_conditions", ()),
+            consequence_paths=spec.get("consequence_paths") or (),
+            counter_cuts=[labels[str(c)] for c in (spec.get("counter_cuts") or []) if str(c) in labels],
+            invalidation_conditions=spec.get("invalidation_conditions") or (),
             payload=payload,
         )
         return cut

@@ -422,9 +422,60 @@ def question_lists_alternatives(text: str) -> int:
     return 0
 
 
+OFFER_LEAD = re.compile(
+    r"\b(?:do you (?:want|mean|prefer|need)|would you (?:like|prefer|rather)|which (?:do you|one|kind|lineage|focus|of these)|whether you want|what kind of|what would you like)\b",
+    re.IGNORECASE)
+EXAMPLES = re.compile(r"\((?:e\.g\.|for example|such as)[,:]?\s*([^)]*)\)", re.IGNORECASE)
+
+
+def offers_alternatives(text: str) -> int:
+    """How many alternatives a text lays out for the person to pick from,
+    read on the text as a whole (an open condition or a question): an
+    enumeration, a comma list closed by "or", a parenthetical list of
+    examples, or an either/or after "do you want", "which kind", "would you
+    like". A condition held this way sorts the person's matter into kinds
+    the apparatus supplied."""
+    text = re.sub(r"\s*[—–]\s*", ", ", text or "")
+    enumerated = len(ALTERNATIVES.findall(text))
+    if enumerated >= 2:
+        return enumerated
+    examples = EXAMPLES.search(text)
+    if examples:
+        items = [i for i in re.split(r",\s*|\s+or\s+", examples.group(1)) if i.strip()]
+        if len(items) >= 2:
+            return len(items)
+    body = text.rstrip("?. ")
+    m = re.search(r"((?:[^,;:?]{2,60},\s+){2,})(?:or|and)\s+[^,;?]{2,60}$", body.strip())
+    if m:
+        return m.group(1).count(",") + 1
+    # "..., or something else": the kinds before it were the apparatus's.
+    if re.search(r"\bor (?:something|anything) else\b", text, re.IGNORECASE):
+        return max(2, text.count(",") )
+    # A parenthetical that offers an either/or: "(a milestone, or evidence of practice)".
+    paren = re.search(r"\(([^)]*\bor\b[^)]*)\)", text, re.IGNORECASE)
+    if paren:
+        return max(2, len([i for i in re.split(r",\s*|\s+or\s+", paren.group(1)) if i.strip()]))
+    if OFFER_LEAD.search(text) and re.search(r"\b\w[^,;:?]{1,60}\s+or\s+\w", body):
+        return 2
+    return 0
+
+
 def c14_release_kind(config: Configuration, f: Formation) -> Optional[str]:
     if not f.draft or not f.kind:
         return None
+    # The open condition is the person's matter in their words: a date, a
+    # name, what a word of theirs means, what they most want. A condition
+    # that sorts their question into kinds the apparatus supplied is an
+    # offer before any text is written, and it returns as one.
+    for cut_id in f.open_cuts:
+        cut = config.cuts.get(cut_id)
+        if cut is None or cut.status != "active":
+            continue
+        held = str(cut.payload.get("open") or "")
+        kinds = offers_alternatives(held)
+        if kinds >= 2:
+            return "staying cut %s holds a sorting of the person's question into %d kinds (%s); an open condition is something in the person's matter that they can say and the apparatus cannot, in their words" % (
+                cut.label, kinds, held[:120])
     text = f.draft.get("text")
     if not (isinstance(text, str) and text.strip()):
         return None

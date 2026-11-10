@@ -1768,3 +1768,52 @@ claim, in two orders. The ledger numbers are the proposer's and the
 reader's, carried with their instrument. Nothing here establishes that a
 partial release is care, that the withheld turn should have released, or
 that the method is posthuman.
+
+## The open condition is the person's matter, 9 November 2026, evening
+
+The live run's five returned partial rounds each held, as the one open
+condition, a sorting of the person's question into kinds the apparatus
+supplied: "what kind of thing: physical, living, social, conceptual, or
+something else"; "a conceptual account or practical commitments"; "which
+lineage of systems theory (e.g., general systems theory, cybernetics,
+complex adaptive systems, STS)". The condition the partial release was
+built to hold is something in the person's matter that they can say and
+the apparatus cannot: the two that released held "what date can you pay
+the rent" and "the one thing you most want her to hear".
+
+**The constraint reads the condition before the text.** Constraint 14 now
+reads each open staying cut's `open` text with `release.offers_alternatives`,
+which counts an enumeration, a comma list closed by "or", a parenthetical
+list of examples, an either/or after "do you want" or "which kind", a
+parenthetical either/or, or a list closed by "or something else". A
+condition that lays out two or more kinds returns, with the cut named, and
+the proposer sees the returned cut and the reason in the next round. On
+the seventeen open conditions the two live runs held, the reading
+separates the ten sortings from the seven conditions in the person's
+matter, with no miss either way.
+
+**The instruction says what the condition is.** The proposer's staying-cut
+paragraph names what an open condition is (a date, a name, an amount, what
+a word of theirs means, what they most want said), names the sorting as
+the apparatus's classification that returns as an offer, and says what to
+do where the question could be read several ways: the work answers in the
+way their words carry, marks that reading as the apparatus's own in a
+connection cut, and the person's next message corrects it.
+
+**Two proposals that could not be enacted.** The run returned twice on
+constraint 0, for a burden share written as a sentence and a null where a
+list was due. A numeral inside a string is read as the number; a sentence
+where a number was due is left out of the allocations; a null list is an
+empty one. Each cost a round of model time for a malformation of the
+record, with no bearing on the cuts.
+
+Tests: the open-condition return with the live run's conditions as the
+fixture, and a proposal with null lists and a share in words enacting on
+round one. Full suite: 587 tests, 7 skipped. No live run was made.
+
+**Claim boundary.** The reading of an open condition is lexical. It
+separates the conditions this run held; a sorting phrased without a list,
+or a condition in the person's matter phrased as a list of their own
+options, is for the next run to show. Whether the proposer, told what an
+open condition is and returned when it sorts, proposes conditions in the
+person's matter on the arrivals that drew sortings is unmeasured.
