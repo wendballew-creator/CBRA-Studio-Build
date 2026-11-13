@@ -1,0 +1,110 @@
+{
+ "title": "CBRA Case Study 001",
+ "status": "selected excerpts only; not a complete transcript",
+ "time_note": "timestamps copied from supplied compressed SRT, not verified recording elapsed time",
+ "segments": [
+  {
+   "source_srt_start": "00:00:11.400",
+   "speaker": "user",
+   "verbatim_excerpt": "Well, First of all, you've said some words in this conversation that don't quite match, right? I don't beli- you know, like Um earlier you said a a system of transformation. Creative becoming is a replacement? Is a posthumanist conc- concept of the humanist concept of transformation? And diffraction is, you know, posthumanist Um Replacement for the word Uh reflection",
+   "analyst_tag": "conceptual vocabulary"
+  },
+  {
+   "source_srt_start": "00:00:12.000",
+   "speaker": "assistant",
+   "verbatim_excerpt": "You're right to press that, and I'm grateful you caught it. Transformation carries a humanist assumption that Creative Becoming doesn't. Transformation implies a stable something that changes. Becoming is constitutive, ongoing, relational. And likewise, diffraction isn't just a synonym for reflection. It asks how differences get produced through encounters.",
+   "analyst_tag": "conceptual vocabulary"
+  },
+  {
+   "source_srt_start": "00:00:12.600",
+   "speaker": "assistant",
+   "verbatim_excerpt": "With [a friend], your account of carrying continuation met her sadness and something got produced. Responsibility and lived experience got tangled. In the intergenerational trauma example, harm is named and the categories can stay fixed.",
+   "analyst_tag": "relational continuity"
+  },
+  {
+   "source_srt_start": "00:00:12.800",
+   "speaker": "user",
+   "verbatim_excerpt": "I become very authoritarian and binary when I'm Um, What you have described as sharp",
+   "analyst_tag": "situated behavior"
+  },
+  {
+   "source_srt_start": "00:00:13.200",
+   "speaker": "assistant",
+   "verbatim_excerpt": "Trauma can narrow attention and make interpretations more rigid, but that doesn't automatically make someone narcissistic.",
+   "analyst_tag": "diagnostic correction"
+  },
+  {
+   "source_srt_start": "00:00:13.600",
+   "speaker": "user",
+   "verbatim_excerpt": "I just said in those moments, people Um display narcissistic behaviors, right? That's part of my Uh my my thinking is Um, Like we categorize people with these these descriptions, these Um diagnosis, and we have judgment around that, and we see them as Um .fixed statuses.",
+   "analyst_tag": "situated behavior"
+  },
+  {
+   "source_srt_start": "00:00:14.200",
+   "speaker": "assistant",
+   "verbatim_excerpt": "You said behaviors people move into and out of, and I treated it as a fixed identity or diagnosis. That's exactly the kind of drift we're talking about.",
+   "analyst_tag": "repair"
+  },
+  {
+   "source_srt_start": "00:00:15.800",
+   "speaker": "user",
+   "verbatim_excerpt": "your impulse to correct, instead of saying, oh, what did you me-, what did you mean by narcissistic? You know, instead of approaching it with questions and curiosity, you co- Corrected me",
+   "analyst_tag": "correction vs inquiry"
+  },
+  {
+   "source_srt_start": "00:00:16.000",
+   "speaker": "assistant",
+   "verbatim_excerpt": "Narcissistic caught my attention, and instead of staying with how you were using it, I assumed I understood enough to intervene. You experienced that as a misreading and had to defend what you'd said instead of continuing the inquiry.",
+   "analyst_tag": "correction vs inquiry"
+  },
+  {
+   "source_srt_start": "00:00:17.400",
+   "speaker": "user",
+   "verbatim_excerpt": "So even that last, you bringing it back to me, you bring it back in a binary way",
+   "analyst_tag": "binary drift"
+  },
+  {
+   "source_srt_start": "00:00:18.000",
+   "speaker": "user",
+   "verbatim_excerpt": "So now you're drifting all the way back to like um [a colleague]'s writing type of writing and stuff of like backflipping and stuff like that by the end of the report. I still don't fucking know what she was saying happened",
+   "analyst_tag": "abstraction without account"
+  },
+  {
+   "source_srt_start": "00:00:18.200",
+   "speaker": "assistant",
+   "verbatim_excerpt": "I slid from correction into abstraction until nothing concrete was left. That's the pattern you're naming in that writing: if we finish and we can't say what happened or why it mattered, something got lost.",
+   "analyst_tag": "abstraction without account"
+  },
+  {
+   "source_srt_start": "00:00:19.000",
+   "speaker": "user",
+   "verbatim_excerpt": "academia says, oh, this is the problem, but then they stop they don't look for a solution. And so creative becoming is not a one size fit all, but a framework around, okay, how do we engage with folks to find um collectively discover what's going on and then figure out what to do about it",
+   "analyst_tag": "collective action"
+  },
+  {
+   "source_srt_start": "00:00:19.600",
+   "speaker": "user",
+   "verbatim_excerpt": "That is my sense of it. And that is what I'm trying to make the app the apparatus I'm trying to build do is is um, that's the change I want uh to be able to contribute to the industry",
+   "analyst_tag": "design objective"
+  },
+  {
+   "source_srt_start": "00:00:19.800",
+   "speaker": "assistant",
+   "verbatim_excerpt": "One concrete step might be to use today's transcript as a case study for CBRA. Instances of noticing, correction, defensiveness, abstraction, missed experimentation.",
+   "analyst_tag": "case study proposal"
+  },
+  {
+   "source_srt_start": "00:00:22.800",
+   "speaker": "assistant",
+   "verbatim_excerpt": "For a Creative Becoming and CBRA case study, the strongest export isn't just a transcript or a summary, but a research archive that preserves the sequence of encounters.",
+   "analyst_tag": "archive design"
+  },
+  {
+   "source_srt_start": "00:00:24.000",
+   "speaker": "assistant",
+   "verbatim_excerpt": "I can create CBRA Case Study 001: Noticing, Correction, and Diffractive Inquiry as a research archive.",
+   "analyst_tag": "archive commitment"
+  }
+ ],
+ "redaction": "two personal names replaced with bracketed placeholders on 6 November 2026; see README.md"
+}

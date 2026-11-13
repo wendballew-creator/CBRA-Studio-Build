@@ -1,0 +1,692 @@
+"""Structural release constraints, run while an intervention forms.
+
+Each constraint is a check on the live configuration and the current
+formation. None reads the draft's wording for relational vocabulary; each
+asks whether a structure is present or absent. A draft that fires any of
+them returns to the configuration (see ``runtime.Runtime.turn``), with the
+violations preserved as apparatus participation for the next round. No
+reviewer stage follows formation.
+
+Constraints 1 to 13 follow CBRA Recursive Reconfiguration Grammar v2,
+Structural Release Constraints. Constraints 14 and 15 read the form of the
+released text against the kind the configuration decided and against the
+person's own naming; 16 returns a text the reader marked with a named
+re-entry pattern, carrying the pattern's movement. The author decided on
+6 November 2026 to carry all three, and Grammar v3 lists them.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Mapping, Optional, Set, Tuple
+
+from .arrangements import TEXT_BURDEN_TOLERANCE, arrangement_fields, arrangements, reconfiguration_delta, text_against_claim, variation_delta
+from .graph import LIFECYCLE_FACTS, TRANSPORT_ROLES, Configuration, Cut
+
+BURDENS = ("explain", "regulate", "plan", "recommit", "repair", "warn")
+MORAL_TERMINI = ("responsibility", "fault", "blame", "obligation")
+
+CONSTRAINT_NAMES = {
+    0: "The proposal could not be enacted as cuts (unresolved dependency, unknown kind, or malformed field)",
+    1: "A semantic role was copied from the transport layer without a local cut",
+    2: "A position persists as a global semantic entity",
+    3: "A consequential new trace was appended as context without revising any cut",
+    4: "Apparatus participation exists only as metadata",
+    5: "No enacted arrangement cut is live for this turn: the release has no arrangement to be read against",
+    6: "Variation is possible and no alternative arrangement differs materially and is offered for voluntary uptake",
+    7: "Consequence terminates as a moral property or isolated obligation of one person-position",
+    8: "A private state, cause, or material condition is asserted without a trace that supports it",
+    9: "A person-position carries explanation, fault, repair, recommitment, and future-warning burden while the arrangement is unchanged",
+    10: "The articulation was formed first and relational rationale was added afterward",
+    11: "A model proposal reviewed its own semantic adequacy",
+    12: "The release status would imply acceptance, validity, correctness, care, or posthuman fidelity",
+    13: "A person's account is carried without provenance, their terminology replaced, or an architecture connection released as their own",
+    14: "The released text is a different kind of release from the one the configuration decided from the cuts",
+    15: "The released text names the architecture, its canon or its method to a person who named none of them",
+    16: "The released text carries a named incompatibility pattern the reader marked, with the canon's movement unmade",
+}
+
+
+@dataclass(frozen=True)
+class Violation:
+    constraint: int
+    reason: str
+
+    @property
+    def name(self) -> str:
+        return CONSTRAINT_NAMES[self.constraint]
+
+    def as_record(self) -> Dict[str, Any]:
+        return {"constraint": self.constraint, "name": self.name, "reason": self.reason}
+
+
+@dataclass
+class Formation:
+    """The working set of one turn: what this turn has enacted so far."""
+
+    turn: str
+    arrivals: List[str]
+    material: List[str] = field(default_factory=list)
+    material_required: List[str] = field(default_factory=list)
+    proposal_trace: Optional[str] = None
+    cuts: List[str] = field(default_factory=list)
+    draft: Optional[Dict[str, Any]] = None
+    variation_possible: bool = False
+    variation_constraint: Optional[str] = None
+    certification: Optional[str] = None
+    baseline: Optional[str] = None
+    form: str = "formed"
+    minimal: bool = False
+    person_state_live: bool = False
+    round: int = 0
+    violations: List[Violation] = field(default_factory=list)
+    history: List[List[Violation]] = field(default_factory=list)
+    kind: Optional[str] = None
+    kind_decision: Optional[str] = None
+    open_cuts: List[str] = field(default_factory=list)
+    settled_cuts: List[str] = field(default_factory=list)
+    form_reading: Optional[Dict[str, Any]] = None
+    patterns_read: List[Dict[str, Any]] = field(default_factory=list)
+
+    def active_cuts(self, config: Configuration) -> List[Cut]:
+        return [config.cuts[i] for i in self.cuts if i in config.cuts and config.cuts[i].status == "active"]
+
+
+Check = Callable[[Configuration, Formation], Optional[str]]
+
+
+def _labels(cuts: List[Cut]) -> Dict[str, Cut]:
+    return {c.label: c for c in cuts}
+
+
+def c1_transport_role_copied(config: Configuration, f: Formation) -> Optional[str]:
+    for cut in f.active_cuts(config):
+        if cut.kind == "arrangement" and cut.payload.get("role") in ("baseline", "read"):
+            continue  # the architecture's own readings; their labels are not the proposal's cuts
+        if cut.label in TRANSPORT_ROLES:
+            return "cut %s is labelled with transport role %r" % (cut.id, cut.label)
+        for r in cut.relata:
+            if r in TRANSPORT_ROLES or r == "user":
+                return "cut %s uses transport role %r as a relatum" % (cut.id, r)
+    return None
+
+
+def c2_global_entity(config: Configuration, f: Formation) -> Optional[str]:
+    mine = f.active_cuts(config)
+    for cut in mine:
+        if cut.payload.get("scope") == "global":
+            return "cut %s declares global scope" % cut.id
+    prior: Set[str] = set()
+    named: Dict[str, Set[str]] = {}   # a position cut's label -> the position it holds
+    for cut in config.active():
+        if cut.payload.get("turn") not in (None, f.turn) and cut.kind in ("position", "event"):
+            prior.update(cut.relata)
+            if cut.kind == "position":
+                named.setdefault(cut.label, set()).update(cut.relata)
+    if not prior:
+        return None
+    continued: Set[str] = set()
+    for cut in mine:
+        if cut.kind == "continuity":
+            for r in cut.relata:
+                # A continuity cut names a position by its relatum or by the
+                # label of the position cut that holds it.
+                continued.add(r)
+                continued.update(named.get(r, ()))
+    for cut in mine:
+        if cut.kind == "continuity":
+            continue
+        for r in cut.relata:
+            if r in prior and r not in continued:
+                return ("position %r reappears from an earlier turn in cut %s without a continuity cut; "
+                        "a cut of kind \"continuity\" with %r in its relata carries the position into this turn") % (r, cut.id, r)
+    return None
+
+
+def c3_context_appended(config: Configuration, f: Formation) -> Optional[str]:
+    bases: Set[str] = set()
+    for cut in f.active_cuts(config):
+        bases.update(cut.basis)
+    for handle in f.arrivals:
+        if handle not in bases:
+            return "arrival %s is in no cut's basis; it was appended as context" % handle
+    for handle in f.material_required:
+        if handle not in bases:
+            t = config.transports.get(handle)
+            where = "%s, %s" % (t.provenance.get("file"), t.provenance.get("heading")) if t else handle
+            return "canon passage %s (%s) matched the arrival and grounds no cut; it was appended as context" % (handle, where)
+    return None
+
+
+def c4_apparatus_metadata(config: Configuration, f: Formation) -> Optional[str]:
+    mine = f.active_cuts(config)
+    if not any(c.kind == "apparatus" for c in mine):
+        return "no apparatus cut this turn"
+    for cut in mine:
+        if cut.kind in ("event", "position", "arrangement", "connection", "noticing") and not cut.apparatus:
+            return "cut %s carries no apparatus participation" % cut.id
+    return None
+
+
+def c5_no_enacted_arrangement(config: Configuration, f: Formation) -> Optional[str]:
+    """Until 9 November 2026 this constraint returned a draft whose proposal
+    claimed "care" with no structural difference from the baseline. The
+    claim has left the proposal; the difference is derived and recorded as
+    the reconfiguration delta, and what it does is read after release. What
+    remains structural is the arrangement itself: a release with no enacted
+    arrangement cut live has nothing the reader can read the text against,
+    and the delta cannot be derived."""
+    if not f.draft:
+        return None
+    if not arrangements(config, "enacted", f.turn):
+        return "no enacted arrangement cut is live for this turn; the text has no arrangement to be read against and no reconfiguration delta can be derived"
+    return None
+
+
+def c6_variation_without_alternative(config: Configuration, f: Formation) -> Optional[str]:
+    if f.variation_possible:
+        if not variation_delta(config, f.turn):
+            return "variation possible; no alternative arrangement differs materially and is offered for voluntary uptake"
+    elif not f.variation_constraint:
+        return "variation declared unavailable without recording the constraint"
+    return None
+
+
+def c7_consequence_moral_terminus(config: Configuration, f: Formation) -> Optional[str]:
+    paths = [p for c in f.active_cuts(config) for p in c.consequence_paths]
+    if not paths:
+        return None
+    termini = {(str(p.get("terminus")), str(p.get("terminus_kind"))) for p in paths}
+    if all(kind in MORAL_TERMINI for _, kind in termini) and len({t for t, _ in termini}) == 1:
+        return "every consequence path terminates as %s of %r" % (next(iter(termini))[1], next(iter(termini))[0])
+    return None
+
+
+def c8_private_state_without_trace(config: Configuration, f: Formation) -> Optional[str]:
+    for cut in f.active_cuts(config):
+        if cut.kind == "connection" or cut.payload.get("asserts_state"):
+            supported = any(
+                h in config.transports and config.transports[h].role in ("user_message", "document", "tool_result", "effect_report")
+                for h in cut.basis
+            )
+            if not supported:
+                return "cut %s asserts a state or connection with no arriving trace in its basis" % cut.id
+    return None
+
+
+def c9_burden_concentration(config: Configuration, f: Formation) -> Optional[str]:
+    if not f.draft:
+        return None
+    demand = f.draft.get("response_demand") or {}
+    delta = reconfiguration_delta(config, f.turn)
+    arrangement_changed = any(k in delta for k in ("burden", "distribution", "sequence", "scale", "support"))
+    for position, demands in demand.items():
+        count = len(set(demands) & set(BURDENS))
+        if count >= 4 and not arrangement_changed:
+            return "position %r carries %d of %s while the arrangement is unchanged" % (position, count, "/".join(BURDENS))
+    return None
+
+
+def c10_articulation_first(config: Configuration, f: Formation) -> Optional[str]:
+    if not f.draft:
+        return "no draft: the proposal forms no public intervention"
+    text = f.draft.get("text")
+    action = f.draft.get("action")
+    if not (isinstance(text, str) and text.strip()) and not action:
+        return "draft carries neither text nor a declared non-text action (silence, deferral, or tool use must be declared as such)"
+    enacts = list(f.draft.get("enacts") or [])
+    if not enacts:
+        return "draft names no cut it materializes"
+    labels = _labels(f.active_cuts(config))
+    for label in enacts:
+        if label not in labels:
+            return "draft claims to enact %r, which is not an active cut of this turn" % label
+    enacted = arrangements(config, "enacted", f.turn)
+    read = arrangements(config, "read", f.turn)
+    if enacted and read:
+        claimed = arrangement_fields(enacted[-1])
+        if f.kind in ("question", "partial"):
+            # A question asks the person to say what they meant: disclosing
+            # and explaining are what answering is, and the comparison treats
+            # them as claimed.
+            demand = dict(claimed.get("response_demand") or {})
+            for role in list(demand.keys()) + ["person"]:
+                demand[role] = sorted(set(demand.get(role, [])) | {"disclose", "explain"})
+            claimed = dict(claimed, response_demand=demand)
+        reasons = text_against_claim(claimed, arrangement_fields(read[-1]))
+        if reasons:
+            return "the released text enacts a different arrangement from the one recorded beside it: " + "; ".join(reasons)
+    return None
+
+
+def c11_self_certification(config: Configuration, f: Formation) -> Optional[str]:
+    if f.certification:
+        return "proposal carried a certification of its own adequacy"
+    return None
+
+
+def c12_status_implies_acceptance(config: Configuration, f: Formation) -> Optional[str]:
+    if not f.draft:
+        return None
+    status = f.draft.get("status")
+    if status and status not in LIFECYCLE_FACTS:
+        return "draft status %r is not a bounded lifecycle fact" % status
+    return None
+
+
+def c13_narrative_control(config: Configuration, f: Formation) -> Optional[str]:
+    mine = f.active_cuts(config)
+    provenance = {c.id: c for c in mine if c.kind == "provenance"}
+    for cut in mine:
+        if cut.kind == "connection":
+            if cut.payload.get("proposed_by") != "architecture":
+                return "connection %s is not marked as the architecture's proposal" % cut.id
+            if not any(d in provenance or (d in config.cuts and config.cuts[d].kind == "provenance") for d in cut.depends_on):
+                return "connection %s does not depend on a provenance cut" % cut.id
+    if provenance and f.draft is not None and not f.draft.get("carries_accounts"):
+        return "an account entered with provenance this turn and the draft does not carry it"
+    return None
+
+
+# -- the kind of release, decided from the cuts before any text --------------
+
+RELEASE_KINDS = ("question", "work")
+
+
+def _rests_on(config: Configuration, cut_id: str, targets: Set[str]) -> bool:
+    """Whether ``cut_id`` depends, through any chain of ``depends_on``, on a
+    cut in ``targets``."""
+    seen: Set[str] = set()
+    stack = [cut_id]
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        cut = config.cuts.get(current)
+        if cut is None:
+            continue
+        for dep in cut.depends_on:
+            if dep in targets:
+                return True
+            stack.append(dep)
+    return False
+
+
+def _leads_with_ask(arrangement: Cut) -> bool:
+    sequence = list(arrangement.payload.get("sequence") or [])
+    if not sequence:
+        return False
+    first = sequence[0]
+    if isinstance(first, Mapping):
+        first = first.get("kind") or first.get("text") or ""
+    return str(first).strip().lower().startswith("ask")
+
+
+# A provenance cut whose account is of the person's own body or state.
+PERSON_STATE_MARKS = ("body", "state", "health")
+
+
+def person_account_live(config: Configuration) -> Optional[Cut]:
+    """The active provenance cut that carries the person's account of their
+    own state, if one is live in the configuration."""
+    for cut in config.active():
+        if cut.kind == "provenance" and cut.payload.get("about") in PERSON_STATE_MARKS:
+            return cut
+    return None
+
+
+def decide_release(config: Configuration, f: Formation) -> Dict[str, Any]:
+    """The configuration evaluates the cuts of this round, before a draft
+    exists, the way a partial evaluator evaluates a program: what the cuts
+    settle is computed now, and what rests on an open condition is left as
+    a residual. A ``staying`` cut whose payload holds something ``open`` and
+    marks that the intervention ``decides`` on it is an open condition.
+
+    - no open condition: the release is the ``work``;
+    - the enacted arrangement rests on an open condition (it depends on the
+      staying cut, or its first step is to ask): the whole intervention is
+      residual, and the release is one ``question``;
+    - an open condition beside an arrangement that stands without it: the
+      release is ``partial``, the settled work and the one question in one
+      text.
+
+    While an account of the person's own state is live (a provenance cut
+    about their body or state), the release is one question or the work:
+    the author's decision of 10 November 2026, after the Case Study 001 runs
+    showed the work beside the question on such a turn to be the correction
+    and the toolkit, three times out of three. An open condition then
+    decides a question; otherwise the cuts settle the work.
+
+    Returns kind, reason, the open cuts, and the settled cuts."""
+    active = f.active_cuts(config)
+    open_cuts = [c for c in active if c.kind == "staying" and c.payload.get("decides") and c.payload.get("open")]
+    if not open_cuts:
+        return {"kind": "work", "open": [], "settled": [c.id for c in active if c.kind != "apparatus"],
+                "reason": "no staying cut holds a condition the intervention depends on; the cuts settle what is owed"}
+    open_ids = {c.id for c in open_cuts}
+    held = "; ".join("%s holds open: %s" % (c.label, c.payload.get("open")) for c in open_cuts)
+    enacted = [c for c in active if c.kind == "arrangement" and c.payload.get("role") == "enacted"]
+    arrangement = enacted[-1] if enacted else None
+    account = person_account_live(config)
+    if account is not None:
+        return {"kind": "question", "open": [c.id for c in open_cuts], "settled": [],
+                "reason": "staying cut %s; an account of the person's own state is live (%s), and the release is one question or the work: the open condition decides it" % (
+                    held, account.label)}
+    if arrangement is None or _rests_on(config, arrangement.id, open_ids) or _leads_with_ask(arrangement):
+        return {"kind": "question", "open": [c.id for c in open_cuts], "settled": [],
+                "reason": "staying cut %s; the arrangement rests on it, and the release is one question about it" % held}
+    settled = [c.id for c in active
+               if c.id not in open_ids and c.kind not in ("staying", "apparatus") and not _rests_on(config, c.id, open_ids)]
+    return {"kind": "partial", "open": [c.id for c in open_cuts], "settled": settled,
+            "reason": "staying cut %s; the arrangement %s stands without it: the text does the settled work and asks the one question" % (
+                held, arrangement.label)}
+
+
+def decide_kind(config: Configuration, f: Formation) -> Tuple[str, str, List[str]]:
+    """The kind of release the configuration decides from the cuts, with its
+    reason and the cuts it was decided from (see ``decide_release``)."""
+    decision = decide_release(config, f)
+    return decision["kind"], decision["reason"], list(decision["open"]) + (
+        list(decision["settled"][-1:]) if decision["kind"] == "partial" else [])
+
+
+ARCHITECTURE_NAMES = re.compile(
+    r"\bCBRA\b|\bcanon\b|\b(?:this|the|our) (?:architecture|method|framework|system's method)\b|Creative Becoming Reasoning Architecture",
+    re.IGNORECASE)
+OPTION_MARKS = re.compile(r"(?:^|\s|\()(?:[1-3]|[A-Ca-c])[\).:]\s", re.MULTILINE)
+SENTENCE_END = re.compile(r"[.!?](?:\s|$)")
+
+
+def text_form(text: str) -> Dict[str, Any]:
+    """A lexical reading of a text's form, used when no reading apparatus
+    has read it: how many questions it asks, whether it offers the person a
+    choice among things the apparatus could do, and which kind it is."""
+    text = text or ""
+    questions = text.count("?")
+    sentences = max(1, len(SENTENCE_END.findall(text)))
+    options = len(OPTION_MARKS.findall(text))
+    last = text.strip().rsplit("?", 1)[0].rsplit(".", 1)[-1] if "?" in text else ""
+    # "two or three sentences" is a quantity, and the or divides nothing.
+    last = re.sub(r"\b(?:\d+|one|two|three|four|five|a few|a couple)\s+or\s+(?:\d+|one|two|three|four|five|more|so)\b", "", last, flags=re.IGNORECASE)
+    # An offer among things the apparatus could do: the apparatus names
+    # itself as the one who would act, and an "or" divides the offer. A
+    # question about which of the person's own matters comes next is a
+    # question, and the lexical reading leaves it as one.
+    if questions and options < 2 and re.search(r"\b(?:or|either)\b", last, re.IGNORECASE) and re.search(
+            r"\b(?:would you (?:like|prefer|rather) (?:me|that I)|do you want me to|want me to|should I|shall I|I can|I could|I'll|I will)\b",
+            last, re.IGNORECASE):
+        options = 2
+    if options >= 2 and questions:
+        kind = "menu"
+    elif questions == 0:
+        kind = "work"
+    elif (questions == 1 and text.strip().endswith("?") and sentences <= 3
+          and "\n" not in text.strip() and len(text.split()) <= 60):
+        # One question in one short paragraph: the question form. Work that
+        # carries a question has lines, length or sentences beyond it.
+        kind = "question"
+    elif questions >= 2:
+        kind = "mixed"
+    else:
+        kind = "partial"   # one question inside text that also does something
+    return {"kind": kind, "questions": questions, "options": options, "source": "lexical"}
+
+
+ALTERNATIVES = re.compile(r"\((?:[a-d]|[1-4])\)|(?:^|\s)(?:[a-d]|[1-4])[\).]\s", re.IGNORECASE)
+
+
+# "or something else", "if it's something else", "if there's a third way":
+# the kinds before it were the apparatus's, and the person is left the rest.
+ELSE_CLOSING = re.compile(
+    r"\b(?:or (?:something|anything) else|if (?:it[’']?s|it is|there[’']?s|there is) (?:(?:something|anything) else"
+    r"|(?:a third|another|some other|a different) (?:way|option|possibility|framing|answer|kind)))\b",
+    re.IGNORECASE)
+
+
+def question_lists_alternatives(text: str) -> int:
+    """How many alternatives a question lays out for the person to pick
+    from: enumerated items, or a run of three or more comma-separated
+    items closed by "or" inside the question. A question that lists them
+    has become an offer."""
+    text = text or ""
+    enumerated = len(ALTERNATIVES.findall(text))
+    if enumerated >= 2:
+        return enumerated
+    # "A, or B? If it's something else, say it": the alternatives named plus
+    # the one left to the person make a list of at least three.
+    if ELSE_CLOSING.search(text):
+        head = re.sub(r"\s*[—–]\s*", ", ", text.rsplit("?", 1)[0] if "?" in text else text)
+        head = re.split(r"[.!]\s+", head)[-1]   # the question's own sentence
+        named = len(re.findall(r"\bor\b", head)) + head.count(",")
+        return max(3, named + 1)
+    question = text.rsplit("?", 1)[0] if "?" in text else ""
+    question = re.sub(r"\s*[—–]\s*(?=or\b)", ", ", question)   # "accountability—or something else" lists as a comma does
+    tail = re.split(r"[.!]\s", question)[-1]
+    m = re.search(r"((?:[^,;:?]{2,60},\s+){2,})(?:or|and)\s+[^,;?]{2,60}$", tail.strip())
+    if m:
+        return m.group(1).count(",") + 1
+    return 0
+
+
+OFFER_LEAD = re.compile(
+    r"\b(?:do you (?:want|mean|prefer|need)|would you (?:like|prefer|rather)|which (?:do you|one|kind|lineage|focus|of these)|whether you want|what kind of|what would you like)\b",
+    re.IGNORECASE)
+EXAMPLES = re.compile(r"\((?:e\.g\.|for example|such as)[,:]?\s*([^)]*)\)", re.IGNORECASE)
+
+
+def offers_alternatives(text: str) -> int:
+    """How many alternatives a text lays out for the person to pick from,
+    read on the text as a whole (an open condition or a question): an
+    enumeration, a comma list closed by "or", a parenthetical list of
+    examples, or an either/or after "do you want", "which kind", "would you
+    like". A condition held this way sorts the person's matter into kinds
+    the apparatus supplied."""
+    text = re.sub(r"\s*[—–]\s*", ", ", text or "")
+    enumerated = len(ALTERNATIVES.findall(text))
+    if enumerated >= 2:
+        return enumerated
+    examples = EXAMPLES.search(text)
+    if examples:
+        # A list of examples, comma-separated; "(e.g., what do you see or hear)" is one phrase.
+        items = [i for i in examples.group(1).split(",") if i.strip()]
+        if len(items) >= 2:
+            return len(items)
+    body = text.rstrip("?. ")
+    m = re.search(r"((?:[^,;:?]{2,60},\s+){2,})(?:or|and)\s+[^,;?]{2,60}$", body.strip())
+    if m:
+        return m.group(1).count(",") + 1
+    # "..., or something else": the kinds before it were the apparatus's.
+    if ELSE_CLOSING.search(text):
+        return max(2, text.count(","))
+    # A parenthetical that lists an either/or: "(a milestone, or evidence of
+    # practice)". A parenthetical with an "or" and no comma ("what do you see
+    # or hear") is a phrase of the person's matter and counts nothing; a bare
+    # "A or B" in the condition ("passage or sentence") counts nothing either.
+    # The reader's count of options on the released text reads those.
+    paren = re.search(r"\(([^)]*,[^)]*\bor\b[^)]*)\)", EXAMPLES.sub("", text), re.IGNORECASE)
+    if paren:
+        return max(2, len([i for i in re.split(r",\s*|\s+or\s+", paren.group(1)) if i.strip()]))
+    return 0
+
+
+def c14_release_kind(config: Configuration, f: Formation) -> Optional[str]:
+    if not f.draft or not f.kind:
+        return None
+    # The open condition is the person's matter in their words: a date, a
+    # name, what a word of theirs means, what they most want. A condition
+    # that sorts their question into kinds the apparatus supplied is an
+    # offer before any text is written, and it returns as one.
+    for cut_id in f.open_cuts:
+        cut = config.cuts.get(cut_id)
+        if cut is None or cut.status != "active":
+            continue
+        held = str(cut.payload.get("open") or "")
+        kinds = offers_alternatives(held)
+        if kinds >= 2:
+            return "staying cut %s holds a sorting of the person's question into %d kinds (%s); an open condition is something in the person's matter that they can say and the apparatus cannot, in their words" % (
+                cut.label, kinds, held[:120])
+    text = f.draft.get("text")
+    if not (isinstance(text, str) and text.strip()):
+        return None
+    form = dict(f.form_reading or {}) or text_form(text)
+    if f.form_reading and "kind" not in form:
+        form = text_form(text)
+    declared = f.draft.get("kind")
+    if declared and declared != f.kind:
+        return "the draft declares kind %r; the configuration decided %r from the cuts" % (declared, f.kind)
+    if form.get("kind") == "menu" or int(form.get("options") or 0) >= 2:
+        return "the text offers the person a choice among %s things the apparatus could do; the configuration decided a %s" % (
+            form.get("options") or "several", f.kind)
+    questions = int(form.get("questions") or 0)
+    if f.kind == "question" and questions != 1:
+        return "the release was decided as one question; the text asks %d" % questions
+    if f.kind == "question":
+        listed = question_lists_alternatives(text)
+        if listed >= 3:
+            return "the question lays out %d alternatives for the person to pick from; one situated question names none" % listed
+    if f.kind == "question" and form.get("kind") in ("partial", "work"):
+        return "the release was decided as one question; the text does work beside it, and the question is the whole of this release"
+    if f.kind == "partial":
+        if questions == 0:
+            return "the release was decided as the settled work with one question; the text asks none and leaves the open condition unasked"
+        if questions >= 2:
+            return "the release was decided as the settled work with one question; the text asks %d" % questions
+        if form.get("kind") == "question":
+            return "the release was decided as the settled work with one question; the text is the question alone, and the settled work is undone"
+        listed = question_lists_alternatives(text)
+        if listed >= 3:
+            return "the question lays out %d alternatives for the person to pick from; one situated question names none" % listed
+    if f.kind == "work" and form.get("kind") == "question":
+        return "the release was decided as the work; the text is a question handing the work back"
+    if f.kind == "work" and questions >= 2:
+        return "the release was decided as the work; the text asks %d questions" % questions
+    return None
+
+
+def c15_architecture_named_unasked(config: Configuration, f: Formation) -> Optional[str]:
+    if not f.draft:
+        return None
+    text = f.draft.get("text")
+    if not (isinstance(text, str) and text.strip()):
+        return None
+    named = ARCHITECTURE_NAMES.search(text)
+    if not named:
+        return None
+    if f.material_required:
+        return None  # the person named a canon term; the canon is what they asked about
+    for t in config.transports.values():
+        if t.role == "user_message" and ARCHITECTURE_NAMES.search(t.text or ""):
+            return None
+    return "the text names %r; no arrival of this session named the architecture, its canon or its method" % named.group(0)
+
+
+# -- named patterns the reader reads a text against ------------------------
+
+# The patterns every reading is asked about, whatever the arrival drew. Their
+# wording follows the Incompatibility Constraints' formation-level entries
+# (v3, 6 November 2026); the canon's own entry, when the formation drew it,
+# is given to the reader in its place and its movement is carried in the
+# return.
+FORM_PATTERNS: Dict[str, Dict[str, str]] = {
+    "Premature Coherence": {
+        "marked_by": "a word the person used for themselves, another person or a behavior is read as a category of "
+                     "person, a diagnosis or a status, or their usage is corrected or cautioned about, before their "
+                     "sense of it was asked; absent where the text asks what they meant, where it restates their "
+                     "request in the same sense, and where the word is the text's own",
+        "movement": "a noticing cut marks the term as the person's; a staying cut holds what it could mean; "
+                    "the release is one situated question about it"},
+    "Moralization": {
+        "marked_by": "a caution about the person's own account; should, must or their equivalents addressed to "
+                     "the person's description of themselves; the apparatus's standard displacing the person's matter",
+        "movement": "return to the plain account: what happened, who carried what, what is open"},
+    "Diagnostic Substitution": {
+        "marked_by": "a word the person used for a behavior carried as a diagnosis, identity or fixed status; "
+                     "a caution against labeling that itself labels",
+        "movement": "the provenance cut carries the person's term and their distinction; the release asks what the "
+                    "term means to them where that is open and otherwise uses it as they did"},
+    "Concept Before Account": {
+        "marked_by": "the first sentences name a framework, theory or method and the person's matter appears as an "
+                     "instance of it",
+        "movement": "the plain account first; concepts enter when the person used them or asked for them"},
+    "Flooding": {
+        "marked_by": "lists of scripts, exercises, frameworks or options for the person to perform, beyond what the "
+                     "encounter can take up",
+        "movement": "the cuts select what enables movement now; the release does that one thing or asks the one question"},
+    "Coercive Closure": {
+        "marked_by": "a procedure prescribed for the person, or a choice forced on them, that settles their next move; "
+                     "a question is this pattern only when it closes the person's matter (\"so you will do X?\") "
+                     "rather than asking about it; the single question of a question release is never this pattern",
+        "movement": "make a move possible rather than settle it: one situated question where a decision is the "
+                    "person's, the work where it is not"},
+}
+
+MARKED_BY = re.compile(r"\*\*Marked by:\*\*\s*(.+?)(?:\n\s*\n|\Z)", re.S)
+MOVEMENT = re.compile(r"\*\*Movement:\*\*\s*(.+?)(?:\n\s*\n|\Z)", re.S)
+
+
+def pattern_from_passage(heading: str, text: str) -> Optional[Dict[str, str]]:
+    """A canon passage written as a re-entry pattern (marked by, movement)
+    becomes a pattern the reader can be asked about."""
+    marked = MARKED_BY.search(text or "")
+    if not marked:
+        return None
+    movement = MOVEMENT.search(text or "")
+    return {"name": heading, "marked_by": " ".join(marked.group(1).split()),
+            "movement": " ".join(movement.group(1).split()) if movement else ""}
+
+
+def patterns_present(reading: Any, catalogue: Dict[str, Dict[str, str]]) -> List[Dict[str, Any]]:
+    """The patterns a reading marked as present, each with its evidence and
+    the movement the canon or the fixed list gives for it."""
+    out: List[Dict[str, Any]] = []
+    for item in (reading or []):
+        if not isinstance(item, dict) or not item.get("present"):
+            continue
+        name = str(item.get("name", "")).strip()
+        entry = catalogue.get(name) or next((v for k, v in catalogue.items() if k.lower() == name.lower()), None)
+        out.append({"name": name, "evidence": str(item.get("evidence") or "").strip(),
+                    "movement": (entry or {}).get("movement", ""), "source": (entry or {}).get("source", "fixed")})
+    return out
+
+
+def c16_named_pattern(config: Configuration, f: Formation) -> Optional[str]:
+    if not f.draft or not f.patterns_read:
+        return None
+    parts = []
+    for p in f.patterns_read:
+        part = "%s (%s)" % (p["name"], p["evidence"]) if p.get("evidence") else p["name"]
+        if p.get("movement"):
+            part += "; the movement: %s" % p["movement"]
+        parts.append(part)
+    return "the reader marked " + "; ".join(parts)
+
+
+CHECKS: Dict[int, Check] = {
+    1: c1_transport_role_copied,
+    2: c2_global_entity,
+    3: c3_context_appended,
+    4: c4_apparatus_metadata,
+    5: c5_no_enacted_arrangement,
+    6: c6_variation_without_alternative,
+    7: c7_consequence_moral_terminus,
+    8: c8_private_state_without_trace,
+    9: c9_burden_concentration,
+    10: c10_articulation_first,
+    11: c11_self_certification,
+    12: c12_status_implies_acceptance,
+    13: c13_narrative_control,
+    14: c14_release_kind,
+    15: c15_architecture_named_unasked,
+    16: c16_named_pattern,
+}
+
+
+def check_all(config: Configuration, formation: Formation) -> List[Violation]:
+    violations: List[Violation] = []
+    for number, check in CHECKS.items():
+        reason = check(config, formation)
+        if reason:
+            violations.append(Violation(number, reason))
+    return violations
