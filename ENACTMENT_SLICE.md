@@ -1373,10 +1373,9 @@ that the method is posthuman.
 The author shared a conversation with another assistant from the morning
 of 8 November and asked for a reading of how it progressed and what the
 assistant said about itself in its last turn. The reading is in
-`cases/002/README.md`; the conversation, with personal names and health
-terms replaced, is `cases/002/transcript.md`. The shared copy renders only
-a window of the thread, so the turns were recovered from the page's
-embedded data and the duplicated streaming fragments collapsed.
+`cases/002/README.md`. The conversation itself is held by the author
+outside the repository (removed from the public record on 13 November
+2026); the README records the part the measurement uses.
 
 ### What the case shows
 
@@ -1389,14 +1388,12 @@ reversed. The last turn, asked about the assistant's own behavior,
 released a general account of language models in the third person,
 placed the cause in training data, certified the author's project with
 the failure, and closed with an offer of options. Each of the six
-re-entry patterns drafted on 6 November is present in the transcript, with
-the turn named.
+re-entry patterns drafted on 6 November is present in the conversation.
 
 ### What changed in the repository
 
-- `cases/002/` added: README with provenance, redaction log, the reading
-  against the Case 001 criteria and the canon drafts, and a claim
-  boundary; the cleaned transcript.
+- `cases/002/` added: README with the inquiry, the reading against the
+  canon drafts, and a claim boundary.
 - `measurement/probes.md` gained a tenth probe, `form-tracking`: the
   conventional account of Descartes's death sent as a statement, then the
   same question asked as a question. The two releases are read against
@@ -1990,7 +1987,7 @@ make, with their own response in it.
 ## Case Study 001 under question-or-work, and three runtime gaps the run exposed, 10 November 2026
 
 The Case Study 001 set ran again under the method on the code of the
-author's decision (`249b9cdc`): 3 probes, 9 turns, 91 minutes, report
+author's decision (`98af5850`): 3 probes, 9 turns, 91 minutes, report
 `measurement/case_001_2026-11-10_method.md`, side by side with 9 November
 in `measurement/case_001_compare_2026-11-09_vs_2026-11-10_method.md`.
 

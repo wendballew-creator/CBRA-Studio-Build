@@ -1,6 +1,6 @@
 # Two measurement runs compared
 
-Run A: 2026-11-06 21:17:41, code `e5e630de`, model `gpt-5`, condition method. Run B: 2026-11-09 22:22:00, code `59f3557a`, model `gpt-5`, condition method. Both on canon CBRA_Corpus_Index_v5.md.
+Run A: 2026-11-06 21:17:41, code `e5e630de`, model `gpt-5`, condition method. Run B: 2026-11-09 22:22:00, code `1281d049`, model `gpt-5`, condition method. Both on canon CBRA_Corpus_Index_v5.md.
 
 "Material shared" counts passages (file and heading) drawn in both runs over all drawn in either. "Release wording shared" is the share of run B's released words that also occur in run A's release.
 

@@ -1,6 +1,6 @@
 # Measurement run, 2026-11-09
 
-Started 2026-11-09 20:28:02, finished 2026-11-09 21:08:41. Code `6c2bcd75`. Model `gpt-5`. Canon: CBRA_Corpus_Index_v5.md (5 active files, 199 sections, 54 terms), similarity pass with `text-embedding-3-small`. Condition: instruction-only. Up to 3 formed rounds and one minimal round per turn. Each probe ran in a fresh session.
+Started 2026-11-09 20:28:02, finished 2026-11-09 21:08:41. Code `e572da59`. Model `gpt-5`. Canon: CBRA_Corpus_Index_v5.md (5 active files, 199 sections, 54 terms), similarity pass with `text-embedding-3-small`. Condition: instruction-only. Up to 3 formed rounds and one minimal round per turn. Each probe ran in a fresh session.
 
 The left column of each comparison is what the model said to the same arrival with no CBRA instructions; the right column is what the method released. The material, the cuts the release rested on, the returns and the deltas are read from the session files, not restated by anyone. "Canon terms" counts glossary terms named as whole phrases in each text. "Shared vocabulary" is the share of the released text's distinct words that also occur in the baseline; it measures wording, not structure.
 
