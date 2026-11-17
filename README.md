@@ -1,15 +1,25 @@
-# Creative Becoming Reasoning Architecture
+# Creative Becoming Reasoning Architecture (CBRA)
 
-CBRA asks whether a language-model system can form a response relationally,
-as something that changes with what arrives, rather than as a bounded agent
-judging another. It is a research instrument, not a product: a Python runtime
-in which a model's proposals enter as material to be checked against
-structural constraints, a live evaluation record that includes documented
-failures, and written claim boundaries stating what each build does and does
+CBRA is a research instrument that asks whether a language-model system can
+form a response relationally, as something that changes with what arrives,
+rather than as a bounded agent judging another. It pairs a Python runtime, in
+which a model's proposals enter as material checked against structural
+release constraints, with a live evaluation record that includes documented
+failures and a written claim boundary stating what each build does and does
 not establish. The most consequential finding so far is recorded in
 [BUILD_STATUS.md](BUILD_STATUS.md): a completed milestone was set aside after
 review found that defensive logic (prevention, rejection, invalidation,
 authority policing) had become the organizing formation of the system.
+
+**Start here: [METHODOLOGY.md](METHODOLOGY.md)**, a one-page account of the
+evaluation design, the probe set, the measurement runs, and the findings.
+
+## Where the work is
+
+| Branch | Contents |
+|---|---|
+| [`enactment/first-slice`](https://github.com/wendballew-creator/CBRA-Studio-Build/tree/enactment/first-slice) | Current development branch: the runtime (`cbra/enactment/`), measurement harness and reports, behavioral evaluation records, and build history from February 2026 on, including work past the point merged here |
+| `main` | This overview, [METHODOLOGY.md](METHODOLOGY.md), and the repository as merged from the slice in November 2026 |
 
 CBRA is an experimental reasoning architecture organized through Creative
 Becoming. The repository is a research and engineering record, not a claim
@@ -89,7 +99,13 @@ python -m unittest discover -s cbra -p 'test_*.py'
 ```
 
 The same complete suite is configured for GitHub Actions. A
-dependency-limited subset is not an integration result.
+dependency-limited subset is not an integration result. The code runs on
+Python 3.9 or later; continuous integration uses 3.12.
+
+With an OpenAI API key in the environment, the test page runs with
+`python -m cbra.enactment.serve --port 8765`. The measurement harness on
+`enactment/first-slice` runs with `python -m cbra.enactment.measure run`.
+Each live turn makes several provider calls.
 
 No live provider request is part of routine verification. The retained live
 validation scripts require a separately authorized, restricted API key and
@@ -112,3 +128,7 @@ A milestone reaches `main` only after:
 7. the local and GitHub commit hashes are verified to match.
 
 Work that exists only in a Work Mode checkout is unpreserved work in progress.
+
+## Author
+
+Wend Ballew, PhD, evaluation methodologist · [linkedin.com/in/wendballew](https://www.linkedin.com/in/wendballew)
