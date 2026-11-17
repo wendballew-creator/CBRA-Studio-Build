@@ -1,7 +1,7 @@
 # CBRA Kernel v10.2
 Creative Becoming Reasoning Architecture  
 Version: 10.2  
-Status: Canonical Runtime Kernel  
+Status: Historical entity/stream proposal; inactive
 Layer: Pre-Generative Execution  
 Location: Developer Message + Corpus Canonical Copy  
 
